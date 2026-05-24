@@ -8,8 +8,8 @@ This is the working checklist for the native Linux GTK4 port against the macOS a
 
 1. Script workspace flow
    - macOS opens to the script list, runs/restores scripts from rows, and opens the editor as a secondary action.
-   - Linux still opens as a three-pane workspace with the editor always visible and script rows mainly selecting editor content.
-   - Needed: make the script list the primary workflow, add per-row run/edit/stop controls, and show running session state inline beside script names.
+   - Linux now has row-level Run/Edit controls, routes row Run through the same local script runtime path as the toolbar, and shows an inline Running badge plus per-row Stop control while a local session is active.
+   - Needed: make the list/preview the default first screen instead of editor-first three-pane layout, support true restore of long-lived preview sessions, and keep inline running state live for asynchronous/long-running sessions.
 
 2. Script UI rendering
    - macOS executes default scripts through `ScriptPreviewManager`, transpiles imports/JSX, and renders `ScriptRenderView` nodes.
@@ -48,6 +48,7 @@ This is the working checklist for the native Linux GTK4 port against the macOS a
 - Linux runtime can transform uppercase JSX and capture the rendered script UI tree from the shared `emw-jsx.js`/`emw-ui.js` modules.
 - Linux GTK can render captured script UI trees for common layout/control nodes instead of showing only a text tree summary.
 - Linux script UI preview now keeps a live `ScriptUiRuntime` and invokes captured handler tokens from GTK buttons, tiles, sliders, pickers, toggles, and text-field submit/change callbacks.
+- Linux script rows now expose native Run/Edit buttons plus inline running state and row Stop actions, instead of requiring the toolbar for script execution.
 - Linux editor uses GtkSourceView with syntax highlighting, line numbers, find, go-to-line, and line wrap.
 - Linux has USB MIDI, Wi-Fi WebSocket/mDNS, and BlueZ BLE GATT transport paths behind the shared transport trait.
 - Linux firmware flow can plan bundled STM32 and ESP32-S3 images and call the local flashing backends.

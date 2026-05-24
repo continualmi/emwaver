@@ -23,6 +23,7 @@ use emwaver_linux_transport::{
     EmwaverTransport,
 };
 use gtk::glib::object::IsA;
+use gtk::glib::variant::{StaticVariantType, ToVariant};
 use gtk::{gio, Align, Orientation, PolicyType};
 use sourceview5::prelude::*;
 use std::cell::RefCell;
@@ -366,6 +367,7 @@ pub fn build_main_window(app: &adw::Application) {
     window.set_content(Some(&root));
 
     let active_session = Rc::new(RefCell::new(None));
+    let active_script_id = Rc::new(RefCell::new(None::<String>));
     {
         let agent_panel = agent_panel.clone();
         agent_toggle_button.connect_toggled(move |button| {
@@ -407,6 +409,159 @@ pub fn build_main_window(app: &adw::Application) {
     }
     {
         agent_stop_button.connect_clicked(|_| {});
+    }
+    {
+        let script_repository = Rc::clone(&script_repository);
+        let script_items = Rc::clone(&script_items);
+        let script_row_indices = Rc::clone(&script_row_indices);
+        let script_list = script_list.clone();
+        let script_search_entry = script_search_entry.clone();
+        let model = Rc::clone(&model);
+        let log_view = log_view.clone();
+        let active_session = Rc::clone(&active_session);
+        let active_script_id = Rc::clone(&active_script_id);
+        let action = gio::SimpleAction::new("script-run", Some(&String::static_variant_type()));
+        action.connect_activate(move |_, parameter| {
+            let Some(script_id) = parameter.and_then(|value| value.get::<String>()) else {
+                append_log(&log_view, "No script was provided to run.");
+                return;
+            };
+            let item = script_repository
+                .list_scripts()
+                .ok()
+                .and_then(|scripts| scripts.into_iter().find(|script| script.id == script_id));
+            let Some(item) = item else {
+                append_log(&log_view, "Script is no longer available.");
+                return;
+            };
+            if !item.is_runnable() {
+                append_log(&log_view, &format!("{} is not runnable.", item.name));
+                return;
+            }
+            let source = match script_repository.read_script(&item) {
+                Ok(source) => source,
+                Err(err) => {
+                    append_log(&log_view, &format!("Script load failed: {err}"));
+                    return;
+                }
+            };
+            let module_sources = match script_repository.module_sources() {
+                Ok(modules) => modules,
+                Err(err) => {
+                    append_log(&log_view, &format!("Module load failed: {err}"));
+                    BTreeMap::new()
+                }
+            };
+            let result = model.borrow_mut().run_script(&item.name, source.clone());
+            match result {
+                Ok(session) => {
+                    *active_session.borrow_mut() = Some(session.id);
+                    *active_script_id.borrow_mut() = Some(item.id.clone());
+                    refresh_script_list(
+                        &script_list,
+                        &script_repository,
+                        &script_items,
+                        &script_row_indices,
+                        &log_view,
+                        script_search_entry.text().as_str(),
+                        active_script_id.borrow().as_deref(),
+                    );
+                    drain_pending_ui_events();
+                    append_log(
+                        &log_view,
+                        &format!(
+                            "Started {} on {}.",
+                            item.name,
+                            selected_device_title(&model.borrow().selected_device())
+                        ),
+                    );
+                    for line in run_selected_script(
+                        &model.borrow().selected_device(),
+                        &source,
+                        &module_sources,
+                    ) {
+                        append_log(&log_view, &line);
+                    }
+                    match model.borrow_mut().stop_script(session.id) {
+                        Ok(_) => append_log(&log_view, "Script session completed."),
+                        Err(err) => {
+                            append_log(&log_view, &format!("Session cleanup failed: {err}"))
+                        }
+                    }
+                    *active_session.borrow_mut() = None;
+                    *active_script_id.borrow_mut() = None;
+                    refresh_script_list(
+                        &script_list,
+                        &script_repository,
+                        &script_items,
+                        &script_row_indices,
+                        &log_view,
+                        script_search_entry.text().as_str(),
+                        active_script_id.borrow().as_deref(),
+                    );
+                }
+                Err(err) => append_log(&log_view, &format!("Run failed: {err}")),
+            }
+        });
+        window.add_action(&action);
+    }
+    {
+        let script_items = Rc::clone(&script_items);
+        let script_row_indices = Rc::clone(&script_row_indices);
+        let script_list = script_list.clone();
+        let editor_stack = editor_stack.clone();
+        let preview_button = preview_button.clone();
+        let action = gio::SimpleAction::new("script-edit", Some(&String::static_variant_type()));
+        action.connect_activate(move |_, parameter| {
+            let Some(script_id) = parameter.and_then(|value| value.get::<String>()) else {
+                return;
+            };
+            preview_button.set_active(false);
+            editor_stack.set_visible_child_name("editor");
+            select_script_by_id(&script_list, &script_items, &script_row_indices, &script_id);
+        });
+        window.add_action(&action);
+    }
+    {
+        let script_repository = Rc::clone(&script_repository);
+        let script_items = Rc::clone(&script_items);
+        let script_row_indices = Rc::clone(&script_row_indices);
+        let script_list = script_list.clone();
+        let script_search_entry = script_search_entry.clone();
+        let model = Rc::clone(&model);
+        let log_view = log_view.clone();
+        let active_session = Rc::clone(&active_session);
+        let active_script_id = Rc::clone(&active_script_id);
+        let action = gio::SimpleAction::new("script-stop", Some(&String::static_variant_type()));
+        action.connect_activate(move |_, parameter| {
+            let Some(script_id) = parameter.and_then(|value| value.get::<String>()) else {
+                return;
+            };
+            if active_script_id.borrow().as_deref() != Some(script_id.as_str()) {
+                append_log(&log_view, "That script is not the active session.");
+                return;
+            }
+            let Some(session_id) = active_session.borrow_mut().take() else {
+                append_log(&log_view, "No active script session.");
+                *active_script_id.borrow_mut() = None;
+                return;
+            };
+            match model.borrow_mut().stop_script(session_id) {
+                Ok(_) => append_log(&log_view, "Stopped script session."),
+                Err(err) => append_log(&log_view, &format!("Stop failed: {err}")),
+            }
+            *active_script_id.borrow_mut() = None;
+            refresh_script_list(
+                &script_list,
+                &script_repository,
+                &script_items,
+                &script_row_indices,
+                &log_view,
+                script_search_entry.text().as_str(),
+                active_script_id.borrow().as_deref(),
+            );
+        });
+        window.add_action(&action);
     }
     {
         let script_repository = Rc::clone(&script_repository);
@@ -467,6 +622,7 @@ pub fn build_main_window(app: &adw::Application) {
         &script_row_indices,
         &log_view,
         script_search_entry.text().as_str(),
+        active_script_id.borrow().as_deref(),
     );
     script_list.select_row(first_script_row(&script_list, &script_row_indices).as_ref());
     {
@@ -478,6 +634,7 @@ pub fn build_main_window(app: &adw::Application) {
         let source_buffer = source_buffer.clone();
         let log_view = log_view.clone();
         let script_search_entry = script_search_entry.clone();
+        let active_script_id = Rc::clone(&active_script_id);
         new_script_button.connect_clicked(move |_| {
             match script_repository.create_script("script.js", default_script_template()) {
                 Ok(item) => {
@@ -489,6 +646,7 @@ pub fn build_main_window(app: &adw::Application) {
                         &script_row_indices,
                         &log_view,
                         script_search_entry.text().as_str(),
+                        active_script_id.borrow().as_deref(),
                     );
                     select_script_by_id(&script_list, &script_items, &script_row_indices, &item.id);
                     source_buffer.set_text(default_script_template());
@@ -506,6 +664,7 @@ pub fn build_main_window(app: &adw::Application) {
         let selected_script = Rc::clone(&selected_script);
         let log_view = log_view.clone();
         let script_search_entry = script_search_entry.clone();
+        let active_script_id = Rc::clone(&active_script_id);
         copy_script_button.connect_clicked(move |_| {
             let Some(item) = selected_script.borrow().clone() else {
                 append_log(&log_view, "No selected script to copy.");
@@ -524,6 +683,7 @@ pub fn build_main_window(app: &adw::Application) {
                         &script_row_indices,
                         &log_view,
                         script_search_entry.text().as_str(),
+                        active_script_id.borrow().as_deref(),
                     );
                     select_script_by_id(&script_list, &script_items, &script_row_indices, &copy.id);
                 }
@@ -556,6 +716,7 @@ pub fn build_main_window(app: &adw::Application) {
         let script_row_indices = Rc::clone(&script_row_indices);
         let script_list = script_list.clone();
         let log_view = log_view.clone();
+        let active_script_id = Rc::clone(&active_script_id);
         script_search_entry.connect_search_changed(move |entry| {
             refresh_script_list(
                 &script_list,
@@ -564,6 +725,7 @@ pub fn build_main_window(app: &adw::Application) {
                 &script_row_indices,
                 &log_view,
                 entry.text().as_str(),
+                active_script_id.borrow().as_deref(),
             );
             script_list.select_row(first_script_row(&script_list, &script_row_indices).as_ref());
         });
@@ -698,77 +860,46 @@ pub fn build_main_window(app: &adw::Application) {
         });
     }
     {
-        let model = Rc::clone(&model);
-        let source_buffer = source_buffer.clone();
+        let window = window.clone();
         let selected_script = Rc::clone(&selected_script);
-        let script_repository = Rc::clone(&script_repository);
         let log_view = log_view.clone();
-        let active_session = Rc::clone(&active_session);
         run_button.connect_clicked(move |_| {
             let Some(item) = selected_script.borrow().clone() else {
                 append_log(&log_view, "No selected script.");
                 return;
             };
-            if !item.is_runnable() {
-                append_log(&log_view, &format!("{} is not runnable.", item.name));
-                return;
-            }
-            let source = source_buffer
-                .text(&source_buffer.start_iter(), &source_buffer.end_iter(), true)
-                .to_string();
-            let module_sources = match script_repository.module_sources() {
-                Ok(modules) => modules,
-                Err(err) => {
-                    append_log(&log_view, &format!("Module load failed: {err}"));
-                    BTreeMap::new()
-                }
-            };
-            let result = model.borrow_mut().run_script(&item.name, source);
-            match result {
-                Ok(session) => {
-                    *active_session.borrow_mut() = Some(session.id);
-                    append_log(
-                        &log_view,
-                        &format!(
-                            "Started script session on {}.",
-                            selected_device_title(&model.borrow().selected_device())
-                        ),
-                    );
-                    let execution_log = run_selected_script(
-                        &model.borrow().selected_device(),
-                        &source_buffer
-                            .text(&source_buffer.start_iter(), &source_buffer.end_iter(), true)
-                            .to_string(),
-                        &module_sources,
-                    );
-                    for line in execution_log {
-                        append_log(&log_view, &line);
-                    }
-                    match model.borrow_mut().stop_script(session.id) {
-                        Ok(_) => append_log(&log_view, "Script session completed."),
-                        Err(err) => {
-                            append_log(&log_view, &format!("Session cleanup failed: {err}"))
-                        }
-                    }
-                    *active_session.borrow_mut() = None;
-                }
-                Err(err) => append_log(&log_view, &format!("Run failed: {err}")),
-            }
+            let _ = window.activate_action("script-run", Some(&item.id.to_variant()));
         });
     }
     {
         let model = Rc::clone(&model);
+        let script_repository = Rc::clone(&script_repository);
+        let script_items = Rc::clone(&script_items);
+        let script_row_indices = Rc::clone(&script_row_indices);
+        let script_list = script_list.clone();
+        let script_search_entry = script_search_entry.clone();
         let log_view = log_view.clone();
         let active_session = Rc::clone(&active_session);
+        let active_script_id = Rc::clone(&active_script_id);
         stop_button.connect_clicked(move |_| {
             let Some(session_id) = active_session.borrow_mut().take() else {
                 append_log(&log_view, "No active script session.");
                 return;
             };
             match model.borrow_mut().stop_script(session_id) {
-                Ok(_) => append_log(&log_view, "Stopped simulator script session."),
+                Ok(_) => append_log(&log_view, "Stopped script session."),
                 Err(err) => append_log(&log_view, &format!("Stop failed: {err}")),
             }
+            *active_script_id.borrow_mut() = None;
+            refresh_script_list(
+                &script_list,
+                &script_repository,
+                &script_items,
+                &script_row_indices,
+                &log_view,
+                script_search_entry.text().as_str(),
+                active_script_id.borrow().as_deref(),
+            );
         });
     }
 
@@ -1874,6 +2005,7 @@ fn refresh_script_list(
     row_indices: &Rc<RefCell<Vec<Option<usize>>>>,
     log_view: &gtk::TextView,
     filter_query: &str,
+    active_script_id: Option<&str>,
 ) {
     while let Some(row) = list.first_child() {
         list.remove(&row);
@@ -1912,7 +2044,7 @@ fn refresh_script_list(
         let index = items.borrow().len();
         {
             let mut row_indices = row_indices.borrow_mut();
-            append_script_row(list, &mut row_indices, &script, index);
+            append_script_row(list, &mut row_indices, &script, index, active_script_id);
         }
         items.borrow_mut().push(script);
     }
@@ -1940,20 +2072,25 @@ fn append_script_row(
     row_indices: &mut Vec<Option<usize>>,
     script: &ScriptListItem,
     index: usize,
+    active_script_id: Option<&str>,
 ) {
-    let row = gtk::Box::new(Orientation::Vertical, 2);
+    let is_running = active_script_id == Some(script.id.as_str());
+    let row = gtk::Box::new(Orientation::Horizontal, 10);
     row.set_margin_top(10);
     row.set_margin_bottom(10);
     row.set_margin_start(10);
     row.set_margin_end(10);
-    row.append(
+    let text = gtk::Box::new(Orientation::Vertical, 2);
+    text.set_hexpand(true);
+    text.append(
         &gtk::Label::builder()
             .label(&script.name)
             .xalign(0.0)
             .ellipsize(gtk::pango::EllipsizeMode::End)
             .build(),
     );
-    row.append(
+    let detail = gtk::Box::new(Orientation::Horizontal, 8);
+    detail.append(
         &gtk::Label::builder()
             .label(format!(
                 "{} · {}",
@@ -1964,6 +2101,58 @@ fn append_script_row(
             .css_classes(vec!["dim-label"])
             .build(),
     );
+    if is_running {
+        detail.append(
+            &gtk::Label::builder()
+                .label("Running")
+                .css_classes(vec!["success"])
+                .build(),
+        );
+    }
+    text.append(&detail);
+    row.append(&text);
+
+    let controls = gtk::Box::new(Orientation::Horizontal, 4);
+    let run_button = gtk::Button::builder()
+        .icon_name("media-playback-start-symbolic")
+        .tooltip_text(if is_running {
+            "Restore running script"
+        } else {
+            "Run script"
+        })
+        .sensitive(script.is_runnable() && !is_running)
+        .build();
+    run_button.set_action_name(Some("win.script-run"));
+    run_button.set_action_target_value(Some(&script.id.to_variant()));
+    controls.append(&run_button);
+
+    if is_running {
+        let stop_button = gtk::Button::builder()
+            .icon_name("media-playback-stop-symbolic")
+            .tooltip_text("Stop running script")
+            .build();
+        stop_button.set_action_name(Some("win.script-stop"));
+        stop_button.set_action_target_value(Some(&script.id.to_variant()));
+        controls.append(&stop_button);
+    }
+
+    let edit_button = gtk::Button::builder()
+        .icon_name(if script.is_editable() {
+            "document-edit-symbolic"
+        } else {
+            "view-visible-symbolic"
+        })
+        .tooltip_text(if script.is_editable() {
+            "Edit script"
+        } else {
+            "View script"
+        })
+        .build();
+    edit_button.set_action_name(Some("win.script-edit"));
+    edit_button.set_action_target_value(Some(&script.id.to_variant()));
+    controls.append(&edit_button);
+    row.append(&controls);
+
     let item = gtk::ListBoxRow::builder().child(&row).build();
     item.set_activatable(true);
     item.set_selectable(true);
@@ -2989,6 +3178,13 @@ fn append_log(log_view: &gtk::TextView, line: &str) {
     let buffer = log_view.buffer();
     let mut end = buffer.end_iter();
     buffer.insert(&mut end, &format!("{line}\n"));
+}
+
+fn drain_pending_ui_events() {
+    let context = gtk::glib::MainContext::default();
+    while context.pending() {
+        context.iteration(false);
+    }
 }
 
 fn add_shortcuts(app: &adw::Application, window: &adw::ApplicationWindow) {
