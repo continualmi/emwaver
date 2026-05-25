@@ -76,9 +76,9 @@ Scripts UI and runtime behavior are centered in `ScriptsPage` and `Scripting/*` 
 
 `EMWaver.Tests` contains the hosted-CI simulator smoke for Windows. It runs a hardware-touching `.js`/JSX script through the real Windows `ScriptEngine` and `SimulatorCommandBridge`, then asserts the rendered UI includes values from `simulator/fixtures/basic-board.json`.
 
-## 3.3 Gateway boundary
+## 3.3 Architecture boundary
 
-The Windows app is self-contained and does not connect to the Gateway as a runtime owner. Browser and CLI control use the Rust Gateway backend; Windows keeps its own native script UI, local transport managers, and firmware/update flows.
+The Windows app is self-contained. The removed Gateway/browser/CLI architecture is not part of the Windows runtime. Windows keeps its own native script UI, local transport managers, Agent surface, and firmware/update flows.
 
 ## 3.4 Firmware update path
 
@@ -284,4 +284,4 @@ Expected workflow:
 
 When changing page structure or service responsibilities in Windows app:
 - update this README in the same PR,
-- include any protocol-impact changes also in Gateway/backend/frontend docs where relevant.
+- include any protocol-impact changes also in the relevant firmware and transport docs.

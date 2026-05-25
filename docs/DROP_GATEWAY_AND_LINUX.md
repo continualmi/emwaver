@@ -1,6 +1,6 @@
-# Gateway and Linux Support Removal
+# Gateway Removal (Historical)
 
-> Historical note: this is a May 2026 decision record for removing the old Gateway/CLI/browser architecture and the old Linux path. It is not the current Linux app plan. The current Linux direction is a native Rust + GTK4/libadwaita app under `linux/`.
+> Historical decision record (May 2026): why the Gateway/CLI/browser architecture was removed. The current native Linux app under `linux/` is unrelated — this document covers only the old Gateway-era Linux path.
 
 ## Decision
 

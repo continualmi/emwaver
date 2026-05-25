@@ -148,16 +148,31 @@ git clone https://github.com/continualmi/emwaver.git
 cd emwaver
 ```
 
-Then read the README closest to the subsystem you are changing:
+Then pick your platform and read the closest README:
+
+| Platform | Quick start |
+|----------|-------------|
+| macOS | Open `macos/EMWaver/EMWaver.xcodeproj` in Xcode → Run |
+| iOS | Open `ios/EMWaver.xcodeproj` in Xcode → Run on simulator or device |
+| Android | `cd android && ./gradlew assembleDebug` (or open in Android Studio) |
+| Windows | Open `windows/EMWaver.sln` in Visual Studio 2022 → Build & Run |
+| Linux | `cargo run --manifest-path linux/Cargo.toml -p emwaver-linux-app` |
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed setup instructions, testing, and contribution guidelines.
+
+Key subsystem READMEs:
 
 - [docs/RELEASES.md](docs/RELEASES.md) for release workflows and public preview assets
 - [android/README.md](android/README.md)
 - [ios/README.md](ios/README.md)
 - [macos/README.md](macos/README.md)
 - [windows/README.md](windows/README.md)
+- [linux/README.md](linux/README.md)
 - [stm/README.md](stm/README.md)
 - [esp/README.md](esp/README.md)
 - [hardware/README.md](hardware/README.md)
+- [docs/RELEASES.md](docs/RELEASES.md)
+- [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Local-First Design
 
@@ -190,6 +205,8 @@ User documentation lives on the EMWaver website:
 Repository docs are mainly for contributors working on apps, firmware, hardware, tests, and release engineering. Start with the README closest to the subsystem you are changing.
 
 ## Contributing
+
+Contributions are very welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions, testing, and contribution guidelines.
 
 EMWaver is open source and local-first. Contributions should preserve these principles:
 
