@@ -15,7 +15,7 @@ The short version: EMWaver turns supported MCU boards into a scriptable hardware
 ## Repo layout
 
 ```text
-android/                 Native Android app (Kotlin, Gradle)
+android/                 Native Android app (Java, Gradle)
 ios/                     Native iOS/iPadOS app (Swift, SwiftUI, Xcode)
 macos/                   Native macOS app (Swift, SwiftUI, Xcode)
 windows/                 Native Windows 11 app (WPF, C#, .NET)
