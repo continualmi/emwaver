@@ -30,15 +30,17 @@ git push origin emwaver-v1.0.3
 5. Watch the tag-triggered GitHub Actions release workflows and confirm the GitHub Release has the expected assets.
 6. Run the store workflows separately for iOS App Store/TestFlight and Google Play, using the same product version and new platform build numbers/codes as required by each store.
 
-## Preview release tag
+## Public download links
 
 The install page points desktop/direct-download buttons at GitHub Release assets under:
 
 ```text
-https://github.com/continualmi/emwaver/releases/download/emwaver-preview/
+https://github.com/continualmi/emwaver/releases/latest/download/
 ```
 
-Expected preview assets:
+Keep the intended public release marked as GitHub's **Latest** release so these links continue to work across new versions.
+
+Expected public assets:
 
 - `EMWaver-android.apk` — signed Android direct-install APK
 - `EMWaver-macos.dmg` — macOS preview DMG
@@ -51,19 +53,22 @@ Linux remains omitted from the public install buttons until the native GTK4/liba
 
 ## Workflows to run before opening the repo
 
-Run these from the GitHub Actions UI or with `gh workflow run ...`:
+For an aligned public release, push the matching `emwaver-vX.Y.Z` tag. The tag-triggered workflows publish assets to that release automatically.
+
+Then verify assets and Latest status:
+
+```bash
+gh release view emwaver-v1.0.2 --json assets,url,isPrerelease,isDraft
+gh release list --limit 5
+```
+
+For a rolling preview refresh only, run these manually from the GitHub Actions UI or with `gh workflow run ...`:
 
 ```bash
 gh workflow run android-apk-release.yml -f tag=emwaver-preview
 gh workflow run macos-dmg-release.yml -f tag=emwaver-preview
 gh workflow run windows-exe-release.yml -f tag=emwaver-preview
 gh workflow run linux-release.yml -f tag=emwaver-preview
-```
-
-Then verify assets:
-
-```bash
-gh release view emwaver-preview --json assets,url
 ```
 
 ## Android APK signing

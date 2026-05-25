@@ -1,6 +1,6 @@
 import { SiteHeader } from "@/components/emwaver/SiteHeader";
 
-const RELEASE_DOWNLOAD_BASE = "https://github.com/continualmi/emwaver/releases/download/emwaver-preview";
+const RELEASE_DOWNLOAD_BASE = "https://github.com/continualmi/emwaver/releases/latest/download";
 const APP_STORE_URL = "https://apps.apple.com/us/app/emwaver/id6747035939";
 const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.emwaver.emwaverandroidapp&hl=en-US&ah=xJ56ZZjMEPUbsS42586J-0pNhxQ";
 const PLAY_INTERNAL_TEST_URL = "https://play.google.com/apps/internaltest/4701722111058615569";

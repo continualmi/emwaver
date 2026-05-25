@@ -135,9 +135,9 @@ For users:
 1. Choose a supported board from the [hardware catalog](https://continualmi.com/emwaver/build).
 2. Install an app from the [install page](https://continualmi.com/emwaver/install):
    - [iPhone and iPad on the App Store](https://apps.apple.com/us/app/emwaver/id6747035939)
-   - Android through Google Play internal testing or the direct [Android APK](https://github.com/continualmi/emwaver/releases/download/emwaver-preview/EMWaver-android.apk)
-   - [macOS DMG](https://github.com/continualmi/emwaver/releases/download/emwaver-preview/EMWaver-macos.dmg)
-   - [Windows installer](https://github.com/continualmi/emwaver/releases/download/emwaver-preview/EMWaverSetup-windows-x64.exe) or [Windows ZIP with `EMWaver.exe`](https://github.com/continualmi/emwaver/releases/download/emwaver-preview/EMWaver-windows-x64.zip)
+   - Android through Google Play internal testing or the direct [Android APK](https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-android.apk)
+   - [macOS DMG](https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-macos.dmg)
+   - [Windows installer](https://github.com/continualmi/emwaver/releases/latest/download/EMWaverSetup-windows-x64.exe) or [Windows ZIP with `EMWaver.exe`](https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-windows-x64.zip)
 3. Connect a supported board.
 4. Open or write a JavaScript hardware script and run it locally.
 

@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-const RELEASE_DOWNLOAD_BASE = "https://github.com/continualmi/emwaver/releases/download/emwaver-preview";
+const RELEASE_DOWNLOAD_BASE = "https://github.com/continualmi/emwaver/releases/latest/download";
 const APP_STORE_URL = "https://apps.apple.com/us/app/emwaver/id6747035939";
 const PLAY_INTERNAL_TEST_URL = "https://play.google.com/apps/internaltest/4701722111058615569";
 
