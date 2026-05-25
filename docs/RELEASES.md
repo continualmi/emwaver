@@ -6,9 +6,9 @@ This document tracks the current public preview release assets for the open-sour
 
 EMWaver uses one product version across the native platforms. The current shared version is stored in the repository root `VERSION` file and is currently `1.0.2`.
 
-Use `emwaver-v1.0.2` for the aligned public release tag. Platform-specific build counters still remain separate, such as iOS build numbers and Android `versionCode`.
+Use the bare SemVer tag `1.0.2` for the aligned public release tag. Platform-specific build counters still remain separate, such as iOS build numbers and Android `versionCode`.
 
-Pushing an `emwaver-v*` tag builds the GitHub Release assets for Android direct APK, macOS DMG, Windows installer/ZIP, and Linux packages. Store uploads remain separate workflows because App Store Connect and Google Play have their own review/track state.
+Manual dispatch of the direct-download workflows updates the GitHub Release assets for the selected existing tag. Leave the `tag` input blank to use the root `VERSION` value, currently `1.0.2`; otherwise enter a bare SemVer tag such as `1.0.2`. The workflows verify that the GitHub Release already exists, then overwrite same-named assets on that release. Store uploads remain separate workflows because App Store Connect and Google Play have their own review/track state.
 
 ## New version flow
 
@@ -20,15 +20,17 @@ Pushing an `emwaver-v*` tag builds the GitHub Release assets for Android direct 
    - Windows assembly/file/app manifest versions
    - Android normally reads root `VERSION` as `versionName`, while `versionCode` remains a separate monotonically increasing Play/App install counter.
 3. Commit and push the version bump to `main`.
-4. Create and push the matching release tag:
+4. Create and push the matching release tag, then create the GitHub Release for it:
 
 ```bash
-git tag emwaver-v1.0.3
-git push origin emwaver-v1.0.3
+git tag 1.0.3
+git push origin 1.0.3
+gh release create 1.0.3 --title "EMWaver 1.0.3" --latest --notes "EMWaver 1.0.3"
 ```
 
-5. Watch the tag-triggered GitHub Actions release workflows and confirm the GitHub Release has the expected assets.
-6. Run the store workflows separately for iOS App Store/TestFlight and Google Play, using the same product version and new platform build numbers/codes as required by each store.
+5. Run the direct-download GitHub Actions workflows manually. Leave the `tag` field blank to use the root `VERSION`, or enter the existing release tag explicitly.
+6. Confirm the GitHub Release has the expected assets. Re-running a workflow overwrites the asset with the same filename on that release.
+7. Run the store workflows separately for iOS App Store/TestFlight and Google Play, using the same product version and new platform build numbers/codes as required by each store.
 
 ## Public download links
 
@@ -53,23 +55,25 @@ Linux remains omitted from the public install buttons until the native GTK4/liba
 
 ## Workflows to run before opening the repo
 
-For an aligned public release, push the matching `emwaver-vX.Y.Z` tag. The tag-triggered workflows publish assets to that release automatically.
+For an aligned public release, create the matching bare SemVer `X.Y.Z` Git tag and GitHub Release, then manually run the direct-download workflows. The workflows publish to `VERSION` by default, require that release to already exist, and overwrite same-named assets on it.
 
 Then verify assets and Latest status:
 
 ```bash
-gh release view emwaver-v1.0.2 --json assets,url,isPrerelease,isDraft
+gh release view 1.0.2 --json assets,url,isPrerelease,isDraft
 gh release list --limit 5
 ```
 
-For a rolling preview refresh only, run these manually from the GitHub Actions UI or with `gh workflow run ...`:
+To refresh the current public release assets manually from the CLI, run:
 
 ```bash
-gh workflow run android-apk-release.yml -f tag=emwaver-preview
-gh workflow run macos-dmg-release.yml -f tag=emwaver-preview
-gh workflow run windows-exe-release.yml -f tag=emwaver-preview
-gh workflow run linux-release.yml -f tag=emwaver-preview
+gh workflow run android-apk-release.yml
+gh workflow run macos-dmg-release.yml
+gh workflow run windows-exe-release.yml
+gh workflow run linux-release.yml
 ```
+
+To update a non-current existing release, pass it explicitly, for example `-f tag=1.0.2`.
 
 ## Android APK signing
 

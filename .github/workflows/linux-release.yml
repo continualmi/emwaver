@@ -4,17 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to publish assets to"
-        required: true
-        default: "emwaver-preview"
+        description: "Existing GitHub Release tag to update; blank uses VERSION"
+        required: false
+        default: ""
       version:
         description: "Package version"
         required: false
         default: ""
         type: string
-  push:
-    tags:
-      - "emwaver-v*"
 
 permissions:
   contents: write
@@ -28,20 +25,32 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Resolve release version
+      - name: Resolve release tag and version
         env:
+          INPUT_TAG: ${{ inputs.tag }}
           INPUT_VERSION: ${{ inputs.version }}
           REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
           set -euo pipefail
+          release_tag="${INPUT_TAG}"
+          if [ -z "${release_tag}" ] && [ "${REF_TYPE}" = "tag" ]; then
+            release_tag="${REF_NAME}"
+          fi
+          if [ -z "${release_tag}" ]; then
+            release_tag="$(tr -d '[:space:]' < VERSION)"
+          fi
+
           version="${INPUT_VERSION}"
-          if [ -z "${version}" ] && [[ "${REF_NAME}" == emwaver-v* ]]; then
-            version="${REF_NAME#emwaver-v}"
+          if [ -z "${version}" ] && [[ "${release_tag}" =~ ^[0-9]+[.][0-9]+[.][0-9]+([.-].*)?$ ]]; then
+            version="${release_tag}"
           fi
           if [ -z "${version}" ]; then
             version="$(tr -d '[:space:]' < VERSION)"
           fi
+          echo "EMWAVER_RELEASE_TAG=${release_tag}" >> "${GITHUB_ENV}"
           echo "EMWAVER_LINUX_VERSION=${version}" >> "${GITHUB_ENV}"
+          echo "Resolved release tag: ${release_tag}"
           echo "Resolved Linux package version: ${version}"
 
       - name: Install Linux build dependencies
@@ -85,6 +94,11 @@ jobs:
           sudo apt-get install -y ./dist/EMWaver-linux-amd64.deb
           linux/scripts/verify-linux-install.sh
 
+      - name: Verify target GitHub Release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release view "${EMWAVER_RELEASE_TAG}" --json tagName,url
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
@@ -96,8 +110,11 @@ jobs:
       - name: Publish release assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          prerelease: true
+          tag_name: ${{ env.EMWAVER_RELEASE_TAG }}
+          prerelease: false
+          make_latest: true
+          overwrite_files: true
+          fail_on_unmatched_files: true
           files: |
             dist/EMWaver-linux-x64.tar.gz
             dist/EMWaver-linux-amd64.deb

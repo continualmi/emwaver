@@ -4,12 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to publish assets to"
-        required: true
-        default: "emwaver-preview"
-  push:
-    tags:
-      - "emwaver-v*"
+        description: "Existing GitHub Release tag to update; blank uses VERSION"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -24,18 +21,31 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Resolve release version
+      - name: Resolve release tag and version
         shell: pwsh
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REF_NAME: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
         run: |
-          $version = "${{ github.event.inputs.tag || github.ref_name }}"
-          if ($version -match '^emwaver-v') {
-            $version = $version -replace '^emwaver-v', ''
+          $releaseTag = $env:INPUT_TAG
+          if (-not $releaseTag -and $env:REF_TYPE -eq "tag") {
+            $releaseTag = $env:REF_NAME
+          }
+          if (-not $releaseTag) {
+            $releaseTag = (Get-Content VERSION -Raw).Trim()
+          }
+
+          if ($releaseTag -match '^\d+\.\d+\.\d+([.-].*)?$') {
+            $version = $releaseTag
           } else {
             $version = (Get-Content VERSION -Raw).Trim()
           }
           $assemblyVersion = if ($version -match '^\d+\.\d+\.\d+$') { "$version.0" } else { "1.0.2.0" }
+          "EMWAVER_RELEASE_TAG=$releaseTag" | Out-File -FilePath $env:GITHUB_ENV -Append
           "EMWAVER_RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
           "EMWAVER_WINDOWS_ASSEMBLY_VERSION=$assemblyVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Resolved release tag: $releaseTag"
           Write-Host "Resolved Windows version: $version ($assemblyVersion)"
 
       - name: Set up .NET
@@ -132,6 +142,11 @@ jobs:
           if (-not $signtool) { throw "signtool.exe was not found." }
           & $signtool.FullName sign /fd SHA256 /tr $timestampUrl /td SHA256 /a dist/EMWaverSetup-windows-x64.exe
 
+      - name: Verify target GitHub Release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release view "$env:EMWAVER_RELEASE_TAG" --json tagName,url
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
@@ -143,8 +158,11 @@ jobs:
       - name: Publish release asset
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
-          prerelease: true
+          tag_name: ${{ env.EMWAVER_RELEASE_TAG }}
+          prerelease: false
+          make_latest: true
+          overwrite_files: true
+          fail_on_unmatched_files: true
           files: |
             dist/EMWaverSetup-windows-x64.exe
             dist/EMWaver-windows-x64.zip
