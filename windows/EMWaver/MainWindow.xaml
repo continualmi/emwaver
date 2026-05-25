@@ -19,7 +19,6 @@
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
@@ -37,18 +36,14 @@
                     </Button>
                 </StackPanel>
 
-                <!-- Agent key indicator -->
-                <Button Grid.Column="1" x:Name="AgentKeyButton" Click="OnAgentKeyClick"
-                        Padding="6,2" Background="Transparent" BorderThickness="0"
-                        ToolTip="Agent API Key" VerticalAlignment="Center">
-                    <TextBlock x:Name="AgentKeyIcon" Text="🔑" FontSize="16" />
-                </Button>
-
-                <!-- Spacer -->
-                <TextBlock Grid.Column="2" />
+                <!-- App build/version for support reports. -->
+                <TextBlock Grid.Column="1" x:Name="AppVersionText"
+                           Foreground="{DynamicResource AppTextSecondaryBrush}"
+                           VerticalAlignment="Center" HorizontalAlignment="Left"
+                           FontSize="11" Margin="12,0,0,0" />
 
                 <!-- Action toolbar -->
-                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- Script mode toggles -->
                     <ToggleButton x:Name="CodeModeToggle" Content="Code" Width="60" Height="28"
                                   IsChecked="True" Click="OnCodeModeClick" Margin="0,0,2,0" />

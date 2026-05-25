@@ -154,6 +154,8 @@ public partial class FirmwareUpdateWindow : Window
             EspBootloaderText.Text = $"Detected on {_updater.EspBootloaderPort}.";
         else if (_updater.EspBootloaderConnected)
             EspBootloaderText.Text = "Detected.";
+        else if (!string.IsNullOrWhiteSpace(_updater.EspDetectionError))
+            EspBootloaderText.Text = $"Detection error: {_updater.EspDetectionError}";
         else
             EspBootloaderText.Text = "Not detected yet. Put the board in bootloader mode, then click Refresh.";
 

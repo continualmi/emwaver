@@ -90,7 +90,7 @@
                     <StackPanel Orientation="Horizontal">
                         <Button Content="Refresh" Width="80" Margin="0,0,8,0" Click="OnEspRefreshClick" />
                         <Button x:Name="EspFlashButton" Content="Flash firmware" Width="120"
-                                Style="{StaticResource AccentButtonStyle}" Click="OnEspFlashClick" />
+                                Click="OnEspFlashClick" />
                     </StackPanel>
                 </StackPanel>
             </Border>

@@ -11,6 +11,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+    <VersionPrefix>1.0.2</VersionPrefix>
+    <Version>$(VersionPrefix)</Version>
+    <AssemblyVersion>$(VersionPrefix).0</AssemblyVersion>
+    <FileVersion>$(VersionPrefix).0</FileVersion>
+    <InformationalVersion Condition="'$(InformationalVersion)' == ''">$(VersionPrefix)+local</InformationalVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
 
     <!-- CI/dev shells may not have full VC toolchain installed. -->
@@ -35,19 +40,6 @@
     </None>
   </ItemGroup>
 
-  <!-- Sync bundled example scripts from repo assets into the Windows project folder. -->
-  <Target Name="SyncDefaultScripts" BeforeTargets="BeforeBuild">
-    <ItemGroup>
-      <_SrcDefaultScripts Include="..\..\assets\default-scripts\*.js" />
-      <_DestDefaultScripts Include="Assets\DefaultScripts\*.js" />
-      <_DestDefaultScripts Include="Assets\DefaultScripts\*.emw" />
-    </ItemGroup>
-
-    <MakeDir Directories="Assets\DefaultScripts" />
-    <Delete Files="@(_DestDefaultScripts)" />
-    <Copy SourceFiles="@(_SrcDefaultScripts)" DestinationFolder="Assets\DefaultScripts\" SkipUnchangedFiles="false" />
-  </Target>
-
   <ItemGroup>
     <!-- App icon asset (runtime). -->
     <None Include="Assets\emwaver.ico">
@@ -59,10 +51,13 @@
     <!-- Ensure .gitkeep doesn't participate in resource indexing. -->
     <None Remove="Assets\DefaultScripts\.gitkeep" />
 
-    <!-- Bundled default scripts. -->
-    <Content Include="Assets\DefaultScripts\*.js">
+    <!-- Bundled default scripts. Include from the repo-level source directory so fresh CI
+         checkouts publish them even though windows/EMWaver/Assets/DefaultScripts only
+         contains .gitkeep before build. -->
+    <Content Include="..\..\assets\default-scripts\*.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <TargetPath>Assets\DefaultScripts\%(Filename)%(Extension)</TargetPath>
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 
@@ -74,12 +69,13 @@
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 
-    <!-- Optional ESP helper + managed firmware bundle. -->
-    <Content Include="..\..\tools\emwaver-esp-helper\dist\emwaver-esp-helper.exe"
-             Condition="Exists('..\..\tools\emwaver-esp-helper\dist\emwaver-esp-helper.exe')">
+    <!-- Optional ESP helper + managed firmware bundle. PyInstaller emits an onedir helper,
+         so copy the full folder; the helper needs its adjacent runtime files on Windows. -->
+    <Content Include="..\..\tools\emwaver-esp-helper\dist\emwaver-esp-helper\**\*.*"
+             Condition="Exists('..\..\tools\emwaver-esp-helper\dist\emwaver-esp-helper\emwaver-esp-helper.exe')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      <TargetPath>emwaver-esp-helper.exe</TargetPath>
+      <TargetPath>emwaver-esp-helper\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 

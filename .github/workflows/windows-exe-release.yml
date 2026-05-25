@@ -33,9 +33,32 @@ jobs:
         working-directory: windows
         run: dotnet restore EMWaver.sln
 
+      - name: Set up Python for ESP helper
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build ESP flashing helper
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install PyInstaller esptool pyserial
+          python tools/emwaver-esp-helper/build_helper.py
+
       - name: Publish Windows app
         working-directory: windows
-        run: dotnet publish EMWaver/EMWaver.csproj --configuration Release --runtime win-x64 --self-contained false --output ../dist/windows-x64
+        shell: pwsh
+        run: |
+          $shortSha = "${{ github.sha }}".Substring(0, 7)
+          $projectXml = [xml](Get-Content EMWaver/EMWaver.csproj -Raw)
+          $appVersion = ($projectXml.Project.PropertyGroup | ForEach-Object { $_.VersionPrefix } | Where-Object { $_ } | Select-Object -First 1)
+          if (-not $appVersion) { $appVersion = "1.0.2" }
+          dotnet publish EMWaver/EMWaver.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained false `
+            --output ../dist/windows-x64 `
+            /p:InformationalVersion="$appVersion+$shortSha"
 
       - name: Install Inno Setup
         shell: pwsh

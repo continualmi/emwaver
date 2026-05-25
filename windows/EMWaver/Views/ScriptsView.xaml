@@ -229,7 +229,13 @@
                                        FontSize="10"
                                        Foreground="{DynamicResource AppTextSecondaryBrush}" />
                         </StackPanel>
-                        <Button Grid.Column="1" Content="API Key" Width="66" Height="26" Click="OnAgentOpenKeyClick" />
+                        <Button Grid.Column="1" x:Name="AgentApiKeyButton" Width="86" Height="26" Click="OnAgentOpenKeyClick"
+                                ToolTip="Agent API key">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                <TextBlock x:Name="AgentApiKeyIcon" Text="🔒" FontSize="13" Margin="0,0,4,0" />
+                                <TextBlock Text="API Key" />
+                            </StackPanel>
+                        </Button>
                     </Grid>
                 </Border>
 

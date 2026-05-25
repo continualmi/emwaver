@@ -52,6 +52,18 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
         }
     }
 
+    private string? _espDetectionError;
+    internal string? EspDetectionError
+    {
+        get => _espDetectionError;
+        private set
+        {
+            if (_espDetectionError == value) return;
+            _espDetectionError = value;
+            OnPropertyChanged();
+        }
+    }
+
     private string? _presentedBoardType;
     internal string? PresentedBoardType
     {
@@ -173,19 +185,22 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
         }
 
         string? espPort = null;
+        string? espError = null;
         try
         {
             espPort = await DetectEspBootloaderPortAsync();
         }
-        catch
+        catch (Exception ex)
         {
             espPort = null;
+            espError = ex.Message;
         }
 
         RunOnUi(() =>
         {
             DfuConnected = dfuPresent;
             EspBootloaderPort = espPort;
+            EspDetectionError = espError;
             EspBootloaderConnected = !string.IsNullOrWhiteSpace(espPort);
             if (!string.IsNullOrWhiteSpace(espPort))
             {
@@ -596,23 +611,37 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
     private string EspHelperPath()
     {
         var appBase = AppContext.BaseDirectory;
-        var bundled = Path.Combine(appBase, "emwaver-esp-helper.exe");
+        var bundled = Path.Combine(appBase, "emwaver-esp-helper", "emwaver-esp-helper.exe");
         if (File.Exists(bundled))
         {
             return bundled;
         }
 
+        // Older preview/dev outputs used a flat helper. Keep this fallback so existing
+        // local builds still work if the helper was copied manually.
+        var bundledFlat = Path.Combine(appBase, "emwaver-esp-helper.exe");
+        if (File.Exists(bundledFlat))
+        {
+            return bundledFlat;
+        }
+
         var repo = DebugRepoRoot();
         if (repo != null)
         {
-            var repoHelper = Path.Combine(repo, "tools", "emwaver-esp-helper", "dist", "emwaver-esp-helper.exe");
+            var repoHelper = Path.Combine(repo, "tools", "emwaver-esp-helper", "dist", "emwaver-esp-helper", "emwaver-esp-helper.exe");
             if (File.Exists(repoHelper))
             {
                 return repoHelper;
             }
+
+            var repoHelperFlat = Path.Combine(repo, "tools", "emwaver-esp-helper", "dist", "emwaver-esp-helper.exe");
+            if (File.Exists(repoHelperFlat))
+            {
+                return repoHelperFlat;
+            }
         }
 
-        throw new FileNotFoundException("Missing bundled ESP helper (emwaver-esp-helper.exe).");
+        throw new FileNotFoundException("Missing bundled ESP helper (emwaver-esp-helper/emwaver-esp-helper.exe).");
     }
 
     private (string Bootloader, string PartitionTable, string OtaData, string App) EspFirmwarePaths()

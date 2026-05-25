@@ -4,7 +4,6 @@ using System.Windows;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using EMWaver.Services;
-using EMWaver.Services.Agent;
 using EMWaver.Views;
 
 namespace EMWaver;
@@ -14,7 +13,6 @@ public partial class MainWindow : Window
     private readonly ScriptsView _scriptsView;
     private readonly WindowsDeviceManager _device;
     private readonly FirmwareUpdateManager _firmwareUpdater;
-    private readonly AgentApiKeyStore _agentKeys;
     private readonly DispatcherTimer _runningPulseTimer;
     private bool _runningPulseBright = true;
 
@@ -25,14 +23,15 @@ public partial class MainWindow : Window
         _scriptsView = ScriptsViewControl;
         _device = AppServices.Device;
         _firmwareUpdater = AppServices.FirmwareUpdater;
-        _agentKeys = AppServices.AgentKeys;
 
         // Wire up dispatchers.
         _device.AttachUiDispatcher(Dispatcher);
         _firmwareUpdater.AttachUiDispatcher(Dispatcher);
 
-        // Set window icon.
+        // Set window icon and visible build/version marker.
         TrySetWindowIcon();
+        AppVersionText.Text = $"App {AppBuildInfo.ShortVersion}";
+        AppVersionText.ToolTip = AppBuildInfo.DiagnosticsLine;
 
         // Subscribe to device state changes.
         _device.PropertyChanged += (_, __) => Dispatcher.Invoke(UpdateDeviceStatus);
@@ -55,7 +54,6 @@ public partial class MainWindow : Window
             await AppServices.Scripts.EnsureBootstrappedAsync();
             await _device.RefreshPortsAsync();
             UpdateDeviceStatus();
-            UpdateAgentKeyIndicator();
         };
 
         Closed += (_, __) =>
@@ -83,16 +81,6 @@ public partial class MainWindow : Window
         };
         window.ShowDialog();
         UpdateDeviceStatus();
-    }
-
-    private void OnAgentKeyClick(object sender, RoutedEventArgs e)
-    {
-        var window = new AgentKeyWindow(_agentKeys)
-        {
-            Owner = this,
-        };
-        window.ShowDialog();
-        UpdateAgentKeyIndicator();
     }
 
     private void OnCodeModeClick(object sender, RoutedEventArgs e)
@@ -204,12 +192,6 @@ public partial class MainWindow : Window
             "" => null,
             var other => other.ToUpperInvariant(),
         };
-    }
-
-    private void UpdateAgentKeyIndicator()
-    {
-        AgentKeyIcon.Text = _agentKeys.HasAgentKey ? "🔑" : "🔒";
-        AgentKeyButton.ToolTip = _agentKeys.HasAgentKey ? "Agent API Key (set)" : "Agent API Key (not set)";
     }
 
     // --- Preview mode ---

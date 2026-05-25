@@ -28,7 +28,11 @@ public partial class DeviceConnectionWindow : Window
         _device.WiFiDiscoveredDevices.CollectionChanged += (_, __) => Dispatcher.Invoke(RefreshDeviceList);
 
         _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
-        _refreshTimer.Tick += async (_, __) => await _device.RefreshPortsAsync();
+        _refreshTimer.Tick += async (_, __) =>
+        {
+            await _device.RefreshPortsAsync();
+            await _updater.RefreshDfuPresenceAsync();
+        };
 
         Closed += (_, __) =>
         {
@@ -38,10 +42,11 @@ public partial class DeviceConnectionWindow : Window
             _device.StopWiFiDiscovery();
         };
 
-        Loaded += (_, __) =>
+        Loaded += async (_, __) =>
         {
             RefreshDeviceList();
             RefreshFirmwareState();
+            await _updater.RefreshDfuPresenceAsync();
             _refreshTimer.Start();
             _device.StartBleDiscovery();
             _device.StartWiFiDiscovery();
@@ -57,6 +62,7 @@ public partial class DeviceConnectionWindow : Window
         {
             RefreshDeviceList();
             RefreshWifiState();
+            RefreshFirmwareState();
         });
     }
 
@@ -250,20 +256,20 @@ public partial class DeviceConnectionWindow : Window
 
     private void RefreshFirmwareState()
     {
-        var isEsp = IsEspDevice;
+        var isEsp = IsEspDevice ||
+                    _updater.EspBootloaderConnected ||
+                    !string.IsNullOrWhiteSpace(_updater.EspBootloaderPort) ||
+                    !_device.IsConnected;
 
         FirmwareDescText.Text = isEsp
-            ? "Flash the bundled ESP32 firmware."
+            ? "Flash bundled ESP32 firmware over the board's serial bootloader. No prior app connection required."
             : "Update the connected board firmware.";
 
         FirmwareButton.Content = isEsp ? "Flash firmware" : "Update firmware";
 
-        var canUpdate = _device.IsConnected ||
-                        _updater.DfuConnected ||
-                        _updater.EspBootloaderConnected ||
-                        !string.IsNullOrWhiteSpace(_updater.EspBootloaderPort);
-
-        FirmwareButton.IsEnabled = canUpdate;
+        // Keep firmware flashing reachable even while the app is only scanning.
+        // A blank ESP32 board cannot be connected to the app before firmware exists.
+        FirmwareButton.IsEnabled = true;
     }
 
     private async void OnWifiSendClick(object sender, RoutedEventArgs e)
@@ -295,6 +301,11 @@ public partial class DeviceConnectionWindow : Window
     private void OnFirmwareClick(object sender, RoutedEventArgs e)
     {
         var boardType = _device.ConnectedBoardType ?? _device.LastDetectedBoardType;
+        if (string.IsNullOrWhiteSpace(boardType) &&
+            (_updater.EspBootloaderConnected || !string.IsNullOrWhiteSpace(_updater.EspBootloaderPort) || !_device.IsConnected))
+        {
+            boardType = "esp32s3";
+        }
         var fwWindow = new FirmwareUpdateWindow(_device, _updater, boardType)
         {
             Owner = this,

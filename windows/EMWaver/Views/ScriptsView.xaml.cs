@@ -313,6 +313,8 @@ public partial class ScriptsView : UserControl
     private void UpdateAgentPanelState()
     {
         var hasKey = AppServices.AgentKeys.HasAgentKey;
+        AgentApiKeyIcon.Text = hasKey ? "🔑" : "🔒";
+        AgentApiKeyButton.ToolTip = hasKey ? "Agent API key is set" : "Add Agent API key";
         AgentSetupPanel.Visibility = hasKey ? Visibility.Collapsed : Visibility.Visible;
         AgentInputBox.IsEnabled = hasKey && !_isAgentSending;
         AgentSendButton.IsEnabled = hasKey && !_isAgentSending;
