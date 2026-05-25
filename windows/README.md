@@ -68,6 +68,18 @@ Transport logic lives under `Services/UsbMidiSysex.cs` and related device manage
 
 Windows also supports a manual ESP32 Wi-Fi runtime connection through the firmware WebSocket endpoint at `ws://<host>:3922/v1/ws`. The device menu and Device page expose `Connect Wi-Fi` for trusted LAN/VPN endpoints, and the Device page exposes Wi-Fi setup actions for sending, clearing, and checking ESP32 SSID/password provisioning over the active local transport. Wi-Fi uses the same 36-byte superframe payload path as USB MIDI and BLE; mDNS discovery remains planned separately.
 
+### 3.1.1 Transport session heartbeat (connection liveness)
+
+All EMWaver transports must use a **transport session heartbeat** to detect disconnections reliably. Platform-level transport status signals (BLE GATT disconnection callbacks, USB device removal events, Wi-Fi socket closures) are unreliable across OS versions and board states — a BLE peripheral can stop responding without the OS ever firing `Disconnected`; a USB MIDI device can silently vanish without a removal event. The only way to confirm the device is actually still there is to ask it: send a known opcode and verify the echo comes back.
+
+The EMWaver protocol is a **single serial bus** — one stream of commands, responses, and streaming data multiplexed over a shared 36-byte superframe lane. The heartbeat is just another command queued on that bus alongside script opcodes and Agent tool calls. There is no contention or separate channel; the heartbeat naturally interleaves without disrupting other traffic. The firmware echoes it immediately, and the round-trip time confirms liveness without adding protocol complexity.
+
+**Protocol:** The app sends opcode `0x0B` (TransportSession) with sub-opcode `0x03` (Heartbeat) every 2 seconds over the active transport (USB MIDI, BLE, or Wi-Fi). The firmware echoes the heartbeat back on the same transport. If the host does not receive the echo within a window of two heartbeat intervals, the connection is marked as lost, and `ConnectedPort` / `IsConnected` is cleared.
+
+**macOS:** Implemented in `MacUSBManager` (`transportSessionHeartbeatIntervalSeconds = 2.0`, `connectionPollIntervalSeconds = 5.0`). The heartbeat timer is created when a transport session is claimed and cancelled on disconnect.
+
+**Windows:** ❌ **Not yet implemented.** The opcode constants (`TransportSessionOpcode.Heartbeat = 0x03`, `EmwOpcode.TransportSession = 0x0B`) are defined in `WindowsDeviceManager.cs` but no timer sends heartbeats and no timeout clears stale connections. This means BLE and Wi-Fi connections can remain in `IsConnected = true` indefinitely after the device physically disconnects or changes mode (e.g., ESP32 entering bootloader). The `UpdateDeviceStatus()` method in `MainWindow.xaml.cs` works around this by checking `FirmwareUpdateManager.EspBootloaderConnected` before `device.IsConnected`, but the heartbeat needs to be implemented for reliable multi-transport operation.
+
 ## 3.2 Scripting UX
 
 Scripts UI and runtime behavior are centered in `ScriptsPage` and `Scripting/*` modules, including plot/state helpers and script document handling.

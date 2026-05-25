@@ -91,6 +91,7 @@ Release distribution:
 3. Keep firmware asset paths stable unless coordinated across tooling and update flows.
 4. Keep app-level dialogs/resources synced with underlying feature availability.
 5. Avoid introducing platform-specific divergence where shared behavior can be aligned with iOS/macOS/web patterns.
+6. **Transport session heartbeat is mandatory.** OS-level connection signals (BLE GATT callbacks, USB device removal broadcasts, Wi-Fi socket closures) are unreliable across Android versions, OEM skins, and board states. The only reliable way to confirm a device is still reachable is the application-level heartbeat: send opcode `0x0B`/`0x03` every 2 seconds over the active transport; if the firmware echo is not received within two heartbeat intervals, mark the connection as lost and clear `IsConnected`. Do not trust platform disconnection events as the sole liveness signal.
 
 Simulator testing:
 - `scripts/SimulatorScriptDeviceBridge.java` reads the shared `simulator/fixtures/*.json` contract and implements the same bridge used by `ScriptEngine`.
