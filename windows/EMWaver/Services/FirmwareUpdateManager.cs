@@ -595,17 +595,39 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
 
     private void MaybeIngestEspProgress(string line)
     {
+        // Connecting phase: 0-10%
         if (line.Contains("Connecting", StringComparison.OrdinalIgnoreCase))
         {
             ProgressPct = Math.Max(ProgressPct, 10);
+            return;
         }
-        else if (line.Contains("Writing at", StringComparison.OrdinalIgnoreCase) ||
-                 line.Contains("Writing", StringComparison.OrdinalIgnoreCase))
+
+        // esptool emits "Writing at 0x... (NN %)" lines — parse the percentage
+        // and map it smoothly from 10% to 90%.
+        if (line.Contains("Writing at", StringComparison.OrdinalIgnoreCase))
         {
-            ProgressPct = Math.Max(ProgressPct, 50);
+            var parenIdx = line.LastIndexOf('(');
+            var pctIdx = line.LastIndexOf('%');
+            if (parenIdx >= 0 && pctIdx > parenIdx)
+            {
+                var pctStr = line.Substring(parenIdx + 1, pctIdx - parenIdx - 1).Trim();
+                if (double.TryParse(pctStr, out var writePct))
+                {
+                    // Map 0-100% write progress → 10-90% overall progress
+                    var overall = 10.0 + writePct * 0.8;
+                    ProgressPct = Math.Max(ProgressPct, Math.Min(90.0, overall));
+                }
+            }
+            else
+            {
+                ProgressPct = Math.Max(ProgressPct, 50);
+            }
+            return;
         }
-        else if (line.Contains("Hash of data verified", StringComparison.OrdinalIgnoreCase) ||
-                 line.Contains("Hard resetting", StringComparison.OrdinalIgnoreCase))
+
+        // Verification/hard reset: 90%
+        if (line.Contains("Hash of data verified", StringComparison.OrdinalIgnoreCase) ||
+            line.Contains("Hard resetting", StringComparison.OrdinalIgnoreCase))
         {
             ProgressPct = Math.Max(ProgressPct, 90);
         }
