@@ -11,9 +11,9 @@ npm run build:static-sites
 npm run start
 ```
 
-Local dev URL: `http://localhost:3300/emwaver`
+Local dev URL: `http://localhost:3300/`
 
-The static export keeps the route available both at the domain root for `emwaver.ai` and under `/emwaver` for compatibility with old Continual MI links.
+The static export is deployed at the domain root for `emwaver.ai`. Older `/emwaver/...` compatibility paths are intentionally not generated; the Azure deploy workflow deletes stale `emwaver/*` blobs before upload so old prefixed pages cannot linger in storage.
 
 ## Deployment
 
