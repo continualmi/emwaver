@@ -6,16 +6,16 @@ const VIDEOS = [
     title: "EMWaver Platform Capabilities",
     summary:
       "A walkthrough of the software platform, agent workflows, and real hardware control flows.",
-    href: "https://youtu.be/uopJ7ONPtM4",
-    embedUrl: "https://www.youtube-nocookie.com/embed/uopJ7ONPtM4?rel=0",
+    href: "https://youtu.be/Tyr9nzmqRUs",
+    embedUrl: "https://www.youtube-nocookie.com/embed/Tyr9nzmqRUs?rel=0",
     eyebrow: "Platform walkthrough",
   },
   {
     title: "EMWaver Hardware and JLCPCB Ordering",
     summary:
       "Hardware overview plus the self-build path for getting a supported EMWaver setup in hand.",
-    href: "https://youtu.be/PNf2JGsF1Mk",
-    embedUrl: "https://www.youtube-nocookie.com/embed/PNf2JGsF1Mk?rel=0",
+    href: "https://youtu.be/K1l5yQR52s0",
+    embedUrl: "https://www.youtube-nocookie.com/embed/K1l5yQR52s0?rel=0",
     eyebrow: "Hardware + build",
   },
   {

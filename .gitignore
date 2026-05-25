@@ -137,3 +137,6 @@ web/out-emwaver/
 # Playwright artifacts
 .playwright-cli/
 output/playwright/
+
+# Added by ggshield
+.cache_ggshield
