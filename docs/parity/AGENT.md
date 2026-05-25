@@ -35,11 +35,11 @@ The repo-level static parity check is:
 node scripts/parity/verify-platform-parity.mjs
 ```
 
-This check runs in GitHub Actions through `.github/workflows/platform-parity.yml`
-and verifies the cross-platform contract that can be checked without a physical
-device or simulator: local Agent key storage, local SQLite chat storage, shared
-Agent request shape, BLE runtime presence, and absence of Firebase/Google
-sign-in style hosted account gates in native app source.
+Run this check manually when changing platform parity contracts. It verifies
+the cross-platform contract that can be checked without a physical device or
+simulator: local Agent key storage, local SQLite chat storage, shared Agent
+request shape, BLE runtime presence, and absence of Firebase/Google sign-in
+style hosted account gates in native app source.
 
 ## Current Notes
 

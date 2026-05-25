@@ -10,7 +10,7 @@ Run the suite locally:
 node scripts/parity/verify-platform-parity.mjs
 ```
 
-CI runs the same command in `.github/workflows/platform-parity.yml`.
+This suite is currently run manually when changing platform parity contracts.
 
 ## Structure
 
