@@ -173,7 +173,7 @@ The workflow runs manually from GitHub Actions or when pushing tags matching `io
 
 `.github/workflows/ios-app-store-upload.yml` can build a signed production IPA and upload it to App Store Connect for TestFlight/build processing. It validates that the IPA bundles the JavaScript `DefaultScripts/*.js` assets and contains no legacy `.emw` scripts before upload. It uses the same `app-store` environment secrets as the TestFlight workflow, runs manually only, and does not submit the app for App Review.
 
-After the workflow completes and Apple finishes processing the build, finish the release in App Store Connect by selecting the processed build, confirming compliance and review details, and submitting for review manually.
+After the workflow completes and Apple finishes processing the build, finish the release in App Store Connect by selecting the processed build, confirming review details, and submitting for review manually. `ios/EMWaver/Info.plist` sets `ITSAppUsesNonExemptEncryption` to `false`, so standard Apple export-compliance encryption prompts should be pre-answered for new builds.
 
 ---
 
