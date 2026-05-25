@@ -10,7 +10,7 @@ function findActiveHref(pathname: string): string | null {
   const exact = allHrefs.find((h) => h === pathname);
   if (exact) return exact;
   const prefixMatches = allHrefs
-    .filter((h) => h !== "/emwaver/docs" && pathname.startsWith(h + "/"))
+    .filter((h) => h !== "/docs" && pathname.startsWith(h + "/"))
     .sort((a, b) => b.length - a.length);
   return prefixMatches[0] ?? null;
 }

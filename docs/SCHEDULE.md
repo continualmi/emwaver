@@ -1,12 +1,11 @@
 # SCHEDULE
 
-## Week of 2026-05-04 -> 2026-05-10
+Short-term execution tracker.
 
-- [ ] ESP32 Wi-Fi transport — run **008_ESP32_WIFI_LAN_SCRIPT_EXECUTION** on real ESP32-S3 hardware: provision over USB/BLE with SSID/password only, verify same-LAN mDNS and direct-IP script execution, second-client busy handling, Wi-Fi drop recovery, USB/BLE recovery, and GPIO/ADC/SPI/PWM/sampler/retransmit coverage.
-- [ ] ESP32 Wi-Fi transport — run **009_ESP32_WIFI_VPN_BY_IP_EXECUTION** on real ESP32-S3 hardware: verify user-owned VPN/private-IP script execution, manual IP fallback when mDNS is unavailable, reachable/busy/connection-failed diagnostics, reconnect behavior, and no hosted relay/account path.
-- [ ] ESP32 Wi-Fi transport — record pass/fail evidence in `docs/TESTS.md` and update `docs/ESP32_WIFI_TRANSPORT_AUDIT.md` before marking the transport plan complete.
+## Current
 
-## Week of 2026-02-23 → 2026-03-01
-
-- [ ] `pwm.emw` — pass local test **#004** (UI slider drives full 0→180° servo movement reliably).
-- [ ] `rfid.emw` — pass local test **#005** (block read/write + UID magic card clone end-to-end).
+- [x] Documentation cleanup — stale Gateway/CLI wording removed from active docs and platform READMEs.
+- [x] CC1101 validation — `cc1101.js` register read/write confirmed on iOS, Android, macOS, and Windows (2026-05-24).
+- [ ] ESP32 Wi-Fi transport — run **013_ESP32_WIFI_LAN_SCRIPT_EXECUTION** on real ESP32-S3 hardware: provision over USB/BLE, verify same-LAN mDNS/direct-IP script execution from native apps, second-client busy handling, Wi-Fi drop recovery, USB/BLE recovery, and representative GPIO/ADC/SPI/PWM/sampler coverage.
+- [ ] ESP32 Wi-Fi remote-by-IP — run **014_ESP32_WIFI_REMOTE_BY_IP_EXECUTION** on real ESP32-S3 hardware through a user-owned routed path such as VPN/Tailscale/SSH tunnel.
+- [ ] Native Linux app — continue GTK4/libadwaita port without reintroducing Gateway/browser/CLI control paths.

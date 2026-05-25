@@ -129,6 +129,8 @@ We intentionally give up:
 - macOS DMG for development and advanced use.
 - Windows deferred past V1; installer EXE and ZIP paths defined but not active.
 - GitHub Releases may host preview downloadable artifacts; the public install page should present mobile first.
+- EMWaver uses one shared product version across native platforms. Keep the root `VERSION` file, iOS/macOS marketing versions, Android versionName, Linux package version, and Windows app/installer version aligned.
+- Release tags use `emwaver-vX.Y.Z` and should match the root `VERSION` value. Pushing such a tag builds/publishes the GitHub Release assets for direct-download platforms; App Store and Google Play submissions remain separate workflows because they have store-specific review and track state.
 
 ### Long-term hardware direction
 
@@ -172,16 +174,17 @@ Use the local README first when working in a folder:
 - `docs/AGENT_API.md` — paid Agent API-key and endpoint direction
 - `docs/AGENT_EVAL_RUNTIME.md` — current Agent automation model: named hardware primitive tools (spi_transfer, gpio_read/write, analog_read)
 - `docs/AGENT_RUNTIME_AND_TOOLS.html` — visual Agent runtime/tooling document
-- `docs/CROSS_PLATFORM_AGENT_UI_MIGRATION_PLAN.html` — cross-platform Agent/UI parity plan
+- `docs/LINUX_MACOS_PARITY_AUDIT.md` — working checklist of macOS-vs-Linux native parity gaps
 - `docs/ESP32_WIFI_REMOTE_ACCESS.md` — user-owned LAN/VPN remote access for ESP32 Wi-Fi
 - `docs/ESP32_WIFI_TRANSPORT_AUDIT.md` — ESP32 Wi-Fi transport audit
 - `docs/ESP32_WIFI_TRANSPORT_PLAN.md` — ESP32 Wi-Fi transport plan
 - `docs/PLANNING.md` — durable working tracker for current priorities, active work, blockers, next steps
 - `docs/SCHEDULE.md` — weekly planning/scheduling tracker
 - `docs/TESTS.md` — active manual hardware test suite, test codes, and pass/pending tracking
+- `docs/RELEASES.md` — release workflows, signing expectations, and public preview assets
 - `docs/SIMULATOR.md` — shared device simulator for cross-platform testing
 - `docs/parity/` — cross-platform feature parity contracts (agent, transport, scripting, firmware, local-first)
-- `docs/archive/` — archived docs from the Gateway/CLI/Linux era
+- `docs/archive/` — archived docs from the Gateway/CLI/Linux era and superseded script/UI planning passes
 - `videos/README.md` — video planning, direction, lightweight production rules, and writing guidance
 - `.agents/skills/` — canonical EMWaver Codex skills for repo-local product guidance
 - `.agents/skills/archive/` — archived skills (Gateway/CLI)
@@ -236,6 +239,7 @@ If a folder has a README, detailed documentation should live there.
 
 - Prefer docs and code updates in the same PR when behavior changes.
 - When changing a specific subsystem, update that folder's README.
+- When porting or matching behavior from another supported platform, read the actual source implementation for the reference platform first, not just docs or summaries. Match the real architecture and user-visible behavior; do not invent platform-local shims, fake previews, substitute UI, or prototype-only approximations when a working implementation already exists elsewhere in the repo.
 - Keep AGENTS concise; do not re-expand it with subsystem internals.
 - Do not move secrets into repo docs.
 - Keep local runtime work account-free and cloud-free. The only planned network integration is the paid Agent API key flow to the future Continual MI/MGPT backend.

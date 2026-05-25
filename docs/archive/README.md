@@ -4,7 +4,7 @@ These documents describe a previous phase of EMWaver where the Gateway (Rust bac
 
 The Gateway, CLI, and Linux support were removed in May 2026. See `docs/DROP_GATEWAY_AND_LINUX.md` for the decision record.
 
-EMWaver is now **native apps only**: iOS, Android, macOS, Windows.
+EMWaver now uses self-contained native apps: iOS, Android, macOS, Windows, with a native Linux app in progress.
 
 The active orientation doc is `docs/CURRENT.md`.
 
@@ -17,3 +17,8 @@ The active orientation doc is `docs/CURRENT.md`.
 - `TESTS_REBIRTH.md` — Gateway validation evidence
 - `PACKAGING.md` — Gateway/CLI/Linux packaging
 - `UI_SNAPSHOT_RUNTIME_MIGRATION.md` — superseded snapshot migration (agent direction reversed)
+- `TRANSPORT_SESSION_ISOLATION_PLAN.md` — superseded Gateway/session isolation plan
+- `MACOS_MULTI_DEVICE_PLAN.md` — superseded Gateway/CLI-oriented multi-device plan
+- `MACOS_SCRIPT_SESSIONS_UI.md` — superseded macOS session UI plan
+- `CROSS_PLATFORM_AGENT_UI_MIGRATION_PLAN.html` — superseded `.js`/`.jsx` parity plan
+- `JSX_UI_MIGRATION_PLAN.html` — superseded JSX migration plan from the older script/UI architecture

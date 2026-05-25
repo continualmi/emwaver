@@ -12,6 +12,8 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>EMWaver uses the local network to discover and connect to ESP32 boards for local scripts and hardware control.</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

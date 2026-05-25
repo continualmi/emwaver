@@ -134,14 +134,14 @@ function ensureCatalogAssetPath(
   githubUrl: string | null = null,
 ): string {
   const raw = normalizeString(value);
-  if (!raw) return `/emwaver/hardware-catalog/hardware/${slug}/${slug}.png`;
+  if (!raw) return `/hardware-catalog/hardware/${slug}/${slug}.png`;
   const githubAssetPath = ensureGithubAssetPath(githubUrl, raw);
   if (githubAssetPath) return githubAssetPath;
-  if (raw.startsWith("/emwaver/hardware-catalog/")) return raw;
-  if (raw.startsWith("hardware/")) return `/emwaver/hardware-catalog/${raw}`;
-  if (raw.startsWith("downloads/")) return `/emwaver/hardware-catalog/${raw}`;
-  if (raw.includes("/")) return `/emwaver/hardware-catalog/hardware/${raw}`;
-  return `/emwaver/hardware-catalog/hardware/${slug}/${raw}`;
+  if (raw.startsWith("/hardware-catalog/")) return raw;
+  if (raw.startsWith("hardware/")) return `/hardware-catalog/${raw}`;
+  if (raw.startsWith("downloads/")) return `/hardware-catalog/${raw}`;
+  if (raw.includes("/")) return `/hardware-catalog/hardware/${raw}`;
+  return `/hardware-catalog/hardware/${slug}/${raw}`;
 }
 
 function ensureBuildAssetHref(

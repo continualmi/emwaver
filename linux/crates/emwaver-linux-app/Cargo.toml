@@ -1,0 +1,18 @@
+[package]
+name = "emwaver-linux-app"
+version = "1.0.2"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+adw = { package = "libadwaita", version = "0.7" }
+emwaver-linux-agent = { path = "../emwaver-linux-agent" }
+emwaver-linux-core = { path = "../emwaver-linux-core" }
+emwaver-linux-firmware = { path = "../emwaver-linux-firmware" }
+emwaver-linux-runtime = { path = "../emwaver-linux-runtime" }
+emwaver-linux-transport = { path = "../emwaver-linux-transport" }
+gtk = { package = "gtk4", version = "0.9" }
+serde_json.workspace = true
+sourceview5 = "0.9.1"
+tokio.workspace = true

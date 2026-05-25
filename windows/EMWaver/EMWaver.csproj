@@ -61,7 +61,7 @@
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 
-    <!-- Bundled firmware payload. -->
+    <!-- Bundled STM32 firmware payload (committed to firmware/). -->
     <Content Include="..\..\firmware\emwaver.bin">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
@@ -69,38 +69,29 @@
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 
-    <!-- Optional ESP helper: the frozen helper folder is copied as a unit during
-         build, matching macOS behaviour (Xcode "ditto" run script). -->
-
-    <Content Include="..\..\esp\build\bootloader\bootloader.bin"
-             Condition="Exists('..\..\esp\build\bootloader\bootloader.bin')">
+    <!-- Bundled ESP32-S3 firmware payloads. All four files must be committed to
+         firmware/ so cross-platform builds work without requiring ESP-IDF. -->
+    <Content Include="..\..\firmware\emwaver-esp32s3-bootloader.bin">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      <TargetPath>emwaver-esp32s3-bootloader.bin</TargetPath>
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 
-    <Content Include="..\..\esp\build\partition_table\partition-table.bin"
-             Condition="Exists('..\..\esp\build\partition_table\partition-table.bin')">
+    <Content Include="..\..\firmware\emwaver-esp32s3-partition-table.bin">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      <TargetPath>emwaver-esp32s3-partition-table.bin</TargetPath>
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 
-    <Content Include="..\..\esp\build\ota_data_initial.bin"
-             Condition="Exists('..\..\esp\build\ota_data_initial.bin')">
+    <Content Include="..\..\firmware\emwaver-esp32s3-ota-data.bin">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      <TargetPath>emwaver-esp32s3-ota-data.bin</TargetPath>
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 
-    <Content Include="..\..\esp\build\emwaveresp.bin"
-             Condition="Exists('..\..\esp\build\emwaveresp.bin')">
+    <Content Include="..\..\firmware\emwaver-esp32s3-app.bin">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      <TargetPath>emwaver-esp32s3-app.bin</TargetPath>
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
   </ItemGroup>

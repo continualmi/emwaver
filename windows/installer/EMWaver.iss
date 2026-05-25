@@ -7,6 +7,7 @@
 #endif
 #ifndef OutputDir
 #define OutputDir "..\..\dist"
+#endif
 
 [Setup]
 AppId={{C170E9A7-8B42-4E27-84A8-5D54664D6F33}

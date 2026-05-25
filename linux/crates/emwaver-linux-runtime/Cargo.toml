@@ -1,0 +1,16 @@
+[package]
+name = "emwaver-linux-runtime"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+boa_engine.workspace = true
+emwaver-linux-transport = { path = "../emwaver-linux-transport" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

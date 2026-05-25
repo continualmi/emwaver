@@ -1,0 +1,17 @@
+# EMWaver Linux device access rules.
+# Install to /etc/udev/rules.d/99-emwaver.rules, then run:
+#   sudo udevadm control --reload-rules
+#   sudo udevadm trigger
+#
+# Local hardware access is not gated by accounts or backend activation.
+
+# STM32F042 EMWaver USB MIDI run mode.
+SUBSYSTEM=="usb", ATTR{idVendor}=="0483", ATTR{idProduct}=="5740", MODE="0666", TAG+="uaccess"
+
+# STM32 DFU bootloader commonly used by STM32F0 boards.
+SUBSYSTEM=="usb", ATTR{idVendor}=="0483", ATTR{idProduct}=="df11", MODE="0666", TAG+="uaccess"
+
+# USB serial adapters commonly present on ESP32 development boards.
+SUBSYSTEM=="tty", ATTRS{idVendor}=="10c4", ATTRS{idProduct}=="ea60", MODE="0666", TAG+="uaccess"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1a86", ATTRS{idProduct}=="55d4", MODE="0666", TAG+="uaccess"
+SUBSYSTEM=="tty", ATTRS{idVendor}=="303a", MODE="0666", TAG+="uaccess"

@@ -7,6 +7,14 @@ on:
         description: "Release tag to publish assets to"
         required: true
         default: "emwaver-preview"
+      version_code:
+        description: "Optional Android versionCode"
+        required: false
+        type: string
+      version_name:
+        description: "Optional Android versionName"
+        required: false
+        type: string
   push:
     tags:
       - "emwaver-v*"
@@ -17,10 +25,31 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    environment: play-store
+    timeout-minutes: 45
+    env:
+      EMWAVER_ANDROID_VERSION_CODE: ${{ inputs.version_code }}
+      EMWAVER_ANDROID_VERSION_NAME: ${{ inputs.version_name }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Resolve release version
+        env:
+          INPUT_VERSION_NAME: ${{ inputs.version_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${INPUT_VERSION_NAME}"
+          if [ -z "${version}" ] && [[ "${REF_NAME}" == emwaver-v* ]]; then
+            version="${REF_NAME#emwaver-v}"
+          fi
+          if [ -z "${version}" ]; then
+            version="$(tr -d '[:space:]' < VERSION)"
+          fi
+          echo "EMWAVER_ANDROID_VERSION_NAME=${version}" >> "${GITHUB_ENV}"
+          echo "Resolved Android versionName: ${version}"
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -35,15 +64,42 @@ jobs:
           mkdir -p stm/emwaver-firmware/Release
           cp firmware/emwaver.bin stm/emwaver-firmware/Release/emwaver-firmware.bin
 
-      - name: Build Android release APK
+      - name: Install Android release signing key
         working-directory: android
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${ANDROID_KEYSTORE_BASE64}" ]; then
+            echo "ANDROID_KEYSTORE_BASE64 is required for the public direct APK." >&2
+            exit 1
+          fi
+          mkdir -p private_keys
+          echo "${ANDROID_KEYSTORE_BASE64}" | base64 -d > private_keys/emwaver-upload.jks
+          chmod 600 private_keys/emwaver-upload.jks
+          echo "ANDROID_KEYSTORE_PATH=${PWD}/private_keys/emwaver-upload.jks" >> "${GITHUB_ENV}"
+
+      - name: Build signed Android release APK
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: ./gradlew assembleRelease
 
-      - name: Collect APK
+      - name: Collect and verify signed APK
         run: |
           set -euo pipefail
           mkdir -p dist
-          cp android/app/build/outputs/apk/release/app-release-unsigned.apk dist/EMWaver-android.apk
+          signed_apk="android/app/build/outputs/apk/release/app-release.apk"
+          if [ ! -f "${signed_apk}" ]; then
+            echo "Expected signed APK missing at ${signed_apk}." >&2
+            find android/app/build/outputs/apk/release -maxdepth 1 -type f -print >&2 || true
+            exit 1
+          fi
+          cp "${signed_apk}" dist/EMWaver-android.apk
+          apksigner="$(find "${ANDROID_HOME}/build-tools" -name apksigner -type f | sort -V | tail -1)"
+          "${apksigner}" verify --verbose --print-certs dist/EMWaver-android.apk
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4

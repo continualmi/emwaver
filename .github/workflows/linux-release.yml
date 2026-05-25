@@ -1,0 +1,103 @@
+name: Linux Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish assets to"
+        required: true
+        default: "emwaver-preview"
+      version:
+        description: "Package version"
+        required: false
+        default: ""
+        type: string
+  push:
+    tags:
+      - "emwaver-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Resolve release version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${INPUT_VERSION}"
+          if [ -z "${version}" ] && [[ "${REF_NAME}" == emwaver-v* ]]; then
+            version="${REF_NAME#emwaver-v}"
+          fi
+          if [ -z "${version}" ]; then
+            version="$(tr -d '[:space:]' < VERSION)"
+          fi
+          echo "EMWAVER_LINUX_VERSION=${version}" >> "${GITHUB_ENV}"
+          echo "Resolved Linux package version: ${version}"
+
+      - name: Install Linux build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            libgtk-4-dev \
+            libadwaita-1-dev \
+            libgtksourceview-5-dev \
+            libgraphene-1.0-dev \
+            libdbus-1-dev \
+            desktop-file-utils \
+            appstream \
+            dbus-x11 \
+            dpkg-dev \
+            xvfb
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: linux -> target
+
+      - name: Build Linux app
+        run: cargo build --manifest-path linux/Cargo.toml --release -p emwaver-linux-app
+
+      - name: Package Linux app
+        run: linux/scripts/package-linux.sh
+
+      - name: Verify Linux packages
+        run: linux/scripts/verify-linux-package.sh dist
+
+      - name: Install and smoke-test Linux package
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y ./dist/EMWaver-linux-amd64.deb
+          linux/scripts/verify-linux-install.sh
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EMWaver-linux-packages
+          path: |
+            dist/EMWaver-linux-x64.tar.gz
+            dist/EMWaver-linux-amd64.deb
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          prerelease: true
+          files: |
+            dist/EMWaver-linux-x64.tar.gz
+            dist/EMWaver-linux-amd64.deb

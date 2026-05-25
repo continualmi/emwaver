@@ -4,6 +4,8 @@ plugins {
 
 def emwaverRepoRootDir = rootProject.projectDir.parentFile
 def emwaverSharedScriptAssetsDir = new File(emwaverRepoRootDir, "assets/default-scripts")
+def emwaverVersionFile = new File(emwaverRepoRootDir, "VERSION")
+def emwaverAppVersion = emwaverVersionFile.exists() ? emwaverVersionFile.getText('UTF-8').trim() : "1.0.2"
 
 def emwaverEnvMap = [:]
 
@@ -67,7 +69,7 @@ android {
         minSdk 24
         targetSdk 35
         versionCode envOr("EMWAVER_ANDROID_VERSION_CODE", "2").toInteger()
-        versionName envOr("EMWAVER_ANDROID_VERSION_NAME", "1.0.0")
+        versionName envOr("EMWAVER_ANDROID_VERSION_NAME", emwaverAppVersion)
 
         buildConfigField "String", "EMWAVER_BUNDLED_FW_VERSION", '"' + emwaverBundledFwVersion + '"'
 

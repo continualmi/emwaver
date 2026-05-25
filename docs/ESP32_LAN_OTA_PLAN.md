@@ -4,10 +4,9 @@ ESP32 LAN OTA is a future local-first update path for boards already provisioned
 
 ## Direction
 
-- OTA should use user-owned LAN/VPN/SSH/Tailscale reachability.
-- OTA must not require EMWaver accounts, hosted device registration, subscription checks, or hosted relay.
+- OTA should use same-LAN or user-owned routed reachability such as VPN, SSH tunnel, or Tailscale.
 - Native apps may expose app-local OTA/update UI where platform constraints allow.
-- Gateway may later expose a local terminal/browser OTA helper, but the current Gateway consolidation focuses on script execution transports.
+- OTA should fit the native-app runtime model and should not revive the removed Gateway/browser/CLI control plane.
 
 ## Current Non-Goals
 

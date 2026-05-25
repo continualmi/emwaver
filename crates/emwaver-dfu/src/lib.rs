@@ -522,12 +522,17 @@ impl DfuDevice {
                         // Some DFU implementations (or macOS USB stacks) will stall DFU_UPLOAD.
                         // If we can't verify, continue flashing without verification rather than failing.
                         let lower = e.to_ascii_lowercase();
-                        let looks_like_pipe = lower.contains("pipe error") || lower.contains("stall") || lower.contains("req=0x02");
+                        let looks_like_pipe = lower.contains("pipe error")
+                            || lower.contains("stall")
+                            || lower.contains("req=0x02");
                         if looks_like_pipe {
                             can_verify = false;
                             emit(
                                 step_index,
-                                format!("Verify not supported ({}). Continuing without verification...", e),
+                                format!(
+                                    "Verify not supported ({}). Continuing without verification...",
+                                    e
+                                ),
                             );
                         } else {
                             return Err(e);

@@ -82,9 +82,9 @@ or run from Android Studio.
 Use the appropriate connected device/emulator setup. USB host and BLE behavior testing need real device support.
 
 Release distribution:
-- direct preview APKs are built by `.github/workflows/android-apk-release.yml`.
+- direct preview APKs are built and signed by `.github/workflows/android-apk-release.yml`.
 - Google Play app bundles are built and uploaded by `.github/workflows/android-play-release.yml` through `android/fastlane/`.
-- Play uploads require the protected `play-store` GitHub Environment secrets documented in `docs/PACKAGING.md`.
+- Direct APK and Play uploads require the protected `play-store` GitHub Environment secrets documented in `../docs/RELEASES.md`.
 
 ---
 

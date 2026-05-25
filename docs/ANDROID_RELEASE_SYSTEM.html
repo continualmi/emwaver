@@ -179,8 +179,8 @@
     <td>APK</td>
     <td><code>android-apk-release.yml</code></td>
     <td><code>emwaver-v*</code></td>
-    <td>Unsigned APK</td>
-    <td><span class="badge badge-orange">None</span></td>
+    <td>Signed APK</td>
+    <td><span class="badge badge-green">Upload key</span></td>
     <td>GitHub Releases (prerelease)</td>
   </tr>
   <tr>
@@ -203,7 +203,7 @@
 </div>
 
 <div class="note">
-  <strong>Key distinction:</strong> The APK workflow and the Play Store workflow use <strong>different tag prefixes</strong> so they never collide. Pushing <code>emwaver-v1.0.0</code> builds an unsigned APK for GitHub Releases. Pushing <code>android-v1.0.0</code> or <code>emwaver-android-v1.0.0</code> triggers the signed Play Store upload.
+  <strong>Key distinction:</strong> The APK workflow and the Play Store workflow use <strong>different tag prefixes</strong> so they never collide. Pushing <code>emwaver-v1.0.0</code> builds a signed direct-install APK for GitHub Releases. Pushing <code>android-v1.0.0</code> or <code>emwaver-android-v1.0.0</code> triggers the signed Play Store upload.
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -236,8 +236,8 @@
 <div class="card">
   <h3>Characteristics</h3>
   <ul>
-    <li><span class="badge badge-orange">Unsigned</span> — no code signing, so users must enable "Install unknown apps"</li>
-    <li><span class="badge badge-blue">No secrets</span> — zero secrets required; runs clean on any push</li>
+    <li><span class="badge badge-green">Signed</span> — built from <code>app-release.apk</code> and verified with <code>apksigner</code></li>
+    <li><span class="badge badge-orange">Protected secrets</span> — requires the Android upload keystore secrets from the <code>play-store</code> GitHub Environment</li>
     <li><span class="badge badge-blue">Prerelease</span> — GitHub Release is always marked <code>prerelease: true</code></li>
     <li>Output name: <code>EMWaver-android.apk</code></li>
     <li>Works with any pre-existing GitHub Release tag (does not create the release itself)</li>
@@ -455,7 +455,7 @@
 <div class="card">
   <table>
     <tr><th>Prefix</th><th>Workflow triggered</th><th>Artifact</th><th>Destination</th></tr>
-    <tr><td><code>emwaver-v*</code></td><td><code>android-apk-release.yml</code></td><td>Unsigned APK</td><td>GitHub Releases</td></tr>
+    <tr><td><code>emwaver-v*</code></td><td><code>android-apk-release.yml</code></td><td>Signed APK</td><td>GitHub Releases</td></tr>
     <tr><td><code>android-v*</code></td><td><code>android-play-release.yml</code></td><td>Signed AAB</td><td>Google Play (track from env)</td></tr>
     <tr><td><code>emwaver-android-v*</code></td><td><code>android-play-release.yml</code></td><td>Signed AAB</td><td>Google Play (track from env)</td></tr>
   </table>
