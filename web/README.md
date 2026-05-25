@@ -17,8 +17,6 @@ The static export keeps the route available both at the domain root for `emwaver
 
 ## Deployment
 
-The repository workflow `.github/workflows/deploy-emwaver-pages.yml` builds this app from `web/` and uploads `web/out-emwaver` to GitHub Pages.
-
-The legacy Azure Storage workflow is still present during migration so `emwaver.ai` can stay on the existing host until the Pages deployment and custom-domain cutover are verified.
+The repository workflow `.github/workflows/deploy-emwaver-static-to-azure.yml` builds this app from `web/` and uploads `web/out-emwaver` to the Azure Storage static website that serves `emwaver.ai`.
 
 Download buttons point to GitHub Release assets under `releases/latest/download` instead of serving binary installers from the static site.
