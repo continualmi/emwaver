@@ -267,6 +267,8 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
     }
     private System.Threading.Timer? _transportHeartbeatTimer;
     private int _transportHeartbeatInFlight;
+    private int _heartbeatMissedCount;
+    private System.Threading.Timer? _connectionPollTimer;
     private readonly SemaphoreSlim _commandSemaphore = new(1, 1);
     private readonly TransportDeviceSessionRegistry _bufferSessions = new();
 
@@ -1011,34 +1013,151 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
         var source = TransportSourceFor(transport);
         if (source == 0) return;
 
+        _heartbeatMissedCount = 0;
+        var heartbeatIntervalMs = 2000;
+
         _transportHeartbeatTimer = new System.Threading.Timer(async _ =>
         {
-            if (Interlocked.Exchange(ref _transportHeartbeatInFlight, 1) == 1) return;
+            if (Interlocked.Exchange(ref _transportHeartbeatInFlight, 1) == 1)
+            {
+                Interlocked.Increment(ref _heartbeatMissedCount);
+                return;
+            }
             try
             {
-                if (!IsConnected) return;
-                _ = await SendCommandAsync(
+                if (!IsConnected)
+                {
+                    _heartbeatMissedCount = 0;
+                    return;
+                }
+
+                var response = await SendCommandAsync(
                     new byte[] { EmwOpcode.TransportSession, TransportSessionOpcode.Heartbeat, source },
                     timeoutMs: 1000,
                     ActiveBufferSession,
                     lane => lane.Length > 0 && (lane[0] == 0x80 || lane[0] == 0x81 || lane[0] == 0x82));
+
+                if (response != null && response.Length > 0 && response[0] == 0x80)
+                {
+                    _heartbeatMissedCount = 0;
+                }
+                else
+                {
+                    var missed = Interlocked.Increment(ref _heartbeatMissedCount);
+                    AppendActivityLog($"Transport session heartbeat missed ({missed}) — {ActiveTransport}");
+                    if (missed >= 2)
+                    {
+                        AppendActivityLog($"Transport session lost after {missed} missed heartbeats — disconnecting");
+                        RunOnUi(() =>
+                        {
+                            LastErrorText = "Device connection lost (heartbeat timeout)";
+                            Disconnect();
+                        });
+                    }
+                }
             }
             catch (Exception ex)
             {
-                AppendActivityLog("Transport session heartbeat failed: " + ex.Message);
+                var missed = Interlocked.Increment(ref _heartbeatMissedCount);
+                AppendActivityLog($"Transport session heartbeat error ({missed}): {ex.Message}");
+                if (missed >= 2)
+                {
+                    AppendActivityLog($"Transport session lost after heartbeat errors — disconnecting");
+                    RunOnUi(() =>
+                    {
+                        LastErrorText = "Device connection lost (heartbeat error)";
+                        Disconnect();
+                    });
+                }
             }
             finally
             {
                 Interlocked.Exchange(ref _transportHeartbeatInFlight, 0);
             }
-        }, null, dueTime: 2500, period: 2500);
+        }, null, dueTime: heartbeatIntervalMs, period: heartbeatIntervalMs);
     }
 
     private void StopTransportSessionHeartbeat()
     {
         var timer = _transportHeartbeatTimer;
         _transportHeartbeatTimer = null;
+        _heartbeatMissedCount = 0;
         timer?.Dispose();
+    }
+
+    private void StartConnectionPolling()
+    {
+        if (_connectionPollTimer != null) return;
+        _connectionPollTimer = new System.Threading.Timer(async _ =>
+        {
+            try
+            {
+                await PollConnectionsAsync();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[EMWaver] Connection poll error: {ex.Message}");
+            }
+        }, null, dueTime: 5000, period: 5000);
+    }
+
+    private async Task PollConnectionsAsync()
+    {
+        // Reconcile USB MIDI: if a physical MIDI port we were connected to is gone, disconnect.
+        if (_activeTransport == DeviceTransport.UsbMidi && _usbMidiConnection != null)
+        {
+            var currentPorts = await WindowsUsbMidiTransport.ListPortsAsync();
+            var stillPresent = currentPorts.Any(p =>
+                p.InDeviceId == _usbMidiConnection.Port.InDeviceId &&
+                p.OutDeviceId == _usbMidiConnection.Port.OutDeviceId);
+            if (!stillPresent)
+            {
+                AppendActivityLog("USB MIDI port removed — disconnecting");
+                RunOnUi(() =>
+                {
+                    LastErrorText = "USB MIDI device disconnected";
+                    Disconnect();
+                });
+            }
+        }
+
+        // Reconcile BLE: check if the connected peripheral is still reachable.
+        if (_activeTransport == DeviceTransport.Ble && _bleConnection != null)
+        {
+            try
+            {
+                var device = await BluetoothLEDevice.FromBluetoothAddressAsync(_bleConnection.BluetoothAddress);
+                if (device == null || device.ConnectionStatus != BluetoothConnectionStatus.Connected)
+                {
+                    AppendActivityLog("BLE device no longer connected — disconnecting");
+                    device?.Dispose();
+                    RunOnUi(() =>
+                    {
+                        LastErrorText = "BLE device disconnected";
+                        Disconnect();
+                    });
+                }
+                else
+                {
+                    device.Dispose();
+                }
+            }
+            catch
+            {
+                // If we can't even query the device, assume it's gone.
+                AppendActivityLog("BLE device unreachable — disconnecting");
+                RunOnUi(() =>
+                {
+                    LastErrorText = "BLE device disconnected";
+                    Disconnect();
+                });
+            }
+        }
+    }
+
+    internal void BeginConnectionMonitoring()
+    {
+        StartConnectionPolling();
     }
 
     internal void ApplyTransportDebugPreference()

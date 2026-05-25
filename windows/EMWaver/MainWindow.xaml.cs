@@ -26,6 +26,7 @@ public partial class MainWindow : Window
 
         // Wire up dispatchers.
         _device.AttachUiDispatcher(Dispatcher);
+        _device.BeginConnectionMonitoring();
         _firmwareUpdater.AttachUiDispatcher(Dispatcher);
 
         // Set window icon and visible build/version marker.

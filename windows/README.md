@@ -78,7 +78,7 @@ The EMWaver protocol is a **single serial bus** — one stream of commands, resp
 
 **macOS:** Implemented in `MacUSBManager` (`transportSessionHeartbeatIntervalSeconds = 2.0`, `connectionPollIntervalSeconds = 5.0`). The heartbeat timer is created when a transport session is claimed and cancelled on disconnect.
 
-**Windows:** ❌ **Not yet implemented.** The opcode constants (`TransportSessionOpcode.Heartbeat = 0x03`, `EmwOpcode.TransportSession = 0x0B`) are defined in `WindowsDeviceManager.cs` but no timer sends heartbeats and no timeout clears stale connections. This means BLE and Wi-Fi connections can remain in `IsConnected = true` indefinitely after the device physically disconnects or changes mode (e.g., ESP32 entering bootloader). The `UpdateDeviceStatus()` method in `MainWindow.xaml.cs` works around this by checking `FirmwareUpdateManager.EspBootloaderConnected` before `device.IsConnected`, but the heartbeat needs to be implemented for reliable multi-transport operation.
+**Windows:** ✅ Implemented in `WindowsDeviceManager` (`_transportHeartbeatTimer`, 2000 ms interval). The heartbeat checks the response byte and disconnects after 2 consecutive misses. A 5-second connection poll timer (`_connectionPollTimer`) reconciles USB MIDI port presence and BLE device state. Started via `BeginConnectionMonitoring()` from `MainWindow` constructor.
 
 ## 3.2 Scripting UX
 
