@@ -46,7 +46,7 @@ public partial class DeviceConnectionWindow : Window
         {
             RefreshDeviceList();
             RefreshFirmwareState();
-            await _updater.RefreshDfuPresenceAsync();
+            await _updater.RefreshDfuPresenceAsync(includeEspSerialProbe: true);
             _refreshTimer.Start();
             _device.StartBleDiscovery();
             _device.StartWiFiDiscovery();

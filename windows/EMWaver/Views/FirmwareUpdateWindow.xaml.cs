@@ -38,7 +38,7 @@ public partial class FirmwareUpdateWindow : Window
 
         Loaded += async (_, __) =>
         {
-            await _updater.RefreshDfuPresenceAsync();
+            await _updater.RefreshDfuPresenceAsync(includeEspSerialProbe: true);
             UpdateUi();
             _refreshTimer.Start();
         };
@@ -314,7 +314,7 @@ public partial class FirmwareUpdateWindow : Window
 
     private async void OnEspRefreshClick(object sender, RoutedEventArgs e)
     {
-        await _updater.RefreshDfuPresenceAsync();
+        await _updater.RefreshDfuPresenceAsync(includeEspSerialProbe: true);
     }
 
     private void OnCloseClick(object sender, RoutedEventArgs e)

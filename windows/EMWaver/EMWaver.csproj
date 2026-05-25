@@ -69,15 +69,8 @@
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 
-    <!-- Optional ESP helper + managed firmware bundle. PyInstaller emits an onedir helper,
-         so copy the full folder; the helper needs its adjacent runtime files on Windows. -->
-    <Content Include="..\..\tools\emwaver-esp-helper\dist\emwaver-esp-helper\**\*.*"
-             Condition="Exists('..\..\tools\emwaver-esp-helper\dist\emwaver-esp-helper\emwaver-esp-helper.exe')">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      <TargetPath>emwaver-esp-helper\%(RecursiveDir)%(Filename)%(Extension)</TargetPath>
-      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
-    </Content>
+    <!-- Optional ESP helper: the frozen helper folder is copied as a unit during
+         build, matching macOS behaviour (Xcode "ditto" run script). -->
 
     <Content Include="..\..\esp\build\bootloader\bootloader.bin"
              Condition="Exists('..\..\esp\build\bootloader\bootloader.bin')">
@@ -112,4 +105,42 @@
     </Content>
   </ItemGroup>
 
+  <!-- Build the frozen ESP flashing helper before build so it is available to
+       the firmware-update window without a separate manual step.
+       For now this runs unconditionally; if Python isn't available the helper
+       won't be created and the app will show a detection error in the firmware UI.
+       This matches the macOS Xcode "Run Script" build phase. -->
+  <Target Name="BuildEspHelper" BeforeTargets="BeforeBuild">
+    <Exec
+      Command="python &quot;$(MSBuildThisFileDirectory)..\..\tools\emwaver-esp-helper\build_helper.py&quot;"
+      IgnoreExitCode="true"
+      ContinueOnError="true"
+      StandardOutputImportance="low"
+      StandardErrorImportance="low" />
+  </Target>
+
+  <!-- Copy the frozen ESP helper folder into the build/publish output.
+       We copy the whole folder with xcopy rather than MSBuild content globs because
+       PyInstaller onedir output paths easily exceed Windows MAX_PATH limits. -->
+  <Target Name="CopyEspHelper" AfterTargets="Build">
+    <PropertyGroup>
+      <_EspDistDir>$(MSBuildThisFileDirectory)..\..\tools\emwaver-esp-helper\dist\emwaver-esp-helper</_EspDistDir>
+    </PropertyGroup>
+    <Exec
+      Command="xcopy /E /I /Y /Q &quot;$(_EspDistDir)&quot; &quot;$(OutputPath)emwaver-esp-helper\&quot;"
+      Condition="Exists('$(_EspDistDir)\emwaver-esp-helper.exe')"
+      IgnoreExitCode="true"
+      ContinueOnError="true" />
+  </Target>
+
+  <Target Name="CopyEspHelperPublish" AfterTargets="Publish">
+    <PropertyGroup>
+      <_EspDistDir>$(MSBuildThisFileDirectory)..\..\tools\emwaver-esp-helper\dist\emwaver-esp-helper</_EspDistDir>
+    </PropertyGroup>
+    <Exec
+      Command="xcopy /E /I /Y /Q &quot;$(_EspDistDir)&quot; &quot;$(PublishDir)emwaver-esp-helper\&quot;"
+      Condition="Exists('$(_EspDistDir)\emwaver-esp-helper.exe')"
+      IgnoreExitCode="true"
+      ContinueOnError="true" />
+  </Target>
 </Project>

@@ -12,9 +12,12 @@ namespace EMWaver.Services;
 
 public sealed class FirmwareUpdateManager : INotifyPropertyChanged
 {
+    private sealed record EspSerialPortCandidate(string Port, bool IsEspressifUsb, bool IsUsbSerial);
+
     private System.Windows.Threading.Dispatcher? _ui;
     private Timer? _dfuPollTimer;
     private readonly List<string> _logLines = new();
+    private readonly SemaphoreSlim _presenceRefreshLock = new(1, 1);
 
     private bool _dfuConnected;
     internal bool DfuConnected
@@ -170,43 +173,61 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
         OnPropertyChanged(nameof(LogText));
     }
 
-    internal async Task RefreshDfuPresenceAsync()
+    internal async Task RefreshDfuPresenceAsync(bool includeEspSerialProbe = false)
     {
         if (IsFlashing) return;
+        if (!await _presenceRefreshLock.WaitAsync(0)) return;
 
-        bool dfuPresent;
         try
         {
-            dfuPresent = await IsDfuPresentAsync();
-        }
-        catch
-        {
-            dfuPresent = false;
-        }
-
-        string? espPort = null;
-        string? espError = null;
-        try
-        {
-            espPort = await DetectEspBootloaderPortAsync();
-        }
-        catch (Exception ex)
-        {
-            espPort = null;
-            espError = ex.Message;
-        }
-
-        RunOnUi(() =>
-        {
-            DfuConnected = dfuPresent;
-            EspBootloaderPort = espPort;
-            EspDetectionError = espError;
-            EspBootloaderConnected = !string.IsNullOrWhiteSpace(espPort);
-            if (!string.IsNullOrWhiteSpace(espPort))
+            bool dfuPresent;
+            try
             {
-                PresentedBoardType = "esp32s3";
+                dfuPresent = await IsDfuPresentAsync();
             }
-        });
+            catch
+            {
+                dfuPresent = false;
+            }
+
+            string? espPort = null;
+            string? espError = null;
+            if (includeEspSerialProbe)
+            {
+                try
+                {
+                    espPort = await DetectEspBootloaderPortAsync();
+                }
+                catch (Exception ex)
+                {
+                    espPort = null;
+                    espError = ex.Message;
+                }
+            }
+
+            RunOnUi(() =>
+            {
+                DfuConnected = dfuPresent;
+
+                // Match macOS: the periodic poll only checks STM DFU. ESP serial
+                // probing opens the COM port and can transiently fail when repeated
+                // too often, so only explicit ESP probes update/clear this state.
+                if (includeEspSerialProbe)
+                {
+                    EspBootloaderPort = espPort;
+                    EspDetectionError = espError;
+                    EspBootloaderConnected = !string.IsNullOrWhiteSpace(espPort);
+                    if (!string.IsNullOrWhiteSpace(espPort))
+                    {
+                        PresentedBoardType = "esp32s3";
+                    }
+                }
+            });
+        }
+        finally
+        {
+            _presenceRefreshLock.Release();
+        }
     }
 
     internal async Task StartUpdateAsync(WindowsDeviceManager device)
@@ -407,13 +428,20 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
 
     private async Task<string?> DetectEspBootloaderPortAsync()
     {
-        var ports = await EspFlashPortCandidatesAsync();
-        var candidates = ports
-            .OrderByDescending(IsPreferredEspPort)
-            .ToList();
+        var candidates = await EspFlashPortCandidatesAsync();
 
-        foreach (var port in candidates)
+        // On Windows the ESP32-S3 native USB bootloader is exposed by pyserial as
+        // VID:PID=303A:1001. Prefer that stable descriptor over repeatedly running
+        // chip-id, which opens the COM port and can transiently fail while polling.
+        var espUsbPorts = candidates.Where(c => c.IsEspressifUsb).ToList();
+        if (espUsbPorts.Count == 1)
         {
+            return espUsbPorts[0].Port;
+        }
+
+        foreach (var candidate in candidates)
+        {
+            var port = candidate.Port;
             var (code, _, _) = await RunEspHelperAndWaitAsync("chip-id", "--port", port, "--baud", "115200", "--no-stub");
             if (code == 0)
             {
@@ -424,7 +452,7 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
         return null;
     }
 
-    private async Task<List<string>> EspFlashPortCandidatesAsync()
+    private async Task<List<EspSerialPortCandidate>> EspFlashPortCandidatesAsync()
     {
         var (code, stdout, stderr) = await RunEspHelperAndWaitAsync("list-ports");
         if (code != 0)
@@ -432,19 +460,30 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
             throw new InvalidOperationException(string.IsNullOrWhiteSpace(stderr) ? "Failed to list ESP serial ports." : stderr.Trim());
         }
 
-        var ports = new List<string>();
+        var candidates = new List<EspSerialPortCandidate>();
         foreach (var rawLine in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             var line = rawLine.Trim();
             if (!line.StartsWith("PORT=", StringComparison.OrdinalIgnoreCase)) continue;
             var port = line.Split('\t', 2)[0][5..].Trim();
-            if (!string.IsNullOrWhiteSpace(port))
-            {
-                ports.Add(port);
-            }
+            if (string.IsNullOrWhiteSpace(port)) continue;
+
+            var isEspressifUsb = line.Contains("VID:PID=303A", StringComparison.OrdinalIgnoreCase) ||
+                                  line.Contains("VID_303A", StringComparison.OrdinalIgnoreCase);
+            var isUsbSerial = isEspressifUsb ||
+                              line.Contains("USB", StringComparison.OrdinalIgnoreCase) ||
+                              line.Contains("UART", StringComparison.OrdinalIgnoreCase) ||
+                              line.Contains("CH34", StringComparison.OrdinalIgnoreCase) ||
+                              line.Contains("CP210", StringComparison.OrdinalIgnoreCase);
+            candidates.Add(new EspSerialPortCandidate(port, isEspressifUsb, isUsbSerial));
         }
 
-        return ports;
+        return candidates
+            .GroupBy(c => c.Port, StringComparer.OrdinalIgnoreCase)
+            .Select(g => g.First())
+            .OrderByDescending(c => c.IsEspressifUsb)
+            .ThenByDescending(c => c.IsUsbSerial)
+            .ToList();
     }
 
     private async Task<string> ResolveEspFlashPortAsync()
@@ -455,27 +494,19 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
             return detected!;
         }
 
-        var ports = await EspFlashPortCandidatesAsync();
-        if (ports.Count == 1)
+        var candidates = await EspFlashPortCandidatesAsync();
+        if (candidates.Count == 1)
         {
-            return ports[0];
+            return candidates[0].Port;
         }
 
-        var preferred = ports.Where(IsPreferredEspPort).ToList();
-        if (preferred.Count == 1)
+        var espUsbPorts = candidates.Where(c => c.IsEspressifUsb).ToList();
+        if (espUsbPorts.Count == 1)
         {
-            return preferred[0];
+            return espUsbPorts[0].Port;
         }
 
         throw new InvalidOperationException("Could not choose a unique ESP serial port. Connect only the ESP flash port, then retry.");
-    }
-
-    private static bool IsPreferredEspPort(string port)
-    {
-        var value = port.ToUpperInvariant();
-        return value.Contains("COM", StringComparison.OrdinalIgnoreCase) ||
-               value.Contains("USB") ||
-               value.Contains("UART");
     }
 
     private async Task RunEspFlashAsync(string port)
