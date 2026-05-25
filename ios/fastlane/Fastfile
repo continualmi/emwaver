@@ -93,7 +93,8 @@ platform :ios do
   end
 
   private_lane :validate_ios_bundle_assets do
-    ipa_path = "../build/ios/EMWaver.ipa"
+    ipa_path = lane_context[SharedValues::IPA_OUTPUT_PATH].to_s
+    ipa_path = File.expand_path("../build/ios/EMWaver.ipa", __dir__) if ipa_path.empty?
     UI.user_error!("Missing IPA for bundle validation: #{ipa_path}") unless File.exist?(ipa_path)
 
     sh(%Q(
