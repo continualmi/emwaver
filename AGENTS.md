@@ -129,6 +129,8 @@ We intentionally give up:
 - macOS DMG for development and advanced use.
 - Windows deferred past V1; installer EXE and ZIP paths defined but not active.
 - GitHub Releases may host preview downloadable artifacts; the public install page should present mobile first.
+- EMWaver uses one shared product version across native platforms. Keep the root `VERSION` file, iOS/macOS marketing versions, Android versionName, Linux package version, and Windows app/installer version aligned.
+- Release tags use `emwaver-vX.Y.Z` and should match the root `VERSION` value. Pushing such a tag builds/publishes the GitHub Release assets for direct-download platforms; App Store and Google Play submissions remain separate workflows because they have store-specific review and track state.
 
 ### Long-term hardware direction
 

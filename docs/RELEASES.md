@@ -10,6 +10,26 @@ Use `emwaver-v1.0.2` for the aligned public release tag. Platform-specific build
 
 Pushing an `emwaver-v*` tag builds the GitHub Release assets for Android direct APK, macOS DMG, Windows installer/ZIP, and Linux packages. Store uploads remain separate workflows because App Store Connect and Google Play have their own review/track state.
 
+## New version flow
+
+1. Choose the next SemVer product version, for example `1.0.3`.
+2. Update the root `VERSION` file and the platform-owned version fields that are not generated from it:
+   - iOS `MARKETING_VERSION`
+   - macOS `MARKETING_VERSION`
+   - Linux app crate version when the packaged app version should change
+   - Windows assembly/file/app manifest versions
+   - Android normally reads root `VERSION` as `versionName`, while `versionCode` remains a separate monotonically increasing Play/App install counter.
+3. Commit and push the version bump to `main`.
+4. Create and push the matching release tag:
+
+```bash
+git tag emwaver-v1.0.3
+git push origin emwaver-v1.0.3
+```
+
+5. Watch the tag-triggered GitHub Actions release workflows and confirm the GitHub Release has the expected assets.
+6. Run the store workflows separately for iOS App Store/TestFlight and Google Play, using the same product version and new platform build numbers/codes as required by each store.
+
 ## Preview release tag
 
 The install page points desktop/direct-download buttons at GitHub Release assets under:
