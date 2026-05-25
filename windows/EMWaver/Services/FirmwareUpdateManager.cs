@@ -610,16 +610,26 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
             return;
         }
 
-        // esptool emits "Writing at 0x... (NN %)" lines — parse the percentage
-        // and map it smoothly from 10% to 90%.
+        // esptool emits "Writing at 0x... [===...  ]  XX.X% NNN/NNN bytes..."
+        // Parse the percentage (e.g. "94.8%") and map it smoothly from 10% to 90%.
         if (line.Contains("Writing at", StringComparison.OrdinalIgnoreCase))
         {
-            var parenIdx = line.LastIndexOf('(');
-            var pctIdx = line.LastIndexOf('%');
-            if (parenIdx >= 0 && pctIdx > parenIdx)
+            // Look for the bracket pattern: find ']' then scan for "%" after it.
+            var bracketIdx = line.LastIndexOf(']');
+            if (bracketIdx < 0) bracketIdx = 0;
+
+            var pctIdx = line.IndexOf('%', bracketIdx);
+            if (pctIdx > 0)
             {
-                var pctStr = line.Substring(parenIdx + 1, pctIdx - parenIdx - 1).Trim();
-                if (double.TryParse(pctStr, out var writePct))
+                // Walk back from '%' to find the start of the number (e.g. "94.8")
+                var numStart = pctIdx - 1;
+                while (numStart > bracketIdx && (char.IsDigit(line[numStart - 1]) || line[numStart - 1] == '.'))
+                    numStart--;
+                var pctStr = line.Substring(numStart, pctIdx - numStart).Trim();
+                if (double.TryParse(pctStr,
+                        System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        out var writePct))
                 {
                     // Map 0-100% write progress → 10-90% overall progress
                     var overall = 10.0 + writePct * 0.8;
@@ -628,7 +638,8 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
             }
             else
             {
-                ProgressPct = Math.Max(ProgressPct, 50);
+                // No percentage found — bare "Writing at" line.
+                ProgressPct = Math.Max(ProgressPct, 20);
             }
             return;
         }

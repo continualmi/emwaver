@@ -184,6 +184,16 @@ public partial class FirmwareUpdateWindow : Window
                 ? "Flashing firmware..." : _updater.ProgressMessage;
             EspProgressPct.Text = $"{_updater.ProgressPct:F0}%";
             EspProgressBar.Value = _updater.ProgressPct;
+
+            // Live-update the raw log if it's visible.
+            if (EspRawLog.Visibility == Visibility.Visible)
+            {
+                var lines = _updater.GetEspHelperLog();
+                EspRawLog.Text = lines.Count == 0
+                    ? "(No output captured yet)"
+                    : string.Join(Environment.NewLine, lines);
+                EspRawLog.ScrollToEnd();
+            }
         }
         else
         {
