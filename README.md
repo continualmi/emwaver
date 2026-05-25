@@ -217,6 +217,14 @@ EMWaver is open source and local-first. Contributions should preserve these prin
 
 Before larger changes, read [AGENTS.md](AGENTS.md) and the README for the subsystem you are touching.
 
+## Support EMWaver
+
+EMWaver is Continual MI's open-source electronics project. If EMWaver helps you, you can support continued development through GitHub Sponsors:
+
+[Sponsor EMWaver](https://github.com/sponsors/continualmi)
+
+Funds go to Continual MI LLC and are used to support EMWaver development.
+
 ## License
 
 EMWaver is licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for copyright attribution.
