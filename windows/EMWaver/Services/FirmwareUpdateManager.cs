@@ -17,6 +17,7 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
     private System.Windows.Threading.Dispatcher? _ui;
     private Timer? _dfuPollTimer;
     private readonly List<string> _logLines = new();
+    private readonly List<string> _espHelperRawLines = new();
     private readonly SemaphoreSlim _presenceRefreshLock = new(1, 1);
 
     private bool _dfuConnected;
@@ -522,6 +523,7 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
         IsFlashing = true;
         ProgressMessage = "Flashing ESP firmware...";
         ProgressPct = 0;
+        _espHelperRawLines.Clear();
 
         try
         {
@@ -556,6 +558,7 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
             process.OutputDataReceived += (_, e) =>
             {
                 if (string.IsNullOrWhiteSpace(e.Data)) return;
+                _espHelperRawLines.Add(e.Data);
                 RunOnUi(() =>
                 {
                     AppendLog(e.Data);
@@ -565,6 +568,7 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
             process.ErrorDataReceived += (_, e) =>
             {
                 if (string.IsNullOrWhiteSpace(e.Data)) return;
+                _espHelperRawLines.Add(e.Data);
                 RunOnUi(() =>
                 {
                     AppendLog(e.Data);
@@ -785,6 +789,8 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
     {
         return (value ?? string.Empty).Trim().ToUpperInvariant();
     }
+
+    internal IReadOnlyList<string> GetEspHelperLog() => _espHelperRawLines;
 
     private void SetProgress(string message, double pct)
     {

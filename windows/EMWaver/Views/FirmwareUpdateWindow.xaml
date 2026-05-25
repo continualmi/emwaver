@@ -82,7 +82,7 @@
                     Padding="12" Margin="0,0,0,12">
                 <StackPanel>
                     <TextBlock Text="Bootloader" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,6" />
-                    <TextBlock x:Name="EspBootloaderText" FontSize="12" />
+                    <TextBlock x:Name="EspBootloaderText" FontSize="12" TextWrapping="Wrap" />
                     <TextBlock Text="1. Hold BOOT" FontSize="11" Margin="0,6,0,0" />
                     <TextBlock Text="2. Press and release RESET" FontSize="11" />
                     <TextBlock Text="3. Release BOOT" FontSize="11" Margin="0,0,0,8" />
@@ -116,6 +116,18 @@
                 </Grid>
                 <ProgressBar x:Name="EspProgressBar" Height="6" Margin="0,4,0,0" />
             </StackPanel>
+
+            <!-- ESP raw helper log -->
+            <CheckBox x:Name="EspShowLogCheckbox" Content="Show helper output" FontSize="11"
+                      Margin="0,12,0,4" Checked="OnEspShowLogChanged" Unchecked="OnEspShowLogChanged" />
+            <TextBox x:Name="EspRawLog" Visibility="Collapsed"
+                     FontFamily="Consolas, monospace" FontSize="10"
+                     IsReadOnly="True" VerticalScrollBarVisibility="Auto"
+                     MinHeight="80" MaxHeight="200"
+                     Background="{DynamicResource EditorSurfaceBackgroundBrush}"
+                     BorderBrush="{DynamicResource EditorSurfaceBorderBrush}"
+                     BorderThickness="1" Padding="6"
+                     TextWrapping="Wrap" />              
 
             <!-- ESP Done -->
             <Border x:Name="EspDoneCard" Visibility="Collapsed"

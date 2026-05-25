@@ -317,6 +317,17 @@ public partial class FirmwareUpdateWindow : Window
         await _updater.RefreshDfuPresenceAsync(includeEspSerialProbe: true);
     }
 
+    private void OnEspShowLogChanged(object sender, RoutedEventArgs e)
+    {
+        var visible = EspShowLogCheckbox.IsChecked == true;
+        EspRawLog.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        if (!visible) return;
+        var lines = _updater.GetEspHelperLog();
+        EspRawLog.Text = lines.Count == 0
+            ? "(No output captured yet)"
+            : string.Join(Environment.NewLine, lines);
+    }
+
     private void OnCloseClick(object sender, RoutedEventArgs e)
     {
         Close();
