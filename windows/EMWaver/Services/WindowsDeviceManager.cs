@@ -363,7 +363,7 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
         var superframe = UsbMidiSysex.DecodeSysexToSuperframe(bytes);
         if (superframe == null || superframe.Length < SuperframeSizeBytes)
         {
-            AppendActivityLog($"RX {transportLabel} sysex={bytes.Length} decode=<invalid>");
+            // Non-EMWaver SYSEX (e.g. heartbeats, BLE housekeeping) — silent.
             return;
         }
 
