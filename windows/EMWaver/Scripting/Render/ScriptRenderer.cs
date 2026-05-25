@@ -539,6 +539,34 @@ public sealed class ScriptRenderer
             if (!string.IsNullOrWhiteSpace(token)) _invokeHandler(token!, new object?[] { next });
         };
 
+        // Enable mouse-wheel scrolling inside the dropdown popup.
+        // The popup has its own visual tree, so we must hook the ScrollViewer
+        // each time the dropdown opens.
+        combo.DropDownOpened += (_, __) =>
+        {
+            if (combo.Template?.FindName("PART_Popup", combo) is not System.Windows.Controls.Primitives.Popup popup)
+                return;
+            var sv = popup.Child as System.Windows.Controls.ScrollViewer
+                     ?? (popup.Child as System.Windows.Controls.Border)?.Child as System.Windows.Controls.ScrollViewer;
+            if (sv != null) sv.PreviewMouseWheel += OnComboPopupMouseWheel;
+
+            void OnComboPopupMouseWheel(object s, MouseWheelEventArgs e)
+            {
+                var scrollViewer = s as System.Windows.Controls.ScrollViewer;
+                scrollViewer?.ScrollToVerticalOffset(scrollViewer.VerticalOffset - e.Delta);
+                e.Handled = true;
+            }
+        };
+        combo.DropDownClosed += (_, __) =>
+        {
+            if (combo.Template?.FindName("PART_Popup", combo) is not System.Windows.Controls.Primitives.Popup popup)
+                return;
+            var sv = popup.Child as System.Windows.Controls.ScrollViewer
+                     ?? (popup.Child as System.Windows.Controls.Border)?.Child as System.Windows.Controls.ScrollViewer;
+            // Can't unsubscribe a local function, but the popup is torn down
+            // when closed so the ScrollViewer is discarded anyway.
+        };
+
         if (string.IsNullOrWhiteSpace(label))
         {
             return combo;
