@@ -2,6 +2,14 @@
 
 This document tracks the current public preview release assets for the open-source EMWaver repo.
 
+## Global version
+
+EMWaver uses one product version across the native platforms. The current shared version is stored in the repository root `VERSION` file and is currently `1.0.2`.
+
+Use `emwaver-v1.0.2` for the aligned public release tag. Platform-specific build counters still remain separate, such as iOS build numbers and Android `versionCode`.
+
+Pushing an `emwaver-v*` tag builds the GitHub Release assets for Android direct APK, macOS DMG, Windows installer/ZIP, and Linux packages. Store uploads remain separate workflows because App Store Connect and Google Play have their own review/track state.
+
 ## Preview release tag
 
 The install page points desktop/direct-download buttons at GitHub Release assets under:
@@ -29,8 +37,7 @@ Run these from the GitHub Actions UI or with `gh workflow run ...`:
 gh workflow run android-apk-release.yml -f tag=emwaver-preview
 gh workflow run macos-dmg-release.yml -f tag=emwaver-preview
 gh workflow run windows-exe-release.yml -f tag=emwaver-preview
-# Optional once Linux is ready for preview:
-gh workflow run linux-release.yml -f tag=emwaver-preview -f version=0.1.0-preview
+gh workflow run linux-release.yml -f tag=emwaver-preview
 ```
 
 Then verify assets:

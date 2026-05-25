@@ -35,6 +35,22 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Resolve release version
+        env:
+          INPUT_VERSION_NAME: ${{ inputs.version_name }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${INPUT_VERSION_NAME}"
+          if [ -z "${version}" ] && [[ "${REF_NAME}" == emwaver-v* ]]; then
+            version="${REF_NAME#emwaver-v}"
+          fi
+          if [ -z "${version}" ]; then
+            version="$(tr -d '[:space:]' < VERSION)"
+          fi
+          echo "EMWAVER_ANDROID_VERSION_NAME=${version}" >> "${GITHUB_ENV}"
+          echo "Resolved Android versionName: ${version}"
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:

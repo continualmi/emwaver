@@ -157,7 +157,7 @@ Build release packages locally on Linux after building the app:
 
 ```sh
 cargo build --manifest-path linux/Cargo.toml --release -p emwaver-linux-app
-EMWAVER_LINUX_VERSION=0.1.0-preview linux/scripts/package-linux.sh
+EMWAVER_LINUX_VERSION=$(cat ../VERSION) linux/scripts/package-linux.sh
 ```
 
 Do not add a localhost daemon or browser relay to make the app run. Hardware transports belong in-process behind `emwaver-linux-transport`.

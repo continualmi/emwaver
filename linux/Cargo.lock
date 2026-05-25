@@ -538,7 +538,7 @@ dependencies = [
 
 [[package]]
 name = "emwaver-linux-app"
-version = "0.1.0"
+version = "1.0.2"
 dependencies = [
  "emwaver-linux-agent",
  "emwaver-linux-core",

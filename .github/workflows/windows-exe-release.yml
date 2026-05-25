@@ -24,6 +24,20 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Resolve release version
+        shell: pwsh
+        run: |
+          $version = "${{ github.event.inputs.tag || github.ref_name }}"
+          if ($version -match '^emwaver-v') {
+            $version = $version -replace '^emwaver-v', ''
+          } else {
+            $version = (Get-Content VERSION -Raw).Trim()
+          }
+          $assemblyVersion = if ($version -match '^\d+\.\d+\.\d+$') { "$version.0" } else { "1.0.2.0" }
+          "EMWAVER_RELEASE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "EMWAVER_WINDOWS_ASSEMBLY_VERSION=$assemblyVersion" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Write-Host "Resolved Windows version: $version ($assemblyVersion)"
+
       - name: Set up .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -35,7 +49,8 @@ jobs:
 
       - name: Publish Windows app
         working-directory: windows
-        run: dotnet publish EMWaver/EMWaver.csproj --configuration Release --runtime win-x64 --self-contained false --output ../dist/windows-x64
+        shell: pwsh
+        run: dotnet publish EMWaver/EMWaver.csproj --configuration Release --runtime win-x64 --self-contained false --output ../dist/windows-x64 /p:Version=$env:EMWAVER_RELEASE_VERSION /p:FileVersion=$env:EMWAVER_WINDOWS_ASSEMBLY_VERSION /p:AssemblyVersion=$env:EMWAVER_WINDOWS_ASSEMBLY_VERSION /p:InformationalVersion=$env:EMWAVER_RELEASE_VERSION
 
       - name: Install Inno Setup
         shell: pwsh
@@ -77,8 +92,7 @@ jobs:
       - name: Build Windows installer
         shell: pwsh
         run: |
-          $version = "${{ github.event.inputs.tag || github.ref_name }}"
-          $version = $version -replace '^emwaver-v', ''
+          $version = $env:EMWAVER_RELEASE_VERSION
           $version = $version -replace '[^0-9A-Za-z\.\-_]', '-'
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" windows/installer/EMWaver.iss "/DAppVersion=$version"
 

@@ -10,7 +10,7 @@ on:
       version:
         description: "Package version"
         required: false
-        default: "0.1.0-preview"
+        default: ""
         type: string
   push:
     tags:
@@ -27,6 +27,22 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+
+      - name: Resolve release version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${INPUT_VERSION}"
+          if [ -z "${version}" ] && [[ "${REF_NAME}" == emwaver-v* ]]; then
+            version="${REF_NAME#emwaver-v}"
+          fi
+          if [ -z "${version}" ]; then
+            version="$(tr -d '[:space:]' < VERSION)"
+          fi
+          echo "EMWAVER_LINUX_VERSION=${version}" >> "${GITHUB_ENV}"
+          echo "Resolved Linux package version: ${version}"
 
       - name: Install Linux build dependencies
         run: |
@@ -58,8 +74,6 @@ jobs:
         run: cargo build --manifest-path linux/Cargo.toml --release -p emwaver-linux-app
 
       - name: Package Linux app
-        env:
-          EMWAVER_LINUX_VERSION: ${{ inputs.version || '0.1.0-preview' }}
         run: linux/scripts/package-linux.sh
 
       - name: Verify Linux packages
