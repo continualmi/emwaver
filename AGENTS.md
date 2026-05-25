@@ -202,6 +202,39 @@ If a folder has a README, detailed documentation should live there.
 
 ---
 
+## 5a) Script Engine & UI Rendering (cross-platform)
+
+EMWaver scripts produce live UI via JSX. The `emw-ui` module provides
+components (`Picker`, `Button`, `Card`, `Tile`, `Grid`, `Scroll`,
+`TextField`, `TextEditor`, `LogViewer`, `Plot`, `Slider`, `Toggle`,
+`Progress`, `Modal`, etc.) that are rendered natively on each platform:
+
+| Platform | Script engine | UI renderer location |
+| --- | --- | --- |
+| **Windows** | ClearScript (V8) | `windows/EMWaver/Scripting/Render/ScriptRenderer.cs` |
+| **macOS** | JavaScriptCore | `macos/EMWaver/EMWaver/Scripting/Render/` |
+| **iOS** | JavaScriptCore | `ios/EMWaver/Scripting/Render/` |
+| **Android** | V8 (J2V8) | `android/app/src/main/java/com/continualmi/emwaver/scripting/render/` |
+
+**Key facts for agents working on UI/script issues:**
+
+- `ScriptRenderer.cs` maps `ScriptNodeType` → WPF `UIElement` (e.g.,
+  `ScriptNodeType.Picker` → `ComboBox`, `ScriptNodeType.Text` →
+  `TextBlock`, `ScriptNodeType.Scroll` → `ScrollViewer`). This is the
+  file to edit when a script UI component behaves wrong on Windows.
+- Platform renderers follow the same node-type-to-native-control mapping
+  pattern; look for the `RenderPicker`/`RenderButton`/etc. methods.
+- The `ScriptNode` tree comes from the JSX transpiler
+  (`ScriptSourceTranspiler.cs` on Windows) which converts `emw-jsx`
+  JavaScript into a typed node tree.
+- Default scripts ship in `assets/default-scripts/` and are bundled
+  into each app's resources.
+- Picker options are passed as `List<object>` dictionaries with
+  `label`/`value` keys; the `selected` prop is a string matching the
+  value.
+
+---
+
 ## 6) Repo Overview (high level)
 
 - `android/`, `ios/`, `macos/`, `windows/` — native client apps (self-contained, local-first).
