@@ -70,26 +70,33 @@
     </Content>
 
     <!-- Bundled ESP32-S3 firmware payloads. All four files must be committed to
-         firmware/ so cross-platform builds work without requiring ESP-IDF. -->
-    <Content Include="..\..\firmware\emwaver-esp32s3-bootloader.bin">
+         firmware/ so cross-platform builds work without requiring ESP-IDF.
+         Condition=Exists allows the build to succeed before the files are added;
+         the app will show a clear error in the firmware UI if flashing is attempted
+         without them. -->
+    <Content Include="..\..\firmware\emwaver-esp32s3-bootloader.bin"
+             Condition="Exists('..\..\firmware\emwaver-esp32s3-bootloader.bin')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 
-    <Content Include="..\..\firmware\emwaver-esp32s3-partition-table.bin">
+    <Content Include="..\..\firmware\emwaver-esp32s3-partition-table.bin"
+             Condition="Exists('..\..\firmware\emwaver-esp32s3-partition-table.bin')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 
-    <Content Include="..\..\firmware\emwaver-esp32s3-ota-data.bin">
+    <Content Include="..\..\firmware\emwaver-esp32s3-ota-data.bin"
+             Condition="Exists('..\..\firmware\emwaver-esp32s3-ota-data.bin')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 
-    <Content Include="..\..\firmware\emwaver-esp32s3-app.bin">
+    <Content Include="..\..\firmware\emwaver-esp32s3-app.bin"
+             Condition="Exists('..\..\firmware\emwaver-esp32s3-app.bin')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
