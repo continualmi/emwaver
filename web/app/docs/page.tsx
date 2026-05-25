@@ -166,6 +166,21 @@ export default function DocsIndex() {
           </div>
         </Link>
         <Link
+          href="/docs/tutorials"
+          className="group flex items-start justify-between gap-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-5 py-4 no-underline transition hover:bg-[color:var(--surface-2)]"
+        >
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--sky)]">Tutorials</div>
+            <div className="mt-1 text-lg font-semibold text-[color:var(--ink)]">Follow step-by-step hardware walkthroughs</div>
+            <div className="mt-1 text-sm text-[color:var(--ink-dim)]">
+              Windows ESP32-S3 firmware flashing, CC1101 433 MHz setup, and practical script-driven hardware tests.
+            </div>
+          </div>
+          <div className="mt-1 text-sm font-semibold text-[color:var(--ink-dim)] transition group-hover:text-[color:var(--ink)]">
+            Open
+          </div>
+        </Link>
+        <Link
           href="/docs/community"
           className="group flex items-start justify-between gap-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-5 py-4 no-underline transition hover:bg-[color:var(--surface-2)]"
         >
