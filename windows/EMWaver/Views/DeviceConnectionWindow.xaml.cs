@@ -31,7 +31,10 @@ public partial class DeviceConnectionWindow : Window
         _refreshTimer.Tick += async (_, __) =>
         {
             await _device.RefreshPortsAsync();
-            await _updater.RefreshDfuPresenceAsync();
+            // Include ESP serial probe so the modal detects bootloader plug-ins
+            // while it is already open. list-ports with VID:PID filtering is stable
+            // and does not open the COM port, so this is safe for periodic polling.
+            await _updater.RefreshDfuPresenceAsync(includeEspSerialProbe: true);
         };
 
         Closed += (_, __) =>

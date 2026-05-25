@@ -145,10 +145,18 @@ public partial class MainWindow : Window
     {
         var device = _device;
 
-        if (!device.IsConnected && _firmwareUpdater.EspBootloaderConnected)
+        // ESP bootloader takes priority over a stale transport IsConnected.
+        // Without a heartbeat, BLE/Wi-Fi connections stay IsConnected after
+        // the device physically changes mode.
+        if (_firmwareUpdater.EspBootloaderConnected)
         {
             DeviceStatusText.Text = "ESP Bootloader";
             DeviceIconText.Text = "💾";
+        }
+        else if (_firmwareUpdater.DfuConnected || device.DfuConnected)
+        {
+            DeviceStatusText.Text = "Update Mode";
+            DeviceIconText.Text = "🔄";
         }
         else if (device.IsConnected)
         {
@@ -159,11 +167,6 @@ public partial class MainWindow : Window
                 DeviceTransport.Wifi => "📶",
                 _ => "🔌",
             };
-        }
-        else if (_firmwareUpdater.DfuConnected || device.DfuConnected)
-        {
-            DeviceStatusText.Text = "Update Mode";
-            DeviceIconText.Text = "🔄";
         }
         else if (device.IsBleScanning)
         {
