@@ -1,6 +1,6 @@
 # EMWaver Planning
 
-This is the durable working tracker for current EMWaver priorities. `SCHEDULE.md` is the short-term execution tracker and `TESTS.md` is the validation tracker.
+This is the durable working tracker for current EMWaver priorities. `SCHEDULE.md` is the short-term execution tracker.
 
 ## Current Focus
 
@@ -18,7 +18,7 @@ This is the durable working tracker for current EMWaver priorities. `SCHEDULE.md
 | Priority | Area | Status | Notes |
 | --- | --- | --- | --- |
 | `P0` | Documentation cleanup | `active` | Remove stale Gateway/CLI, UI snapshot, separate `.jsx`, Windows-deferred, and internal wording from active/public docs. |
-| `P0` | Cross-platform CC1101 validation | `active` | `cc1101.js` reads/writes registers across Windows, macOS, Android, and iOS. Capture concise evidence in `docs/TESTS.md`. |
+| `P0` | Cross-platform CC1101 validation | `done` | `cc1101.js` reads/writes registers across Windows, macOS, Android, and iOS (2026-05-24). |
 | `P0` | Agent hardware primitive tools | `implemented / validating` | Validate `spi_transfer`, GPIO, analog, and module-probe flows against real hardware. Canonical model: `docs/AGENT_EVAL_RUNTIME.md`. |
 | `P0` | Script-defined native UI | `active` | JavaScript scripts can define instant native panels with JSX-style syntax. Keep docs clear that JSX is syntax inside JS, not a separate product surface. |
 | `P0` | Mobile UI polish | `active` | Improve iOS and Android Agent/script/device flows for phone use. |
@@ -33,7 +33,7 @@ This is the durable working tracker for current EMWaver priorities. `SCHEDULE.md
 1. Run preview release workflows for signed Android APK, macOS DMG, and Windows installer/ZIP; verify all `emwaver-preview` release assets before opening the repo.
 2. Clean the public website docs, especially script/UI docs and install/status pages.
 3. Replace Gateway-centered Wi-Fi docs with native-app USB/BLE/Wi-Fi transport docs.
-4. Rewrite `docs/TESTS.md` around native apps, real hardware scripts, Agent primitive tools, and simulator fixtures.
+4. Rebuild the hardware validation suite around native apps, real hardware scripts, Agent primitive tools, and simulator fixtures.
 5. Update platform READMEs where they still mention Gateway, UI snapshots as primary automation, or Windows as deferred.
 6. Capture concise CC1101 validation evidence for iOS, Android, macOS, and Windows.
 7. Continue the Linux native app port without reintroducing a Gateway/browser/CLI control plane.

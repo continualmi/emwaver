@@ -81,7 +81,7 @@ Key contributor docs:
 | `docs/CURRENT.md` | Current-state orientation |
 | `docs/PLANNING.md` | Active priorities and next steps |
 | `docs/SCHEDULE.md` | Short-term execution tracker |
-| `docs/TESTS.md` | Hardware and app validation suite |
+| `docs/TESTS.md` | Hardware and app validation suite *(being rebuilt)* |
 | `docs/RELEASES.md` | Release workflows and public preview assets |
 | `docs/AGENT_EVAL_RUNTIME.md` | Agent hardware primitive model |
 | `docs/AGENT_RUNTIME_AND_TOOLS.html` | Visual Agent hardware-tool workflow |
