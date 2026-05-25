@@ -56,19 +56,35 @@ Rough historical estimate: 2 units for about 38 USD.
 The schematic exposes these named nets. Verify physical orientation against the
 PCB PDF before wiring modules.
 
-| Signal | Function |
-| --- | --- |
-| `D+`, `D-` | USB data path |
-| `IR_RX` | IR receiver output |
-| `IR_TX` | IR LED driver input |
-| `MOSI`, `MISO`, `SCK`, `NSS` | SPI bus to CC1101/add-on modules |
-| `GDO0`, `GDO2` | CC1101 interrupt/status lines |
-| `GPIO14`, `GPIO15` | exposed ESP32-S3 GPIO signals shown in schematic |
-| `+5V`, `VCC`, `GND` | USB 5 V, 3.3 V logic, ground |
+| Signal | Function | ESP32-S3 GPIO |
+| --- | --- | --- |
+| `D+`, `D-` | USB data path | — (built-in USB) |
+| `IR_RX` | IR receiver output | GPIO5 |
+| `IR_TX` | IR LED driver input | GPIO4 |
+| `MOSI` | SPI MOSI (CC1101 / expansion) | GPIO11 |
+| `MISO` | SPI MISO (CC1101 / expansion) | GPIO13 |
+| `SCK` | SPI clock (CC1101 / expansion) | GPIO12 |
+| `NSS` | SPI chip-select (CC1101) | GPIO10 |
+| `GDO0` | CC1101 interrupt / status | GPIO1 |
+| `GDO2` | CC1101 interrupt / status | GPIO2 |
+| `GPIO14`, `GPIO15` | spare ESP32-S3 GPIOs exposed on header | GPIO14, GPIO15 |
+| `+5V`, `VCC`, `GND` | USB 5 V, 3.3 V logic, ground | — |
 
-The current ESP32 firmware defaults are `MOSI=GPIO11`, `SCK=GPIO12`,
-`MISO=GPIO13`, default IR transmit on `GPIO4`, and shield-compatible IR
-transmit on `GPIO37`. Align the installed DevKit and jumper/header routing with
+### ESP32-S3 firmware pin defaults
+
+| Peripheral | GPIO | Notes |
+| --- | --- | --- |
+| CC1101 MOSI | 11 | |
+| CC1101 MISO | 13 | |
+| CC1101 SCK | 12 | |
+| CC1101 CS (NSS) | 10 | |
+| CC1101 GDO0 | 1 | interrupt / status |
+| CC1101 GDO2 | 2 | interrupt / status |
+| IR receiver (IR_RX) | 5 | |
+| IR transmit (IR_TX) | 4 | primary; shield-compatible alt on GPIO37 |
+| Spare | 14, 15 | exposed on header |
+
+Align the installed DevKit and jumper/header routing with
 those defaults or update firmware configuration intentionally.
 
 ## Manufacturing With JLCPCB
