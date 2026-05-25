@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { PlatformLogo, type PlatformLogoName } from "@/components/emwaver/PlatformLogo";
+
 const RELEASE_DOWNLOAD_BASE = "https://github.com/continualmi/emwaver/releases/latest/download";
 const APP_STORE_URL = "https://apps.apple.com/us/app/emwaver/id6747035939";
 const PLAY_INTERNAL_TEST_URL = "https://play.google.com/apps/internaltest/4701722111058615569";
@@ -77,32 +79,32 @@ function PlatformPanel({
   eyebrow,
   title,
   description,
-  badge,
-  badgeAlt,
+  icon,
   children,
 }: {
   eyebrow: string;
   title: string;
   description: string;
-  badge?: string;
-  badgeAlt?: string;
+  icon?: PlatformLogoName;
   children: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
+    <div className="flex h-full flex-col rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--sky)]">{eyebrow}</div>
-          <div className="mt-2 text-lg font-semibold text-[color:var(--ink)]">{title}</div>
+          <div className="mt-2 flex items-center gap-3 text-lg font-semibold text-[color:var(--ink)]">
+            {icon ? (
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)]">
+                <PlatformLogo name={icon} className="h-6 w-6" />
+              </span>
+            ) : null}
+            <span>{title}</span>
+          </div>
           <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">{description}</p>
         </div>
-        {badge ? (
-          <div className="rounded-2xl border border-[color:var(--line)] bg-black/45 px-4 py-3">
-            <img src={badge} alt={badgeAlt || title} className="h-11 w-auto max-w-[210px] object-contain opacity-95" />
-          </div>
-        ) : null}
       </div>
-      <div className="mt-5 flex flex-wrap gap-3">{children}</div>
+      <div className="mt-auto flex flex-wrap gap-3 pt-5">{children}</div>
     </div>
   );
 }
@@ -143,13 +145,12 @@ function InstallOptions() {
 
       <div>
         <h3>Desktop downloads</h3>
-        <div className="mt-3 grid gap-3 md:grid-cols-2">
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
           <PlatformPanel
             eyebrow="macOS — Dev & Advanced"
             title="macOS app"
             description="For firmware flashing, multi-device bench testing, and long automation runs."
-            badge="/badges/macos.png"
-            badgeAlt="Available for Mac"
+            icon="apple"
           >
             <FileDownloadCard
               item={{
@@ -165,8 +166,7 @@ function InstallOptions() {
             eyebrow="Windows — Preview"
             title="Windows app"
             description="Preview build for testing local EMWaver workflows on Windows 11."
-            badge="/badges/windows.png"
-            badgeAlt="Available for Windows"
+            icon="windows"
           >
             <FileDownloadCard
               item={{
@@ -176,22 +176,24 @@ function InstallOptions() {
                 detail: "Recommended Windows installer",
               }}
             />
+          </PlatformPanel>
+
+          <PlatformPanel
+            eyebrow="Linux — Preview"
+            title="Linux app"
+            description="Native Linux build for Ubuntu 24.04+."
+            icon="linux"
+          >
             <FileDownloadCard
               item={{
-                label: "Download portable package",
-                href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-windows-x64.zip`,
-                ext: "ZIP",
-                detail: "Portable build archive",
+                label: "Download DEB package",
+                href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-linux-amd64.deb`,
+                ext: "DEB",
+                detail: "Recommended Debian/Ubuntu installer",
               }}
             />
           </PlatformPanel>
         </div>
-      </div>
-
-      <div className="rounded-2xl border border-dashed border-[color:var(--line)] bg-[color:var(--surface)] p-5 opacity-75">
-        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-dim)]">Linux</div>
-        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">In progress</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">The native Linux app port is underway. Public packages are not available yet.</div>
       </div>
     </div>
   );
@@ -208,8 +210,8 @@ export default function InstallDocPage() {
       <h2>1. Install the app</h2>
       <p>
         iOS and Android are the primary EMWaver platforms. iOS is available through the App Store.
-        Android is available through the Google Play internal test and as a direct APK download. macOS and Windows
-        downloads are available for desktop use. The native Linux app is in progress.
+        Android is available through the Google Play internal test and as a direct APK download. macOS, Windows,
+        and Linux downloads are available for desktop use.
       </p>
       <InstallOptions />
 
@@ -247,7 +249,7 @@ export default function InstallDocPage() {
       </p>
       <ul>
         <li><strong>Pre-flashed board</strong>: skip this step and connect directly.</li>
-        <li><strong>Blank or stock board</strong>: use the EMWaver app's firmware setup/update flow where available.</li>
+        <li><strong>Blank or stock board</strong>: use the EMWaver app&apos;s firmware setup/update flow where available.</li>
         <li><strong>Desktop setup</strong>: use macOS for one-time firmware setup when a phone cannot flash the board directly.</li>
       </ul>
       <blockquote>

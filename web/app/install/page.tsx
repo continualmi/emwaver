@@ -1,3 +1,4 @@
+import { PlatformLogo, type PlatformLogoName } from "@/components/emwaver/PlatformLogo";
 import { SiteHeader } from "@/components/emwaver/SiteHeader";
 
 const RELEASE_DOWNLOAD_BASE = "https://github.com/continualmi/emwaver/releases/latest/download";
@@ -18,8 +19,7 @@ type InstallAction = {
 
 type PlatformCard = {
   platform: string;
-  label: string;
-  icon: string;
+  icon: PlatformLogoName;
   accent: "aqua" | "sky";
   description: string;
   badge?: string;
@@ -30,8 +30,7 @@ type PlatformCard = {
 const MOBILE_PLATFORMS: PlatformCard[] = [
   {
     platform: "iOS",
-    label: "Primary",
-    icon: "",
+    icon: "apple",
     accent: "aqua",
     description: "Install EMWaver on iPhone or iPad from the App Store.",
     actions: [
@@ -45,8 +44,7 @@ const MOBILE_PLATFORMS: PlatformCard[] = [
   },
   {
     platform: "Android",
-    label: "Primary",
-    icon: "▶",
+    icon: "android",
     accent: "aqua",
     description: "Join the Google Play internal test to install through Play, or use the direct APK.",
     actions: [
@@ -74,12 +72,9 @@ const MOBILE_PLATFORMS: PlatformCard[] = [
 const DESKTOP_PLATFORMS: PlatformCard[] = [
   {
     platform: "macOS",
-    label: "Dev & Advanced",
-    icon: "Mac",
+    icon: "apple",
     accent: "sky",
     description: "Desktop build for firmware flashing, multi-device bench testing, and long automation runs.",
-    badge: "/badges/macos.png",
-    badgeAlt: "Available for Mac",
     actions: [
       {
         label: "Download macOS app",
@@ -91,12 +86,9 @@ const DESKTOP_PLATFORMS: PlatformCard[] = [
   },
   {
     platform: "Windows",
-    label: "Preview",
-    icon: "Win",
+    icon: "windows",
     accent: "sky",
     description: "Windows preview build for testing local EMWaver workflows on Windows 11.",
-    badge: "/badges/windows.png",
-    badgeAlt: "Available for Windows",
     actions: [
       {
         label: "Download installer",
@@ -104,32 +96,19 @@ const DESKTOP_PLATFORMS: PlatformCard[] = [
         fileExt: "EXE",
         detail: "Recommended Windows installer",
       },
-      {
-        label: "Download portable package",
-        href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-windows-x64.zip`,
-        fileExt: "ZIP",
-        detail: "Portable build archive",
-      },
     ],
   },
   {
     platform: "Linux",
-    label: "Preview",
-    icon: "Linux",
+    icon: "linux",
     accent: "sky",
-    description: "Native Linux build for Ubuntu 24.04+. Install via DEB package or portable tarball.",
+    description: "Native Linux build for Ubuntu 24.04+. Install via the DEB package.",
     actions: [
       {
         label: "Download DEB package",
         href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-linux-amd64.deb`,
         fileExt: "DEB",
         detail: "Recommended Debian/Ubuntu installer",
-      },
-      {
-        label: "Download portable tarball",
-        href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-linux-x64.tar.gz`,
-        fileExt: "tar.gz",
-        detail: "Portable build archive",
       },
     ],
   },
@@ -222,11 +201,11 @@ function PlatformCardView({ platform }: { platform: PlatformCard }) {
     <div className="flex h-full flex-col rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
       <div className="flex items-start gap-4">
         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-2)] text-base font-semibold text-[color:var(--ink)]">
-          {platform.icon}
+          <PlatformLogo name={platform.icon} />
         </div>
         <div>
           <div className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${accentClass}`}>
-            {platform.platform} — {platform.label}
+            {platform.platform}
           </div>
           <p className="pt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
             {platform.description}
@@ -242,7 +221,7 @@ function PlatformCardView({ platform }: { platform: PlatformCard }) {
           />
         </div>
       ) : null}
-      <div className="mt-5 flex flex-wrap items-center gap-4">
+      <div className="mt-auto flex flex-wrap items-center gap-4 pt-5">
         {platform.actions.map((action) => (
           <ActionButton key={action.label} action={action} />
         ))}
@@ -284,7 +263,7 @@ export default function InstallPage() {
             </p>
 
             <div className="mt-6 flex flex-wrap gap-2">
-              {["App Store", "Google Play internal test", "Android APK", "macOS DMG", "Windows EXE", "Windows ZIP", "Linux tar.gz", "Linux DEB"].map((label) => (
+              {["App Store", "Google Play internal test", "Android APK", "macOS DMG", "Windows EXE", "Linux DEB"].map((label) => (
                 <div
                   key={label}
                   className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--ink-dim)]"
@@ -333,7 +312,7 @@ export default function InstallPage() {
             </p>
           </div>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {DESKTOP_PLATFORMS.map((platform) => (
               <PlatformCardView key={platform.platform} platform={platform} />
             ))}
