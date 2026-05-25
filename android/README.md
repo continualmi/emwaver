@@ -60,11 +60,7 @@ Notable UX coverage reflected by resources:
 
 ## 4) Bundled firmware assets
 
-Firmware payloads in app assets:
-- `android/app/src/main/assets/firmware/emwaver.bin`
-- `android/app/src/main/assets/ota/emwaveresp.bin`
-
-These are updated by repo firmware tooling and consumed by update flows. The Gradle build syncs STM32 firmware from `stm/emwaver-firmware/Release/emwaver-firmware.bin`; Android packages the checked-in ESP app image at `android/app/src/main/assets/ota/emwaveresp.bin` for the native serial updater.
+Firmware is sourced from the shared repo [`firmware/`](/Users/luisml/continualmi/emwaver/firmware) folder via the `syncBundledFirmware` Gradle task. This copies STM32 (`emwaver.bin`) and ESP32-S3 app (`emwaver-esp32s3-app.bin`) into generated Android assets for the update flows.
 
 ---
 

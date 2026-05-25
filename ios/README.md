@@ -75,10 +75,7 @@ iOS also supports a manual ESP32 Wi-Fi runtime connection through the firmware W
 
 ## 3) Bundled firmware assets
 
-- `ios/EMWaver/firmware/emwaver.bin`
-- `ios/EMWaver/ota/emwaveresp.bin`
-
-These are repo-managed payloads synced by firmware update tooling and consumed by update flows. iOS currently exposes bundled payload visibility, local share/handoff for the bundled STM32 and ESP images, and STM32 Update Mode entry over the active local transport. STM32 DFU flashing is intentionally owned by macOS, Windows, and Android because iOS does not expose the USB DFU device class needed for the transfer runtime. ESP serial flashing also remains outside the iOS runtime; use macOS, Windows, or Android for the actual flash step.
+- Firmware is sourced from the shared repo [`firmware/`](/Users/luisml/continualmi/emwaver/firmware) folder via an Xcode folder reference. iOS currently exposes bundled payload visibility, local share/handoff for the bundled STM32 and ESP images, and STM32 Update Mode entry over the active local transport. STM32 DFU flashing is intentionally owned by macOS, Windows, and Android because iOS does not expose the USB DFU device class needed for the transfer runtime. ESP serial flashing also remains outside the iOS runtime; use macOS, Windows, or Android for the actual flash step.
 
 ---
 

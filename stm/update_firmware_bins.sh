@@ -44,8 +44,6 @@ arm-none-eabi-objcopy -O binary "$ELF_PATH" "$TMP_BIN"
 
 TARGETS=(
   "$REPO_ROOT/firmware/emwaver.bin"
-  "$REPO_ROOT/android/app/src/main/assets/firmware/emwaver.bin"
-  "$REPO_ROOT/ios/EMWaver/firmware/emwaver.bin"
   "$REPO_ROOT/windows/EMWaver/Assets/Firmware/emwaver.bin"
   "$REPO_ROOT/apple/EMWaverAppleCore/Resources/Firmware/emwaver.bin"
 )

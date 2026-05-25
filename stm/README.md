@@ -370,9 +370,7 @@ Use STM32CubeIDE project:
 `update_firmware_bins.sh`:
 - input: built ELF (defaulting to current Release ELF),
 - emits BIN and copies to:
-  - `firmware/emwaver.bin`
-  - `android/app/src/main/assets/firmware/emwaver.bin`
-  - `ios/EMWaver/firmware/emwaver.bin`
+  - `firmware/emwaver.bin` (canonical source for all platforms)
   - `windows/EMWaver/Assets/Firmware/emwaver.bin`
   - `apple/EMWaverAppleCore/Resources/Firmware/emwaver.bin`
 

@@ -688,12 +688,12 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
             var repo = DebugRepoRoot();
             if (repo != null)
             {
-                var repoPath = Path.Combine(repo, "esp", "build", name switch
+                var repoPath = Path.Combine(repo, "firmware", name switch
                 {
-                    "emwaver-esp32s3-app" => "emwaveresp.bin",
-                    "emwaver-esp32s3-bootloader" => Path.Combine("bootloader", "bootloader.bin"),
-                    "emwaver-esp32s3-partition-table" => Path.Combine("partition_table", "partition-table.bin"),
-                    "emwaver-esp32s3-ota-data" => "ota_data_initial.bin",
+                    "emwaver-esp32s3-app" => "emwaver-esp32s3-app.bin",
+                    "emwaver-esp32s3-bootloader" => "emwaver-esp32s3-bootloader.bin",
+                    "emwaver-esp32s3-partition-table" => "emwaver-esp32s3-partition-table.bin",
+                    "emwaver-esp32s3-ota-data" => "emwaver-esp32s3-ota-data.bin",
                     _ => ""
                 });
                 if (!string.IsNullOrWhiteSpace(repoPath) && File.Exists(repoPath))

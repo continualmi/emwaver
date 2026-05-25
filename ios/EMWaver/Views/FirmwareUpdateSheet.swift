@@ -20,7 +20,7 @@ struct FirmwareUpdateSheet: View {
                     LabeledContent("Target", value: targetLabel)
                     LabeledContent("Connection", value: device.isConnected ? "Connected" : "Disconnected")
                     LabeledContent("Bundled STM32 firmware", value: bundledAssetStatus("emwaver", extension: "bin", subdirectory: "firmware"))
-                    LabeledContent("Bundled ESP image", value: bundledAssetStatus("emwaveresp", extension: "bin", subdirectory: "ota"))
+                    LabeledContent("Bundled ESP image", value: bundledAssetStatus("emwaver-esp32s3-app", extension: "bin", subdirectory: "firmware"))
                 }
 
                 Section("Firmware Handoff") {
@@ -33,7 +33,7 @@ struct FirmwareUpdateSheet: View {
                             .foregroundStyle(.orange)
                     }
 
-                    if let espURL = bundledAssetURL("emwaveresp", extension: "bin", subdirectory: "ota") {
+                    if let espURL = bundledAssetURL("emwaver-esp32s3-app", extension: "bin", subdirectory: "firmware") {
                         ShareLink(item: espURL) {
                             Label("Share ESP firmware", systemImage: "square.and.arrow.up")
                         }

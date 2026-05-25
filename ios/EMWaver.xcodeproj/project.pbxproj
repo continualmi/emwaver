@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A0E0A1B22F6B4D7C8E9F0001 /* ota in Resources */ = {isa = PBXBuildFile; fileRef = A0E0A1B22F6B4D7C8E9F0002 /* ota */; };
+		A0E0A1B22F6B4D7C8E9F0001 /* firmware in Resources */ = {isa = PBXBuildFile; fileRef = A0E0A1B22F6B4D7C8E9F0002 /* firmware */; };
 		A1E0A1B22F6B4D7C8E9F2007 /* EMWaverScriptsUI in Frameworks */ = {isa = PBXBuildFile; productRef = A1E0A1B22F6B4D7C8E9F2005 /* EMWaverScriptsUI */; };
 		A1E0A1B22F6B4D7C8E9F2008 /* EMWaverScriptRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = A1E0A1B22F6B4D7C8E9F2006 /* EMWaverScriptRuntime */; };
 		A1E0A1B22F6B4D7C8E9F2009 /* EMWaverScriptSwiftUI in Frameworks */ = {isa = PBXBuildFile; productRef = A1E0A1B22F6B4D7C8E9F2010 /* EMWaverScriptSwiftUI */; };
@@ -49,7 +49,7 @@
 		46DC3FDA2DA99FB800423E8A /* EMWaver.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EMWaver.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		46DC3FE72DA99FBD00423E8A /* EMWaverTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EMWaverTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		46DC3FF12DA99FBD00423E8A /* EMWaverUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EMWaverUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		A0E0A1B22F6B4D7C8E9F0002 /* ota */ = {isa = PBXFileReference; lastKnownFileType = folder; name = ota; path = EMWaver/ota; sourceTree = "<group>"; };
+		A0E0A1B22F6B4D7C8E9F0002 /* firmware */ = {isa = PBXFileReference; lastKnownFileType = folder; name = firmware; path = ../../firmware; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -116,7 +116,7 @@
 		46746BE72F048A29004A6871 /* Recovered References */ = {
 			isa = PBXGroup;
 			children = (
-				A0E0A1B22F6B4D7C8E9F0002 /* ota */,
+				A0E0A1B22F6B4D7C8E9F0002 /* firmware */,
 			);
 			name = "Recovered References";
 			sourceTree = "<group>";
@@ -281,7 +281,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A0E0A1B22F6B4D7C8E9F0001 /* ota in Resources */,
+				A0E0A1B22F6B4D7C8E9F0001 /* firmware in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -336,7 +336,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-				shellScript = "set -eu\n\nrepo_root=\"${SRCROOT}/..\"\noutput_plist=\"${SCRIPT_OUTPUT_FILE_0:-${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/EMWaverEnv.plist}\"\nconfiguration=\"${CONFIGURATION:-Debug}\"\n\nmkdir -p \"$(dirname \"${output_plist}\")\"\n\nexport EMWAVER_REPO_ROOT=\"${repo_root}\"\nexport EMWAVER_OUTPUT_PLIST=\"${output_plist}\"\nexport EMWAVER_CONFIGURATION=\"${configuration}\"\n\n/usr/bin/python3 <<'PY'\nimport os\nimport pathlib\nimport plistlib\nimport re\n\nrepo_root = pathlib.Path(os.environ[\"EMWAVER_REPO_ROOT\"]).resolve()\noutput_plist = pathlib.Path(os.environ[\"EMWAVER_OUTPUT_PLIST\"])\nconfiguration = os.environ.get(\"EMWAVER_CONFIGURATION\", \"Debug\").lower()\n\nenv_files = [\".env.prod\"] if configuration == \"release\" else [\".env\"]\n\ntoken = re.compile(r\"\\$\\{([A-Z0-9_]+)\\}\")\nresolved = {}\n\ndef expand(value: str) -> str:\n    out = value\n    for _ in range(4):\n        out = token.sub(lambda match: os.environ.get(match.group(1), resolved.get(match.group(1), \"\")), out)\n    return out.strip()\n\nfor rel in env_files:\n    path = repo_root / rel\n    if not path.exists():\n        continue\n    for raw in path.read_text(encoding=\"utf-8\").splitlines():\n        line = raw.strip()\n        if not line or line.startswith(\"#\") or \"=\" not in line:\n            continue\n        key, value = line.split(\"=\", 1)\n        key = key.strip()\n        if not key or key in resolved:\n            continue\n        resolved[key] = expand(value.strip())\n\nbundled = {}\nfor key, value in resolved.items():\n    if not key.startswith(\"EMWAVER_\"):\n        continue\n    runtime = os.environ.get(key, \"\").strip()\n    bundled[key] = runtime or value\n\nwith output_plist.open(\"wb\") as fh:\n    plistlib.dump(bundled, fh, sort_keys=True)\nPY\n";
+			shellScript = "set -eu\n\nrepo_root=\"${SRCROOT}/..\"\noutput_plist=\"${SCRIPT_OUTPUT_FILE_0:-${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/EMWaverEnv.plist}\"\nconfiguration=\"${CONFIGURATION:-Debug}\"\n\nmkdir -p \"$(dirname \"${output_plist}\")\"\n\nexport EMWAVER_REPO_ROOT=\"${repo_root}\"\nexport EMWAVER_OUTPUT_PLIST=\"${output_plist}\"\nexport EMWAVER_CONFIGURATION=\"${configuration}\"\n\n/usr/bin/python3 <<'PY'\nimport os\nimport pathlib\nimport plistlib\nimport re\n\nrepo_root = pathlib.Path(os.environ[\"EMWAVER_REPO_ROOT\"]).resolve()\noutput_plist = pathlib.Path(os.environ[\"EMWAVER_OUTPUT_PLIST\"])\nconfiguration = os.environ.get(\"EMWAVER_CONFIGURATION\", \"Debug\").lower()\n\nenv_files = [\".env.prod\"] if configuration == \"release\" else [\".env\"]\n\ntoken = re.compile(r\"\\$\\{([A-Z0-9_]+)\\}\")\nresolved = {}\n\ndef expand(value: str) -> str:\n    out = value\n    for _ in range(4):\n        out = token.sub(lambda match: os.environ.get(match.group(1), resolved.get(match.group(1), \"\")), out)\n    return out.strip()\n\nfor rel in env_files:\n    path = repo_root / rel\n    if not path.exists():\n        continue\n    for raw in path.read_text(encoding=\"utf-8\").splitlines():\n        line = raw.strip()\n        if not line or line.startswith(\"#\") or \"=\" not in line:\n            continue\n        key, value = line.split(\"=\", 1)\n        key = key.strip()\n        if not key or key in resolved:\n            continue\n        resolved[key] = expand(value.strip())\n\nbundled = {}\nfor key, value in resolved.items():\n    if not key.startswith(\"EMWAVER_\"):\n        continue\n    runtime = os.environ.get(key, \"\").strip()\n    bundled[key] = runtime or value\n\nwith output_plist.open(\"wb\") as fh:\n    plistlib.dump(bundled, fh, sort_keys=True)\nPY\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

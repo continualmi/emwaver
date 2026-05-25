@@ -19,7 +19,7 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/ios`](/Users/l
 - [`/Users/luisml/continualmi/emwaver/ios/EMWaver/Auth`](/Users/luisml/continualmi/emwaver/ios/EMWaver/Auth): transitional Agent API key/session helpers
 - [`/Users/luisml/continualmi/emwaver/ios/EMWaver/Managers`](/Users/luisml/continualmi/emwaver/ios/EMWaver/Managers): USB transport, local script/device managers, and legacy host/remote-control surfaces
 - [`/Users/luisml/continualmi/emwaver/ios/EMWaver/Views`](/Users/luisml/continualmi/emwaver/ios/EMWaver/Views): app UI surfaces
-- [`/Users/luisml/continualmi/emwaver/ios/EMWaver/firmware`](/Users/luisml/continualmi/emwaver/ios/EMWaver/firmware) and [`/Users/luisml/continualmi/emwaver/ios/EMWaver/ota`](/Users/luisml/continualmi/emwaver/ios/EMWaver/ota): bundled firmware payloads
+- [`/Users/luisml/continualmi/emwaver/firmware`](/Users/luisml/continualmi/emwaver/firmware): canonical shared firmware payloads (sourced into the iOS bundle via Xcode folder reference)
 - [`/Users/luisml/continualmi/emwaver/ios/EMWaver/Native`](/Users/luisml/continualmi/emwaver/ios/EMWaver/Native): native interop and buffer-related components
 - [`/Users/luisml/continualmi/emwaver/apple/EMWaverAppleCore/Sources`](/Users/luisml/continualmi/emwaver/apple/EMWaverAppleCore/Sources): shared Apple transport, script runtime, storage, and UI modules
 
