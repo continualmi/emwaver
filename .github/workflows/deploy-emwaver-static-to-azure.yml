@@ -46,11 +46,6 @@ jobs:
               --static-website \
               --index-document index.html \
               --404-document 404.html
-            az storage blob delete-batch \
-              --connection-string "$CONNECTION_STRING" \
-              --source '$web' \
-              --pattern "*" \
-              --only-show-errors
             az storage blob upload-batch \
               --connection-string "$CONNECTION_STRING" \
               --destination '$web' \
