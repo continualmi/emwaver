@@ -89,7 +89,17 @@ platform :ios do
     )
 
     validate_ios_bundle_assets
-    upload_app_store_candidate(api_key: api_key)
+    upload_binary_to_app_store_connect(api_key: api_key)
+  end
+
+  private_lane :upload_binary_to_app_store_connect do |options|
+    upload_to_testflight(
+      api_key: options[:api_key],
+      ipa: lane_context[SharedValues::IPA_OUTPUT_PATH].to_s,
+      skip_waiting_for_build_processing: true,
+      distribute_external: false,
+      changelog: changelog_text
+    )
   end
 
   private_lane :validate_ios_bundle_assets do

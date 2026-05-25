@@ -137,7 +137,7 @@ Lanes:
 - `test` runs the `EMWaver` scheme tests on the default simulator.
 - `archive` creates `build/ios/EMWaver.ipa` without uploading.
 - `beta` builds and uploads the IPA to TestFlight.
-- `app_store_upload` builds and uploads an App Store production candidate, but does not submit for App Review.
+- `app_store_upload` builds and uploads an App Store Connect binary candidate through TestFlight processing, but does not submit for App Review.
 - `release` uploads metadata and the latest local IPA when present, but does not submit for App Review.
 
 Apple review remains a manual App Store Connect checkpoint: select the processed build, confirm compliance/review answers, and click the review submission button.
@@ -171,9 +171,9 @@ The workflow runs manually from GitHub Actions or when pushing tags matching `io
 
 ## 6.2 GitHub Actions App Store upload
 
-`.github/workflows/ios-app-store-upload.yml` can build a signed production IPA and upload it to App Store Connect. It uses the same `app-store` environment secrets as the TestFlight workflow, runs manually only, and does not submit the app for App Review.
+`.github/workflows/ios-app-store-upload.yml` can build a signed production IPA and upload it to App Store Connect for TestFlight/build processing. It validates that the IPA bundles the JavaScript `DefaultScripts/*.js` assets and contains no legacy `.emw` scripts before upload. It uses the same `app-store` environment secrets as the TestFlight workflow, runs manually only, and does not submit the app for App Review.
 
-After the workflow completes, finish the release in App Store Connect by selecting the processed build, confirming compliance and review details, and submitting for review manually.
+After the workflow completes and Apple finishes processing the build, finish the release in App Store Connect by selecting the processed build, confirming compliance and review details, and submitting for review manually.
 
 ---
 
