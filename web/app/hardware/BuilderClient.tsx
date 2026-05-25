@@ -5,35 +5,35 @@ import { useEffect, useState } from "react";
 
 type BomRow = Record<string, string>;
 
-const LINK_FABRICATION_ROOT = "/emwaver/hardware-catalog/hardware/pcb";
+const LINK_FABRICATION_ROOT = "/hardware-catalog/hardware/pcb";
 const BOM_URL = `${LINK_FABRICATION_ROOT}/BOM_EMWaver_2026-01-21.csv`;
 const CPL_URL = `${LINK_FABRICATION_ROOT}/CPL_EMWaver_2026-01-21.csv`;
 const GERBER_URL = `${LINK_FABRICATION_ROOT}/Gerber_EMWaver_2026-01-21.zip`;
-const STL_URL = "/emwaver/hardware-catalog/hardware/case/emwaver.stl";
+const STL_URL = "/hardware-catalog/hardware/case/emwaver.stl";
 
 const BOARD_IMAGES = {
-  all: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_all.png",
-  allIso: "/emwaver/hardware-catalog/downloads/emwaver.png",
-  noGpio: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_gpio.png",
-  noIsm: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_ism.png",
-  noIsmNoGpio: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_ism_no_gpio.png",
-  noIr: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_ir.png",
-  noIrNoGpio: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_ir_no_gpio.png",
-  noIrNoIsm: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_ir_no_ism.png",
-  noUsbMale: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_usbmale.png",
-  noUsbFemale: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_usbfemale.png",
-  noGpioNoUsbMale: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_gpio_no_usbmale.png",
-  noGpioNoUsbFemale: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_gpio_no_usbfemale.png",
-  noIsmNoUsbMale: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_ism_no_usbmale.png",
-  noIsmNoUsbFemale: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_ism_no_usbfemale.png",
-  noIsmNoGpioNoUsbFemale: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_ism_no_gpio_no_usbfemale.png",
-  noIsmNoGpioNoUsbMale: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_ism_no_gpio_no_usbmale.png",
-  noIrNoUsbMale: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_ir_no_usbmale.png",
-  noIrNoUsbFemale: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_ir_no_usbfemale.png",
-  noIrNoGpioNoUsbMale: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_ir_no_gpio_no_usbmal.png",
-  noIrNoGpioNoUsbFemale: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_ir_no_gpio_no_usbfemale.png",
-  noIrNoIsmNoUsbMale: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_ir_no_ism_no_maleusb.png",
-  noIrNoIsmNoUsbFemale: "/emwaver/hardware-catalog/hardware/emwaver/emwaver_no_ir_no_ism_no_usbfemale.png",
+  all: "/hardware-catalog/hardware/emwaver/emwaver_all.png",
+  allIso: "/hardware-catalog/downloads/emwaver.png",
+  noGpio: "/hardware-catalog/hardware/emwaver/emwaver_no_gpio.png",
+  noIsm: "/hardware-catalog/hardware/emwaver/emwaver_no_ism.png",
+  noIsmNoGpio: "/hardware-catalog/hardware/emwaver/emwaver_no_ism_no_gpio.png",
+  noIr: "/hardware-catalog/hardware/emwaver/emwaver_no_ir.png",
+  noIrNoGpio: "/hardware-catalog/hardware/emwaver/emwaver_no_ir_no_gpio.png",
+  noIrNoIsm: "/hardware-catalog/hardware/emwaver/emwaver_no_ir_no_ism.png",
+  noUsbMale: "/hardware-catalog/hardware/emwaver/emwaver_no_usbmale.png",
+  noUsbFemale: "/hardware-catalog/hardware/emwaver/emwaver_no_usbfemale.png",
+  noGpioNoUsbMale: "/hardware-catalog/hardware/emwaver/emwaver_no_gpio_no_usbmale.png",
+  noGpioNoUsbFemale: "/hardware-catalog/hardware/emwaver/emwaver_no_gpio_no_usbfemale.png",
+  noIsmNoUsbMale: "/hardware-catalog/hardware/emwaver/emwaver_no_ism_no_usbmale.png",
+  noIsmNoUsbFemale: "/hardware-catalog/hardware/emwaver/emwaver_no_ism_no_usbfemale.png",
+  noIsmNoGpioNoUsbFemale: "/hardware-catalog/hardware/emwaver/emwaver_no_ism_no_gpio_no_usbfemale.png",
+  noIsmNoGpioNoUsbMale: "/hardware-catalog/hardware/emwaver/emwaver_no_ism_no_gpio_no_usbmale.png",
+  noIrNoUsbMale: "/hardware-catalog/hardware/emwaver/emwaver_no_ir_no_usbmale.png",
+  noIrNoUsbFemale: "/hardware-catalog/hardware/emwaver/emwaver_no_ir_no_usbfemale.png",
+  noIrNoGpioNoUsbMale: "/hardware-catalog/hardware/emwaver/emwaver_no_ir_no_gpio_no_usbmal.png",
+  noIrNoGpioNoUsbFemale: "/hardware-catalog/hardware/emwaver/emwaver_no_ir_no_gpio_no_usbfemale.png",
+  noIrNoIsmNoUsbMale: "/hardware-catalog/hardware/emwaver/emwaver_no_ir_no_ism_no_maleusb.png",
+  noIrNoIsmNoUsbFemale: "/hardware-catalog/hardware/emwaver/emwaver_no_ir_no_ism_no_usbfemale.png",
 } as const;
 
 const BOM_REMOVALS = {

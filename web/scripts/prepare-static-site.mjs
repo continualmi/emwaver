@@ -1,5 +1,6 @@
-import { cp, mkdir, rm } from "node:fs/promises";
+import { cp, mkdir, rm, readdir } from "node:fs/promises";
 import path from "node:path";
+import { statSync } from "node:fs";
 
 const repoRoot = process.cwd();
 const exportDir = path.join(repoRoot, "out");
@@ -17,18 +18,22 @@ async function copyIfExists(from, to) {
 }
 
 async function prepareEmwaverExport() {
-  const emwaverSource = path.join(exportDir, "emwaver");
+  // Move old out-emwaver aside and create fresh
   await rm(emwaverDir, { recursive: true, force: true });
   await mkdir(emwaverDir, { recursive: true });
 
-  await cp(emwaverSource, emwaverDir, { recursive: true });
-  await cp(emwaverSource, path.join(emwaverDir, "emwaver"), { recursive: true });
-  await copyIfExists(path.join(exportDir, "_next"), path.join(emwaverDir, "_next"));
-  await copyIfExists(path.join(exportDir, "404.html"), path.join(emwaverDir, "404.html"));
-  await copyIfExists(path.join(exportDir, "404"), path.join(emwaverDir, "404"));
-  await copyIfExists(path.join(exportDir, "favicon.ico"), path.join(emwaverDir, "favicon.ico"));
-  await copyIfExists(path.join(exportDir, "favicon.png"), path.join(emwaverDir, "favicon.png"));
-  await copyIfExists(path.join(exportDir, "apple-icon.png"), path.join(emwaverDir, "apple-icon.png"));
+  // Copy entire static export to out-emwaver
+  // The Next.js output directory is flat — pages are at the root
+  const entries = await readdir(exportDir);
+  for (const entry of entries) {
+    const from = path.join(exportDir, entry);
+    const to = path.join(emwaverDir, entry);
+    try {
+      await cp(from, to, { recursive: true });
+    } catch {
+      // skip entries that fail
+    }
+  }
 }
 
 await prepareEmwaverExport();

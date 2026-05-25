@@ -75,8 +75,8 @@ export default function DocsCommunityPage() {
       <p>
         It helps to include your board, platform, app version, and the script or hardware module
         you are using. If your question is about writing a script, the{" "}
-        <Link href="/emwaver/docs/scripts">scripting guide</Link> and{" "}
-        <Link href="/emwaver/docs/scripts/device-api">device API</Link> pages are the best references to
+        <Link href="/docs/scripts">scripting guide</Link> and{" "}
+        <Link href="/docs/scripts/device-api">device API</Link> pages are the best references to
         check first.
       </p>
     </>

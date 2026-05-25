@@ -101,7 +101,7 @@ export default function DocsIndex() {
       <h2>Quick start details</h2>
       <ol>
         <li>
-          <strong>Choose hardware</strong> from the <Link href="/emwaver/build">build catalog</Link> or start with a supported
+          <strong>Choose hardware</strong> from the <Link href="/build">build catalog</Link> or start with a supported
           ESP32-S3 dev board. Purpose-built hardware is also available in the{" "}
           <a href="https://github.com/continualmi/emwaver-shield" target="_blank" rel="noreferrer">
             EMWaver Shield repository
@@ -110,7 +110,7 @@ export default function DocsIndex() {
         </li>
         <li>
           <strong>Install the app</strong> through the{" "}
-          <Link href="/emwaver/docs/install">App Store, Google Play internal test, Android APK, macOS DMG, or Windows download</Link>.
+          <Link href="/docs/install">App Store, Google Play internal test, Android APK, macOS DMG, or Windows download</Link>.
         </li>
         <li>
           <strong>Flash the fixed EMWaver firmware</strong> if your board is not already pre-flashed. Use the bundled ESP32-S3 or STM32F042 target image rather than building firmware manually.
@@ -136,7 +136,7 @@ export default function DocsIndex() {
       <h2>What to read next</h2>
       <div className="mt-4 grid gap-3">
         <Link
-          href="/emwaver/docs/scripts"
+          href="/docs/scripts"
           className="group flex items-start justify-between gap-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-5 py-4 no-underline transition hover:bg-[color:var(--surface-2)]"
         >
           <div>
@@ -151,7 +151,7 @@ export default function DocsIndex() {
           </div>
         </Link>
         <Link
-          href="/emwaver/docs/hardware"
+          href="/docs/hardware"
           className="group flex items-start justify-between gap-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-5 py-4 no-underline transition hover:bg-[color:var(--surface-2)]"
         >
           <div>
@@ -166,7 +166,7 @@ export default function DocsIndex() {
           </div>
         </Link>
         <Link
-          href="/emwaver/docs/community"
+          href="/docs/community"
           className="group flex items-start justify-between gap-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-5 py-4 no-underline transition hover:bg-[color:var(--surface-2)]"
         >
           <div>

@@ -112,21 +112,21 @@ function InstallOptions() {
     {
       label: "iPhone and iPad",
       href: APP_STORE_URL,
-      badge: "/emwaver/badges/app-store.png",
+      badge: "/badges/app-store.png",
       badgeAlt: "Download on the App Store",
       note: "Primary iOS install path.",
     },
     {
       label: "Android through Google Play",
       href: PLAY_INTERNAL_TEST_URL,
-      badge: "/emwaver/badges/google-play.png",
+      badge: "/badges/google-play.png",
       badgeAlt: "Get it on Google Play",
       note: "Join the internal test.",
     },
     {
       label: "Android direct download",
       href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-android.apk`,
-      badge: "/emwaver/badges/android-apk.png",
+      badge: "/badges/android-apk.png",
       badgeAlt: "Download Android APK",
       note: "Direct APK outside Google Play.",
     },
@@ -148,7 +148,7 @@ function InstallOptions() {
             eyebrow="macOS — Dev & Advanced"
             title="macOS app"
             description="For firmware flashing, multi-device bench testing, and long automation runs."
-            badge="/emwaver/badges/macos.png"
+            badge="/badges/macos.png"
             badgeAlt="Available for Mac"
           >
             <FileDownloadCard
@@ -165,7 +165,7 @@ function InstallOptions() {
             eyebrow="Windows — Preview"
             title="Windows app"
             description="Preview build for testing local EMWaver workflows on Windows 11."
-            badge="/emwaver/badges/windows.png"
+            badge="/badges/windows.png"
             badgeAlt="Available for Windows"
           >
             <FileDownloadCard
@@ -216,7 +216,7 @@ export default function InstallDocPage() {
       <h2>2. Get a supported board</h2>
       <p>
         You can build one from our{" "}
-        <Link href="/emwaver/docs/hardware">open-source hardware repos</Link> or use a compatible
+        <Link href="/docs/hardware">open-source hardware repos</Link> or use a compatible
         off-the-shelf board:
       </p>
       <ul>
@@ -234,8 +234,8 @@ export default function InstallDocPage() {
         </li>
         <li>
           <strong>EMWaver lineup</strong> — optional custom EMWaver devices and modules are listed in the{" "}
-          <Link href="/emwaver/docs/hardware">hardware docs</Link> and on the{" "}
-          <Link href="/emwaver/build">Build page</Link>.
+          <Link href="/docs/hardware">hardware docs</Link> and on the{" "}
+          <Link href="/build">Build page</Link>.
         </li>
       </ul>
 
@@ -275,7 +275,7 @@ export default function InstallDocPage() {
       <p>
         The optional Agent can use an API key to inspect hardware through primitive tools, probe modules,
         and help write or debug scripts. The local script runtime works without Agent access. See the{" "}
-        <Link href="/emwaver/docs/scripts">scripting guide</Link> for script details.
+        <Link href="/docs/scripts">scripting guide</Link> for script details.
       </p>
     </>
   );

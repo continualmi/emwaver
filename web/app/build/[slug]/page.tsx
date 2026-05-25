@@ -2,7 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SiteHeader } from "@/components/emwaver/SiteHeader";
-import { DeviceGallery } from "@/app/emwaver/build/[slug]/DeviceGallery";
+import { DeviceGallery } from "@/app/build/[slug]/DeviceGallery";
 import {
   getHardwareCatalog,
   getHardwareDevice,
@@ -125,7 +125,7 @@ export default async function BuildDevicePage({
       <main className="mx-auto max-w-6xl px-5 py-10">
         <div className="pb-4">
           <Link
-            href="/emwaver/build"
+            href="/build"
             className="text-sm text-[color:var(--ink-dim)] hover:text-[color:var(--ink)]"
           >
             &larr; Back to Build

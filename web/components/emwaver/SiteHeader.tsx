@@ -7,10 +7,10 @@ import { usePathname } from "next/navigation";
 import { societyRouteUrl } from "@/lib/emwaver/societySite";
 
 const nav = [
-  { href: "/emwaver/build", label: "Build" },
-  { href: "/emwaver/install", label: "Install" },
-  { href: "/emwaver/docs", label: "Documentation" },
-  { href: "/emwaver/videos", label: "Videos" },
+  { href: "/build", label: "Build" },
+  { href: "/install", label: "Install" },
+  { href: "/docs", label: "Documentation" },
+  { href: "/videos", label: "Videos" },
   { href: societyRouteUrl("/society"), label: "Community" },
 ];
 
@@ -33,7 +33,7 @@ export function SiteHeader() {
               aria-label="Continual MI"
             >
               <Image
-                src="/emwaver/continuous-logo.png"
+                src="/continuous-logo.png"
                 alt="Continual MI"
                 width={36}
                 height={36}
@@ -43,7 +43,7 @@ export function SiteHeader() {
             <Link href="/" className="flex items-center gap-3">
               <div className="h-9 w-9 overflow-hidden rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)]">
                 <Image
-                  src="/emwaver/logo.png"
+                  src="/logo.png"
                   alt="EMWaver"
                   width={36}
                   height={36}

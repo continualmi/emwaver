@@ -53,13 +53,13 @@ EMWaver videos
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link
-                href="/emwaver/build"
+                href="/build"
                 className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-5 py-3 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95"
               >
                 Open Build
               </Link>
               <Link
-                href="/emwaver/docs"
+                href="/docs"
                 className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-5 py-3 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-3)]"
               >
                 Read docs

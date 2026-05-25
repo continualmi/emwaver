@@ -8,9 +8,9 @@ type NavItem = {
 
 const NAV: NavItem[] = [
   { href: "/", label: "Build" },
-  { href: "/emwaver/install", label: "Install" },
-  { href: "/emwaver/docs", label: "Documentation" },
-  { href: "/emwaver/docs/hardware", label: "Hardware" },
+  { href: "/install", label: "Install" },
+  { href: "/docs", label: "Documentation" },
+  { href: "/docs/hardware", label: "Hardware" },
 ];
 
 function NavLinks({ activeHref }: { activeHref: string }) {

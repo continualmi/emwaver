@@ -29,8 +29,8 @@ const CATALOG_DIR = path.join(PUBLIC_DIR, "hardware-catalog", "hardware");
 
 export function resolveImagePath(slug: string, imagePath: string): string {
   if (imagePath.includes("/"))
-    return `/emwaver/hardware-catalog/hardware/${imagePath}`;
-  return `/emwaver/hardware-catalog/hardware/${slug}/${imagePath}`;
+    return `/hardware-catalog/hardware/${imagePath}`;
+  return `/hardware-catalog/hardware/${slug}/${imagePath}`;
 }
 
 export function loadDeviceList(): string[] {

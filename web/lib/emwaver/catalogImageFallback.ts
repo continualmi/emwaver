@@ -49,24 +49,24 @@ export function getCatalogImageFallbackPath(src: string): string | null {
 
   if (repo === "emwaver-link") {
     if (EMWAVER_LINK_PHOTOSHOOT.has(filename)) {
-      return `/emwaver/hardware-catalog/hardware/emwaver_photoshoot/${filename}`;
+      return `/hardware-catalog/hardware/emwaver_photoshoot/${filename}`;
     }
     if (EMWAVER_LINK_MODULE_PHOTOS.has(filename)) {
-      return `/emwaver/hardware-catalog/hardware/emwaver_photoshoot_modules/${filename}`;
+      return `/hardware-catalog/hardware/emwaver_photoshoot_modules/${filename}`;
     }
     if (filename === "emwaver-link.png") {
-      return "/emwaver/hardware-catalog/hardware/emwaver/emwaver.png";
+      return "/hardware-catalog/hardware/emwaver/emwaver.png";
     }
     if (filename === "emwaver-link-all.png") {
-      return "/emwaver/hardware-catalog/hardware/emwaver/emwaver_all.png";
+      return "/hardware-catalog/hardware/emwaver/emwaver_all.png";
     }
     if (filename === "emwaver-link.webp") {
-      return "/emwaver/hardware-catalog/hardware/emwaver_photoshoot/IMG_0149.webp";
+      return "/hardware-catalog/hardware/emwaver_photoshoot/IMG_0149.webp";
     }
     return null;
   }
 
   const slug = REPO_TO_LOCAL_CATALOG_SLUG[repo];
   if (!slug) return null;
-  return `/emwaver/hardware-catalog/hardware/${slug}/${filename}`;
+  return `/hardware-catalog/hardware/${slug}/${filename}`;
 }

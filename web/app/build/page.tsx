@@ -7,21 +7,21 @@ import {
   getArchiveDevices,
   type HardwareDevice,
 } from "@/lib/emwaver/hardwareCatalog";
-import { BuilderClient } from "@/app/emwaver/hardware/BuilderClient";
+import { BuilderClient } from "@/app/hardware/BuilderClient";
 
 const LANDING_IMAGES = [
   {
-    src: "/emwaver/landing1.jpeg",
+    src: "/landing1.jpeg",
     alt: "EMWaver plugged into a smartphone",
     label: "Mobile setup",
   },
   {
-    src: "/emwaver/landing2.png",
+    src: "/landing2.png",
     alt: "EMWaver device close-up",
     label: "Device close-up",
   },
   {
-    src: "/emwaver/landing3.png",
+    src: "/landing3.png",
     alt: "EMWaver connected to laptop with modules",
     label: "Laptop setup",
   },

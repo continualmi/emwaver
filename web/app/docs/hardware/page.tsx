@@ -66,7 +66,7 @@ export default function HardwareDocPage() {
           <div className="flex flex-wrap items-start gap-4">
             <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)]">
               <Image
-                src="/emwaver/landing3.png"
+                src="/landing3.png"
                 alt="ESP32-S3 board support"
                 fill
                 unoptimized
@@ -92,7 +92,7 @@ export default function HardwareDocPage() {
           <div className="flex flex-wrap items-start gap-4">
             <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)]">
               <Image
-                src="/emwaver/landing1.jpeg"
+                src="/landing1.jpeg"
                 alt="STM32F042 board support"
                 fill
                 unoptimized
@@ -183,7 +183,7 @@ export default function HardwareDocPage() {
       <h2>Pinout reference</h2>
       <p>
         For GPIO numbering, headers, and pin assignments on the EMWaver Shield, see the{" "}
-        <Link href="/emwaver/docs/hardware/pinout">pinout reference</Link>.
+        <Link href="/docs/hardware/pinout">pinout reference</Link>.
       </p>
     </>
   );

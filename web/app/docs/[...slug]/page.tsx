@@ -2,10 +2,10 @@ import { notFound, redirect } from "next/navigation";
 
 const REDIRECTS: Record<string, string> = {
   "overview": "/",
-  "installing-using": "/emwaver/docs/install",
-  "hardware/device": "/emwaver/docs/hardware",
-  "hardware/pinout/index": "/emwaver/docs/hardware/pinout",
-  "daemon": "/emwaver/docs",
+  "installing-using": "/docs/install",
+  "hardware/device": "/docs/hardware",
+  "hardware/pinout/index": "/docs/hardware/pinout",
+  "daemon": "/docs",
 };
 
 export function generateStaticParams() {

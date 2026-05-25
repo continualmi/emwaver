@@ -38,7 +38,7 @@ const MOBILE_PLATFORMS: PlatformCard[] = [
       {
         label: "Download on the App Store",
         href: APP_STORE_URL,
-        badge: "/emwaver/badges/app-store.png",
+        badge: "/badges/app-store.png",
         badgeAlt: "Download on the App Store",
       },
     ],
@@ -53,7 +53,7 @@ const MOBILE_PLATFORMS: PlatformCard[] = [
       {
         label: "Join Google Play internal test",
         href: PLAY_INTERNAL_TEST_URL,
-        badge: "/emwaver/badges/google-play.png",
+        badge: "/badges/google-play.png",
         badgeAlt: "Get it on Google Play",
         note: "Join internal testing",
       },
@@ -64,7 +64,7 @@ const MOBILE_PLATFORMS: PlatformCard[] = [
       {
         label: "Download APK",
         href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-android.apk`,
-        badge: "/emwaver/badges/android-apk.png",
+        badge: "/badges/android-apk.png",
         badgeAlt: "Download Android APK",
       },
     ],
@@ -78,7 +78,7 @@ const DESKTOP_PLATFORMS: PlatformCard[] = [
     icon: "Mac",
     accent: "sky",
     description: "Desktop build for firmware flashing, multi-device bench testing, and long automation runs.",
-    badge: "/emwaver/badges/macos.png",
+    badge: "/badges/macos.png",
     badgeAlt: "Available for Mac",
     actions: [
       {
@@ -95,7 +95,7 @@ const DESKTOP_PLATFORMS: PlatformCard[] = [
     icon: "Win",
     accent: "sky",
     description: "Windows preview build for testing local EMWaver workflows on Windows 11.",
-    badge: "/emwaver/badges/windows.png",
+    badge: "/badges/windows.png",
     badgeAlt: "Available for Windows",
     actions: [
       {
@@ -265,7 +265,7 @@ export default function InstallPage() {
         <section className="grid gap-8 rounded-[2rem] border border-[color:var(--line)] bg-[color:var(--glass)] px-6 py-7 shadow-[0_24px_70px_var(--shadow)] md:grid-cols-[auto_1fr] md:items-center md:px-8 md:py-8">
           <div className="flex justify-center md:justify-start">
             <img
-              src="/emwaver/app-icon.png"
+              src="/app-icon.png"
               alt="EMWaver app icon"
               className="h-28 w-28 rounded-[1.75rem] border border-[color:var(--line)] shadow-[0_16px_48px_var(--shadow-heavy)]"
             />

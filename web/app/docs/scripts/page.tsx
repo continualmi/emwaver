@@ -184,8 +184,8 @@ timer.stop();`}</code>
 
       <h2>Next</h2>
       <ul>
-        <li><Link href="/emwaver/docs/scripts/ui">UI widgets</Link> for every JSX component and prop shape.</li>
-        <li><Link href="/emwaver/docs/scripts/device-api">Device API</Link> for GPIO, buses, sampler, files, and device info.</li>
+        <li><Link href="/docs/scripts/ui">UI widgets</Link> for every JSX component and prop shape.</li>
+        <li><Link href="/docs/scripts/device-api">Device API</Link> for GPIO, buses, sampler, files, and device info.</li>
       </ul>
     </>
   );

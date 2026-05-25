@@ -26,7 +26,7 @@ export default function SupportPage() {
             {
               title: "Documentation",
               body: "Install guides, hardware specs, scripting API, and board references.",
-              href: "/emwaver/docs",
+              href: "/docs",
               cta: "Browse docs",
             },
             {
@@ -39,7 +39,7 @@ export default function SupportPage() {
             {
               title: "Build & Hardware",
               body: "Find supported boards, build instructions, and hardware catalog.",
-              href: "/emwaver/build",
+              href: "/build",
               cta: "Open Build",
             },
           ].map((card) => (
@@ -82,11 +82,11 @@ export default function SupportPage() {
                     Currently supported targets include ESP32-S3 class dev boards and the
                     EMWaver Shield carrier. The EMWaver lineup of custom boards is listed
                     in the{" "}
-                    <Link href="/emwaver/docs/hardware" className="text-[color:var(--sky)] underline decoration-[color:var(--link-underline)] hover:decoration-[color:var(--link-underline-hover)]">
+                    <Link href="/docs/hardware" className="text-[color:var(--sky)] underline decoration-[color:var(--link-underline)] hover:decoration-[color:var(--link-underline-hover)]">
                       hardware docs
                     </Link>{" "}
                     and on the{" "}
-                    <Link href="/emwaver/build" className="text-[color:var(--sky)] underline decoration-[color:var(--link-underline)] hover:decoration-[color:var(--link-underline-hover)]">
+                    <Link href="/build" className="text-[color:var(--sky)] underline decoration-[color:var(--link-underline)] hover:decoration-[color:var(--link-underline-hover)]">
                       Build page
                     </Link>
                     . More targets are added as firmware ports are completed.
@@ -113,7 +113,7 @@ export default function SupportPage() {
                     JavaScript scripts. It can also help configure hardware peripherals and
                     troubleshoot signal issues. Agent usage is optional and metered
                     through the paid Continual MI API. See{" "}
-                    <Link href="/emwaver/docs/scripts" className="text-[color:var(--sky)] underline decoration-[color:var(--link-underline)] hover:decoration-[color:var(--link-underline-hover)]">
+                    <Link href="/docs/scripts" className="text-[color:var(--sky)] underline decoration-[color:var(--link-underline)] hover:decoration-[color:var(--link-underline-hover)]">
                       scripting docs
                     </Link>{" "}
                     for details.
@@ -134,7 +134,7 @@ export default function SupportPage() {
                       Continual MI Discord
                     </a>
                     . For documentation-specific questions, start with the{" "}
-                    <Link href="/emwaver/docs" className="text-[color:var(--sky)] underline decoration-[color:var(--link-underline)] hover:decoration-[color:var(--link-underline-hover)]">
+                    <Link href="/docs" className="text-[color:var(--sky)] underline decoration-[color:var(--link-underline)] hover:decoration-[color:var(--link-underline-hover)]">
                       documentation
                     </Link>
                     . For bug reports, open an issue on the{" "}
