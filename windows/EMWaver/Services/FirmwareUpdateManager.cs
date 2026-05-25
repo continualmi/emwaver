@@ -565,7 +565,11 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
             process.ErrorDataReceived += (_, e) =>
             {
                 if (string.IsNullOrWhiteSpace(e.Data)) return;
-                RunOnUi(() => AppendLog(e.Data));
+                RunOnUi(() =>
+                {
+                    AppendLog(e.Data);
+                    MaybeIngestEspProgress(e.Data);
+                });
             };
 
             if (!process.Start())
