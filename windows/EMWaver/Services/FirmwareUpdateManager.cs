@@ -20,6 +20,13 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
     private readonly List<string> _espHelperRawLines = new();
     private readonly SemaphoreSlim _presenceRefreshLock = new(1, 1);
 
+    // Multi-partition progress tracking
+    private long _espTotalFlashBytes;
+    private long _espBootloaderSize;
+    private long _espPartitionTableSize;
+    private long _espOtaDataSize;
+    private long _espAppSize;
+
     private bool _dfuConnected;
     internal bool DfuConnected
     {
@@ -520,6 +527,15 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
         AppendLog($"ESP OTA data: {Path.GetFileName(assets.OtaData)}");
         AppendLog($"ESP app image: {Path.GetFileName(assets.App)}");
 
+        // Compute total flash size for multi-partition progress tracking.
+        _espBootloaderSize   = new FileInfo(assets.Bootloader).Length;
+        _espPartitionTableSize = new FileInfo(assets.PartitionTable).Length;
+        _espOtaDataSize      = new FileInfo(assets.OtaData).Length;
+        _espAppSize          = new FileInfo(assets.App).Length;
+        _espTotalFlashBytes  = _espBootloaderSize + _espPartitionTableSize + _espOtaDataSize + _espAppSize;
+        AppendLog($"ESP total flash size: {_espTotalFlashBytes} bytes "
+                  + $"(bootloader={_espBootloaderSize}, pt={_espPartitionTableSize}, ota={_espOtaDataSize}, app={_espAppSize})");
+
         IsFlashing = true;
         ProgressMessage = "Flashing ESP firmware...";
         ProgressPct = 0;
@@ -610,35 +626,63 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
             return;
         }
 
-        // esptool emits "Writing at 0x... [===...  ]  XX.X% NNN/NNN bytes..."
-        // Parse the percentage (e.g. "94.8%") and map it smoothly from 10% to 90%.
-        if (line.Contains("Writing at", StringComparison.OrdinalIgnoreCase))
+        // Erasing phase: slight bump per erase
+        if (line.Contains("Erasing flash", StringComparison.OrdinalIgnoreCase))
         {
-            // Look for the bracket pattern: find ']' then scan for "%" after it.
-            var bracketIdx = line.LastIndexOf(']');
-            if (bracketIdx < 0) bracketIdx = 0;
+            ProgressPct = Math.Max(ProgressPct, ProgressPct + 1);
+            return;
+        }
 
-            var pctIdx = line.IndexOf('%', bracketIdx);
-            if (pctIdx > 0)
+        // esptool emits "Writing at 0xXXXXXXXX [===...  ]  XX.X% NNN/total bytes..."
+        // We have 4 partitions: bootloader@0x0, pt@0x8000, ota@0x10000, app@0x20000.
+        if (line.Contains("Writing at", StringComparison.OrdinalIgnoreCase) && _espTotalFlashBytes > 0)
+        {
+            // Parse the hex address: "Writing at 0xXXXXXXXX"
+            var addrIdx = line.IndexOf("0x", StringComparison.OrdinalIgnoreCase);
+            long addr = 0;
+            if (addrIdx >= 0)
             {
-                // Walk back from '%' to find the start of the number (e.g. "94.8")
-                var numStart = pctIdx - 1;
-                while (numStart > bracketIdx && (char.IsDigit(line[numStart - 1]) || line[numStart - 1] == '.'))
-                    numStart--;
-                var pctStr = line.Substring(numStart, pctIdx - numStart).Trim();
-                if (double.TryParse(pctStr,
-                        System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture,
-                        out var writePct))
+                var addrEnd = addrIdx + 2;
+                while (addrEnd < line.Length && IsHexDigit(line[addrEnd])) addrEnd++;
+                if (addrEnd > addrIdx + 2)
+                    long.TryParse(line.Substring(addrIdx + 2, addrEnd - addrIdx - 2),
+                        System.Globalization.NumberStyles.HexNumber,
+                        System.Globalization.CultureInfo.InvariantCulture, out addr);
+            }
+
+            // Parse bytes written: "NNN/total" after the bracket bar
+            var slashIdx = line.LastIndexOf('/');
+            if (slashIdx > 0)
+            {
+                // Walk back to find the start of the number before '/'
+                var numStart = slashIdx - 1;
+                while (numStart >= 0 && char.IsDigit(line[numStart])) numStart--;
+                numStart++;
+                if (long.TryParse(line.Substring(numStart, slashIdx - numStart), out var regionBytes))
                 {
-                    // Map 0-100% write progress → 10-90% overall progress
-                    var overall = 10.0 + writePct * 0.8;
+                    // Compute absolute position: region base offset + bytes written
+                    // Partition layout by address order:
+                    //   0x00000: bootloader  (0x00000–0x05FFF, ~21KB)
+                    //   0x08000: partition-table (0x08000–0x08BFF, ~3KB)
+                    //   0x10000: ota-data    (0x10000–0x11FFF, ~8KB)
+                    //   0x20000: app         (0x20000–0x141FFF, ~1.18MB)
+                    long absolutePosition;
+                    if (addr >= 0x20000)
+                        absolutePosition = _espBootloaderSize + _espPartitionTableSize + _espOtaDataSize + (addr - 0x20000) + regionBytes;
+                    else if (addr >= 0x10000)
+                        absolutePosition = _espBootloaderSize + _espPartitionTableSize + (addr - 0x10000) + regionBytes;
+                    else if (addr >= 0x08000)
+                        absolutePosition = _espBootloaderSize + (addr - 0x08000) + regionBytes;
+                    else
+                        absolutePosition = addr + regionBytes;
+
+                    var overall = 10.0 + (absolutePosition / (double)_espTotalFlashBytes) * 80.0;
                     ProgressPct = Math.Max(ProgressPct, Math.Min(90.0, overall));
                 }
             }
             else
             {
-                // No percentage found — bare "Writing at" line.
+                // No byte count — at least bump past the erase phase.
                 ProgressPct = Math.Max(ProgressPct, 20);
             }
             return;
@@ -651,6 +695,9 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
             ProgressPct = Math.Max(ProgressPct, 90);
         }
     }
+
+    private static bool IsHexDigit(char c) =>
+        (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 
     private async Task<(int Code, string Stdout, string Stderr)> RunEspHelperAndWaitAsync(params string[] arguments)
     {
