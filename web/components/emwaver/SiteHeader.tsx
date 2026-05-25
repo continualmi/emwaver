@@ -40,7 +40,7 @@ export function SiteHeader() {
                 className="h-full w-full object-contain"
               />
             </a>
-            <Link href="/emwaver" className="flex items-center gap-3">
+            <Link href="/" className="flex items-center gap-3">
               <div className="h-9 w-9 overflow-hidden rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)]">
                 <Image
                   src="/emwaver/logo.png"
