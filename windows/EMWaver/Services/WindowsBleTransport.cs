@@ -173,7 +173,13 @@ internal static class WindowsBleTransport
         return string.IsNullOrWhiteSpace(name) ? "EMWaver BLE" : name;
     }
 
-    internal static string BoardType() => "esp32s3";
+    internal static string BoardType(string? displayName = null)
+    {
+        var name = (displayName ?? string.Empty).Trim().ToLowerInvariant();
+        if (name.Contains("esp32-s2") || name.Contains("esp32s2")) return "esp32s2";
+        if (name.Contains("esp32-s3") || name.Contains("esp32s3") || name.Contains("s3")) return "esp32s3";
+        return "esp32";
+    }
 
     internal static async Task<BluetoothLEDevice?> OpenDeviceAsync(ulong bluetoothAddress)
     {

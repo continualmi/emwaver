@@ -69,7 +69,31 @@
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 
-    <!-- Bundled ESP32-S3 firmware payloads committed to firmware/. -->
+    <!-- Bundled ESP firmware payloads committed to firmware/. -->
+    <Content Include="..\..\firmware\emwaver-esp32-bootloader.bin">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
+
+    <Content Include="..\..\firmware\emwaver-esp32-partition-table.bin">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
+
+    <Content Include="..\..\firmware\emwaver-esp32-ota-data.bin">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
+
+    <Content Include="..\..\firmware\emwaver-esp32-app.bin">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
+
     <Content Include="..\..\firmware\emwaver-esp32s3-bootloader.bin">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

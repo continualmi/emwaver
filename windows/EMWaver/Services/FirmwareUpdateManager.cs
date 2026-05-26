@@ -13,6 +13,15 @@ namespace EMWaver.Services;
 public sealed class FirmwareUpdateManager : INotifyPropertyChanged
 {
     private sealed record EspSerialPortCandidate(string Port, bool IsEspressifUsb, bool IsUsbSerial);
+    private sealed record EspBootloaderDetection(string Port, string? BoardType);
+    private sealed record EspFirmwareAssets(
+        string Chip,
+        string BootloaderOffset,
+        string FlashFrequency,
+        string Bootloader,
+        string PartitionTable,
+        string OtaData,
+        string App);
 
     private System.Windows.Threading.Dispatcher? _ui;
     private Timer? _dfuPollTimer;
@@ -198,17 +207,17 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
                 dfuPresent = false;
             }
 
-            string? espPort = null;
+            EspBootloaderDetection? espDetection = null;
             string? espError = null;
             if (includeEspSerialProbe)
             {
                 try
                 {
-                    espPort = await DetectEspBootloaderPortAsync();
+                    espDetection = await DetectEspBootloaderAsync();
                 }
                 catch (Exception ex)
                 {
-                    espPort = null;
+                    espDetection = null;
                     espError = ex.Message;
                 }
             }
@@ -222,12 +231,12 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
                 // too often, so only explicit ESP probes update/clear this state.
                 if (includeEspSerialProbe)
                 {
-                    EspBootloaderPort = espPort;
+                    EspBootloaderPort = espDetection?.Port;
                     EspDetectionError = espError;
-                    EspBootloaderConnected = !string.IsNullOrWhiteSpace(espPort);
-                    if (!string.IsNullOrWhiteSpace(espPort))
+                    EspBootloaderConnected = !string.IsNullOrWhiteSpace(espDetection?.Port);
+                    if (!string.IsNullOrWhiteSpace(espDetection?.Port))
                     {
-                        PresentedBoardType = "esp32s3";
+                        PresentedBoardType = espDetection?.BoardType ?? PresentedBoardType ?? "esp32";
                     }
                 }
             });
@@ -416,16 +425,19 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
         {
             ProgressMessage = "Preparing ESP serial update...";
             CompletionMessage = "ESP firmware update complete. Reconnect the device in Run Mode.";
-            AppendLog("ESP32-S3 update selected");
+            AppendLog("ESP32 update selected");
             AppendLog("ESP flashing uses the serial helper, not DFU.");
             if (device.IsConnected)
             {
                 AppendLog("Run Mode remains separate from flashing; using serial port discovery.");
             }
 
+            var boardType = EffectiveBoardType(device);
+            AppendLog($"ESP board type: {boardType}");
+
             var port = await ResolveEspFlashPortAsync();
             AppendLog($"ESP flash port: {port}");
-            await RunEspFlashAsync(port);
+            await RunEspFlashAsync(port, boardType);
         }
         catch (Exception ex)
         {
@@ -436,6 +448,11 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
 
     private async Task<string?> DetectEspBootloaderPortAsync()
     {
+        return (await DetectEspBootloaderAsync())?.Port;
+    }
+
+    private async Task<EspBootloaderDetection?> DetectEspBootloaderAsync()
+    {
         var candidates = await EspFlashPortCandidatesAsync();
 
         // On Windows the ESP32-S3 native USB bootloader is exposed by pyserial as
@@ -444,19 +461,28 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
         var espUsbPorts = candidates.Where(c => c.IsEspressifUsb).ToList();
         if (espUsbPorts.Count == 1)
         {
-            return espUsbPorts[0].Port;
+            return new EspBootloaderDetection(espUsbPorts[0].Port, "esp32s3");
         }
 
         foreach (var candidate in candidates)
         {
             var port = candidate.Port;
-            var (code, _, _) = await RunEspHelperAndWaitAsync("chip-id", "--port", port, "--baud", "115200", "--no-stub");
+            var (code, stdout, stderr) = await RunEspHelperAndWaitAsync("chip-id", "--port", port, "--baud", "115200", "--no-stub");
             if (code == 0)
             {
-                return port;
+                return new EspBootloaderDetection(port, BoardTypeFromEspHelperOutput(stdout + "\n" + stderr));
             }
         }
 
+        return null;
+    }
+
+    private static string? BoardTypeFromEspHelperOutput(string output)
+    {
+        var text = output.ToLowerInvariant();
+        if (text.Contains("esp32-s3") || text.Contains("esp32s3")) return "esp32s3";
+        if (text.Contains("esp32-s2") || text.Contains("esp32s2")) return "esp32s2";
+        if (text.Contains("esp32")) return "esp32";
         return null;
     }
 
@@ -517,11 +543,12 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
         throw new InvalidOperationException("Could not choose a unique ESP serial port. Connect only the ESP flash port, then retry.");
     }
 
-    private async Task RunEspFlashAsync(string port)
+    private async Task RunEspFlashAsync(string port, string boardType)
     {
         if (IsFlashing) return;
 
-        var assets = EspFirmwarePaths();
+        var assets = EspFirmwarePaths(boardType);
+        AppendLog($"ESP chip: {assets.Chip}");
         AppendLog($"ESP bootloader: {Path.GetFileName(assets.Bootloader)}");
         AppendLog($"ESP partition table: {Path.GetFileName(assets.PartitionTable)}");
         AppendLog($"ESP OTA data: {Path.GetFileName(assets.OtaData)}");
@@ -552,15 +579,20 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
                 CreateNoWindow = true,
             };
             psi.ArgumentList.Add("flash");
+            psi.ArgumentList.Add("--chip");
+            psi.ArgumentList.Add(assets.Chip);
             psi.ArgumentList.Add("--port");
             psi.ArgumentList.Add(port);
             psi.ArgumentList.Add("--baud");
-            psi.ArgumentList.Add("115200");
+            psi.ArgumentList.Add("460800");
             psi.ArgumentList.Add("--before");
-            psi.ArgumentList.Add("no_reset");
+            psi.ArgumentList.Add("default_reset");
             psi.ArgumentList.Add("--after");
             psi.ArgumentList.Add("hard_reset");
-            psi.ArgumentList.Add("--no-stub");
+            psi.ArgumentList.Add("--bootloader-offset");
+            psi.ArgumentList.Add(assets.BootloaderOffset);
+            psi.ArgumentList.Add("--flash-freq");
+            psi.ArgumentList.Add(assets.FlashFrequency);
             psi.ArgumentList.Add("--bootloader");
             psi.ArgumentList.Add(assets.Bootloader);
             psi.ArgumentList.Add("--partition-table");
@@ -763,8 +795,18 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
         throw new FileNotFoundException("Missing bundled ESP helper (emwaver-esp-helper/emwaver-esp-helper.exe).");
     }
 
-    private (string Bootloader, string PartitionTable, string OtaData, string App) EspFirmwarePaths()
+    private EspFirmwareAssets EspFirmwarePaths(string boardType)
     {
+        var normalized = NormalizedEspBoardType(boardType);
+        if (normalized == "esp32s2")
+        {
+            throw new FileNotFoundException("Bundled ESP32-S2 firmware is not available yet.");
+        }
+        if (normalized == null)
+        {
+            throw new FileNotFoundException("Unknown ESP board type for firmware flashing.");
+        }
+
         string Require(string name)
         {
             var path = Path.Combine(AppContext.BaseDirectory, $"{name}.bin");
@@ -778,6 +820,10 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
             {
                 var repoPath = Path.Combine(repo, "firmware", name switch
                 {
+                    "emwaver-esp32-app" => "emwaver-esp32-app.bin",
+                    "emwaver-esp32-bootloader" => "emwaver-esp32-bootloader.bin",
+                    "emwaver-esp32-partition-table" => "emwaver-esp32-partition-table.bin",
+                    "emwaver-esp32-ota-data" => "emwaver-esp32-ota-data.bin",
                     "emwaver-esp32s3-app" => "emwaver-esp32s3-app.bin",
                     "emwaver-esp32s3-bootloader" => "emwaver-esp32s3-bootloader.bin",
                     "emwaver-esp32s3-partition-table" => "emwaver-esp32s3-partition-table.bin",
@@ -793,7 +839,22 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
             throw new FileNotFoundException($"Missing bundled ESP firmware asset ({name}.bin).");
         }
 
-        return (
+        if (normalized == "esp32")
+        {
+            return new EspFirmwareAssets(
+                "esp32",
+                "0x1000",
+                "40m",
+                Require("emwaver-esp32-bootloader"),
+                Require("emwaver-esp32-partition-table"),
+                Require("emwaver-esp32-ota-data"),
+                Require("emwaver-esp32-app"));
+        }
+
+        return new EspFirmwareAssets(
+            "esp32s3",
+            "0x0",
+            "80m",
             Require("emwaver-esp32s3-bootloader"),
             Require("emwaver-esp32s3-partition-table"),
             Require("emwaver-esp32s3-ota-data"),
@@ -833,14 +894,26 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
 
     private string EffectiveBoardType(WindowsDeviceManager device)
     {
-        if (IsEspBoardType(PresentedBoardType)) return "esp32s3";
-        if (EspBootloaderConnected || !string.IsNullOrWhiteSpace(EspBootloaderPort)) return "esp32s3";
+        var presented = NormalizedEspBoardType(PresentedBoardType);
+        if (presented != null) return presented;
+        if (EspBootloaderConnected || !string.IsNullOrWhiteSpace(EspBootloaderPort)) return "esp32";
         return device.ConnectedBoardType ?? device.LastDetectedBoardType ?? "stm32f042";
     }
 
     private static bool IsEspBoardType(string? boardType)
     {
-        return string.Equals(boardType, "esp32s3", StringComparison.OrdinalIgnoreCase);
+        return NormalizedEspBoardType(boardType) != null;
+    }
+
+    internal static string? NormalizedEspBoardType(string? boardType)
+    {
+        return (boardType ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "esp32" => "esp32",
+            "esp32s2" or "esp32-s2" => "esp32s2",
+            "esp32s3" or "esp32-s3" => "esp32s3",
+            _ => null,
+        };
     }
 
     private static string Normalize(string? value)

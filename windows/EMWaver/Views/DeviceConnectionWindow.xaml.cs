@@ -307,7 +307,7 @@ public partial class DeviceConnectionWindow : Window
         if (string.IsNullOrWhiteSpace(boardType) &&
             (_updater.EspBootloaderConnected || !string.IsNullOrWhiteSpace(_updater.EspBootloaderPort) || !_device.IsConnected))
         {
-            boardType = "esp32s3";
+            boardType = "esp32";
         }
         var fwWindow = new FirmwareUpdateWindow(_device, _updater, boardType)
         {

@@ -32,6 +32,7 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
     {
         internal const byte Version = 0x01;
         internal const byte EnterDfu = 0x06;
+        internal const byte Board = 0x09;
         internal const byte TransportSession = 0x0B;
     }
 
@@ -493,7 +494,8 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
             {
                 try
                 {
-                    var boardType = connection.InferBoardType();
+                    var reportedBoardType = await QueryBoardTypeAsync(timeoutMs: 1500);
+                    var boardType = reportedBoardType ?? connection.InferBoardType();
                     RunOnUi(() =>
                     {
                         ConnectedBoardType = boardType;
@@ -600,6 +602,27 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
 
         return $"{resp[1]}.{resp[2]}";
+    }
+
+    private async Task<string?> QueryBoardTypeAsync(int timeoutMs)
+    {
+        var resp = await SendCommandAsync(
+            commandLane: new byte[] { EmwOpcode.Board },
+            timeoutMs: timeoutMs,
+            responsePredicate: lane18 => lane18.Length > 0 && (lane18[0] == 0x80 || lane18[0] == 0x81)
+        );
+
+        if (resp == null || resp.Length < 2 || resp[0] != 0x80)
+        {
+            return null;
+        }
+
+        var end = 1;
+        while (end < resp.Length && resp[end] != 0) end++;
+        if (end <= 1) return null;
+
+        var board = Encoding.UTF8.GetString(resp, 1, end - 1).Trim().ToLowerInvariant();
+        return NormalizeBoardType(board);
     }
 
     private async Task<byte[]?> SendCommandAsync(byte[] commandLane, int timeoutMs, Func<byte[], bool> responsePredicate)
@@ -858,7 +881,7 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
             WindowsBleTransport.SessionId(args.BluetoothAddress),
             args.BluetoothAddress,
             WindowsBleTransport.DisplayName(args),
-            WindowsBleTransport.BoardType(),
+            WindowsBleTransport.BoardType(WindowsBleTransport.DisplayName(args)),
             DateTime.Now);
 
         RunOnUi(() =>
@@ -914,7 +937,8 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
             }
 
             DeviceEmwaverVersion = version;
-            ConnectedBoardType = WindowsBleTransport.BoardType();
+            var reportedBoardType = await QueryBoardTypeAsync(timeoutMs: 2000);
+            ConnectedBoardType = reportedBoardType ?? WindowsBleTransport.BoardType(displayName);
             LastDetectedBoardType = ConnectedBoardType;
             ApplyTransportDebugPreference();
         }
@@ -1228,8 +1252,9 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
                 return;
             }
 
+            var reportedBoardType = await QueryBoardTypeAsync(timeoutMs: 1500);
             DeviceEmwaverVersion = version;
-            ConnectedBoardType = "esp32s3";
+            ConnectedBoardType = reportedBoardType ?? "esp32";
             LastDetectedBoardType = ConnectedBoardType;
             ApplyTransportDebugPreference();
         }
@@ -1438,6 +1463,19 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
     }
 
     private static Task<bool> IsDfuPresentAsync() => Dfu.IsPresentAsync();
+
+    private static string? NormalizeBoardType(string? boardType)
+    {
+        return (boardType ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "esp32" => "esp32",
+            "esp32-s2" or "esp32s2" => "esp32s2",
+            "esp32-s3" or "esp32s3" => "esp32s3",
+            "stm32f042" or "stm32" => "stm32f042",
+            "" => null,
+            var other => other,
+        };
+    }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

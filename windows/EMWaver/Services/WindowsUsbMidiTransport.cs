@@ -176,9 +176,17 @@ internal static class WindowsUsbMidiTransport
     internal static string InferBoardType(string? displayName)
     {
         var name = (displayName ?? string.Empty).ToLowerInvariant();
-        if (name.Contains("esp32") || name.Contains("esp 32") || name.Contains("s3") || name.Contains("emwaver esp"))
+        if (name.Contains("esp32-s2") || name.Contains("esp32s2"))
+        {
+            return "esp32s2";
+        }
+        if (name.Contains("esp32-s3") || name.Contains("esp32s3") || name.Contains("s3"))
         {
             return "esp32s3";
+        }
+        if (name.Contains("esp32") || name.Contains("esp 32") || name.Contains("emwaver esp"))
+        {
+            return "esp32";
         }
         return "stm32f042";
     }
