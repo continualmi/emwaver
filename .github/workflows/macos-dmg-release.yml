@@ -10,6 +10,11 @@ on:
   repository_dispatch:
     types:
       - macos-dmg-release
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/macos-dmg-release.yml"
 
 permissions:
   contents: write

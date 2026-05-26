@@ -85,6 +85,8 @@ gh api repos/continualmi/emwaver/dispatches \
   -F client_payload[tag]=1.0.2
 ```
 
+As a final fallback, edits pushed to `.github/workflows/macos-dmg-release.yml` on `main` trigger the macOS release workflow and use the root `VERSION` value as the release tag.
+
 ## Android APK signing
 
 The public direct APK workflow requires the same upload keystore secrets used by the Play workflow:
