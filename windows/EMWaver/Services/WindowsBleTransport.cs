@@ -16,6 +16,7 @@ internal static class WindowsBleTransport
     internal static readonly Guid NotifyUuid = Guid.Parse("47C7158E-0C3B-4E90-A847-452A15B14191");
 
     internal const int WriteChunkBytes = 20;
+    private const int SysexWriteBytes = 48;
 
     public sealed record DiscoveredDevice(
         string Id,
@@ -230,7 +231,12 @@ internal static class WindowsBleTransport
 
         if (notifyCharacteristic != null)
         {
-            await EnableNotificationsAsync(notifyCharacteristic);
+            var notifyStatus = await EnableNotificationsAsync(notifyCharacteristic);
+            if (notifyStatus != GattCommunicationStatus.Success)
+            {
+                connection.Dispose();
+                return (null, $"BLE notifications could not be enabled: {notifyStatus}");
+            }
         }
 
         return (connection, null);
@@ -266,13 +272,13 @@ internal static class WindowsBleTransport
         return notifyResult.Characteristics[0];
     }
 
-    internal static async Task EnableNotificationsAsync(GattCharacteristic? characteristic)
+    internal static async Task<GattCommunicationStatus> EnableNotificationsAsync(GattCharacteristic? characteristic)
     {
         if (characteristic == null)
         {
-            return;
+            return GattCommunicationStatus.Unreachable;
         }
-        await characteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
+        return await characteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
             GattClientCharacteristicConfigurationDescriptorValue.Notify);
     }
 
@@ -289,19 +295,64 @@ internal static class WindowsBleTransport
 
         Debug.WriteLine($"[EMWaver][BLE][TX] superframe36={superframe36.Length} sysex={sysex.Length} cmd0=0x{superframe36[0]:X2}");
 
-        // ESP32 firmware expects one complete 48-byte SysEx superframe per GATT write.
-        // Splitting into 20-byte ATT chunks makes the peripheral see partial writes and
-        // reject/drop the command before it reaches the command queue.
+        // Match the Apple clients: prefer write-without-response when the firmware
+        // advertises it, otherwise use write-with-response. Some classic ESP32 +
+        // Windows adapter pairs do not negotiate an MTU large enough for one 48-byte
+        // write, so fall back to ordered ATT-sized chunks; current firmware reassembles
+        // chunked SysEx before enqueueing the command.
+        var writeOption = characteristic.CharacteristicProperties.HasFlag(GattCharacteristicProperties.WriteWithoutResponse)
+            ? GattWriteOption.WriteWithoutResponse
+            : GattWriteOption.WriteWithResponse;
         var status = characteristic
-            .WriteValueAsync(bufferFromBytes(sysex), GattWriteOption.WriteWithResponse)
+            .WriteValueAsync(bufferFromBytes(sysex), writeOption)
             .AsTask()
             .GetAwaiter()
             .GetResult();
-        if (status != GattCommunicationStatus.Success)
+        if (status == GattCommunicationStatus.Success)
         {
-            return $"BLE write failed: {status}";
+            return null;
         }
 
-        return null;
+        if (sysex.Length == SysexWriteBytes)
+        {
+            var chunkStatus = SendChunkedSysex(characteristic, sysex, bufferFromBytes, writeOption);
+            if (chunkStatus == GattCommunicationStatus.Success)
+            {
+                return null;
+            }
+
+            return $"BLE write failed: {status}; chunked retry failed: {chunkStatus}";
+        }
+
+        return $"BLE write failed: {status}";
+    }
+
+    private static GattCommunicationStatus SendChunkedSysex(
+        GattCharacteristic characteristic,
+        byte[] sysex,
+        Func<byte[], IBuffer> bufferFromBytes,
+        GattWriteOption writeOption)
+    {
+        var offset = 0;
+        while (offset < sysex.Length)
+        {
+            var take = Math.Min(WriteChunkBytes, sysex.Length - offset);
+            var chunk = new byte[take];
+            Array.Copy(sysex, offset, chunk, 0, take);
+
+            var status = characteristic
+                .WriteValueAsync(bufferFromBytes(chunk), writeOption)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+            if (status != GattCommunicationStatus.Success)
+            {
+                return status;
+            }
+
+            offset += take;
+        }
+
+        return GattCommunicationStatus.Success;
     }
 }

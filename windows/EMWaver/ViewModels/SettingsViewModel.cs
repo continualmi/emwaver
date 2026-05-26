@@ -40,19 +40,6 @@ public class SettingsViewModel : INotifyPropertyChanged
         }
     }
 
-    public bool TransportDebugLoggingEnabled
-    {
-        get => _settings.TransportDebugLoggingEnabled;
-        set
-        {
-            if (_settings.TransportDebugLoggingEnabled != value)
-            {
-                _settings.TransportDebugLoggingEnabled = value;
-                OnPropertyChanged();
-            }
-        }
-    }
-
     public string MgptApiUrl => "https://mdl.continualmi.com/mgpt-api";
 
     public ICommand DoneCommand => new RelayCommand(_ => DoneRequested?.Invoke());

@@ -285,9 +285,9 @@ public partial class FirmwareUpdateWindow : Window
             }
             if (lower.Contains("port") || lower.Contains("serial") || lower.Contains("boot"))
             {
-                return text + "\n\nRecovery: hold BOOT, press/release RESET, release BOOT, click Refresh, then Flash firmware again.";
+                return text + "\n\nRecovery: hold BOOT, press/release RESET, click Refresh, then Flash firmware again. Keep BOOT held until flashing starts.";
             }
-            return text + "\n\nIf flashing does not start, put the board back into bootloader mode and click Refresh.";
+            return text + "\n\nIf flashing does not start, put the board back into bootloader mode and click Refresh. Keep BOOT held until flashing starts.";
         }
 
         if (lower.Contains("dfu") || lower.Contains("update mode"))

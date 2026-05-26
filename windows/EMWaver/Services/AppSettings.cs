@@ -113,22 +113,11 @@ public sealed class AppSettings
 
     public bool TransportDebugLoggingEnabled
     {
-        get
-        {
-            lock (_lock)
-            {
-                return Load().TransportDebugLoggingEnabled;
-            }
-        }
+        get => true;
         set
         {
-            lock (_lock)
-            {
-                var m = Load();
-                m.TransportDebugLoggingEnabled = value;
-                Save(m);
-            }
-            Changed?.Invoke();
+            // ESP firmware packet diagnostics are always enabled for developer
+            // console traces; the user-facing setting was removed from Settings.
         }
     }
 

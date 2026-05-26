@@ -71,6 +71,8 @@ static uint8_t ble_rxBuffer[BLE_RX_BUFFER_SIZE];
 static volatile uint16_t ble_rxBufferHeadPos = 0;
 static volatile uint16_t ble_rxBufferTailPos = 0;
 static uint8_t ble_transmitter_mode = 0;
+static uint8_t ble_sysex_fragment_buffer[EMW_BLE_SYSEX_BYTES];
+static uint16_t ble_sysex_fragment_len = 0;
 
 static bool ble_matches_ascii_command_prefix(const uint8_t *data, uint16_t len, const char *prefix)
 {
@@ -179,6 +181,52 @@ static bool ble_enqueue_superframe(const uint8_t *sysex)
     return xQueueSendToBack(cmd_queue_handle, &cmd, 0) == pdTRUE;
 }
 
+static bool ble_ingest_sysex_fragment(const uint8_t *data, uint16_t len, bool *handled)
+{
+    if (handled) {
+        *handled = false;
+    }
+    if (!data || len == 0 || cmd_queue_handle == NULL) {
+        return false;
+    }
+
+    bool saw_sysex_byte = false;
+    bool queued = false;
+
+    for (uint16_t i = 0; i < len; ++i) {
+        uint8_t value = data[i];
+
+        if (value == 0xF0) {
+            ble_sysex_fragment_len = 0;
+            saw_sysex_byte = true;
+        }
+
+        if (ble_sysex_fragment_len == 0 && value != 0xF0) {
+            continue;
+        }
+
+        saw_sysex_byte = true;
+        if (ble_sysex_fragment_len >= EMW_BLE_SYSEX_BYTES) {
+            ble_sysex_fragment_len = 0;
+            continue;
+        }
+
+        ble_sysex_fragment_buffer[ble_sysex_fragment_len++] = value;
+
+        if (value == 0xF7) {
+            if (ble_sysex_fragment_len == EMW_BLE_SYSEX_BYTES) {
+                queued = ble_enqueue_superframe(ble_sysex_fragment_buffer) || queued;
+            }
+            ble_sysex_fragment_len = 0;
+        }
+    }
+
+    if (handled) {
+        *handled = saw_sysex_byte;
+    }
+    return queued;
+}
+
 // Include this declaration after the existing declarations, before ble_gap_event
 static const struct ble_gap_upd_params CI_15_MS = {
     .itvl_min = 12,          // 12 × 1.25 ms = 15 ms
@@ -284,8 +332,10 @@ static int gatt_svr_chr_access(uint16_t conn_handle, uint16_t attr_handle,
                         return BLE_ATT_ERR_UNLIKELY;
                     }
 
-                    if (len == EMW_BLE_SYSEX_BYTES && data[0] == 0xF0) {
-                        return ble_enqueue_superframe(data) ? 0 : BLE_ATT_ERR_UNLIKELY;
+                    bool sysex_handled = false;
+                    (void)ble_ingest_sysex_fragment(data, len, &sysex_handled);
+                    if (sysex_handled) {
+                        return 0;
                     }
                     
                     // If in transmitter mode, add data to circular buffer instead of command queue
@@ -481,6 +531,7 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg)
         if (event->connect.status == 0) {
             ESP_LOGI(TAG, "Connection established");
             notify_conn_handle = event->connect.conn_handle;
+            ble_sysex_fragment_len = 0;
             
             // Request connection parameter update for 15ms interval
             int rc = ble_gap_update_params(event->connect.conn_handle, &CI_15_MS);
@@ -500,6 +551,7 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg)
         ESP_LOGI(TAG, "Disconnected");
         // Reset connection handle
         notify_conn_handle = BLE_HS_CONN_HANDLE_NONE;
+        ble_sysex_fragment_len = 0;
 #if EMWAVER_ENABLE_OTA
         ota_ble_gatt_on_disconnect();
 #endif

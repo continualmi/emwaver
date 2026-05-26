@@ -14,6 +14,7 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
 {
     private sealed record EspSerialPortCandidate(string Port, bool IsEspressifUsb, bool IsUsbSerial);
     private sealed record EspBootloaderDetection(string Port, string? BoardType);
+    private sealed record EspFlashTarget(string Port, bool AlreadyInBootloader);
     private sealed record EspFirmwareAssets(
         string Chip,
         string BootloaderOffset,
@@ -188,6 +189,18 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
         CompletionMessage = "Update complete. Reconnect the device to use it.";
         _logLines.Clear();
         OnPropertyChanged(nameof(LogText));
+    }
+
+    internal void ClearEspBootloaderPresence()
+    {
+        if (!EspBootloaderConnected && string.IsNullOrWhiteSpace(EspBootloaderPort) && string.IsNullOrWhiteSpace(EspDetectionError))
+        {
+            return;
+        }
+
+        EspBootloaderPort = null;
+        EspDetectionError = null;
+        EspBootloaderConnected = false;
     }
 
     internal async Task RefreshDfuPresenceAsync(bool includeEspSerialProbe = false)
@@ -435,9 +448,9 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
             var boardType = EffectiveBoardType(device);
             AppendLog($"ESP board type: {boardType}");
 
-            var port = await ResolveEspFlashPortAsync();
-            AppendLog($"ESP flash port: {port}");
-            await RunEspFlashAsync(port, boardType);
+            var target = await ResolveEspFlashTargetAsync();
+            AppendLog($"ESP flash port: {target.Port}" + (target.AlreadyInBootloader ? " (bootloader already detected; skipping reset before flash)" : ""));
+            await RunEspFlashAsync(target.Port, boardType, target.AlreadyInBootloader);
         }
         catch (Exception ex)
         {
@@ -511,30 +524,35 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
             .ToList();
     }
 
-    private async Task<string> ResolveEspFlashPortAsync()
+    private async Task<EspFlashTarget> ResolveEspFlashTargetAsync()
     {
+        if (!string.IsNullOrWhiteSpace(EspBootloaderPort))
+        {
+            return new EspFlashTarget(EspBootloaderPort!, AlreadyInBootloader: true);
+        }
+
         var detected = await DetectEspBootloaderPortAsync();
         if (!string.IsNullOrWhiteSpace(detected))
         {
-            return detected!;
+            return new EspFlashTarget(detected!, AlreadyInBootloader: true);
         }
 
         var candidates = await EspFlashPortCandidatesAsync();
         if (candidates.Count == 1)
         {
-            return candidates[0].Port;
+            return new EspFlashTarget(candidates[0].Port, AlreadyInBootloader: false);
         }
 
         var espUsbPorts = candidates.Where(c => c.IsEspressifUsb).ToList();
         if (espUsbPorts.Count == 1)
         {
-            return espUsbPorts[0].Port;
+            return new EspFlashTarget(espUsbPorts[0].Port, AlreadyInBootloader: false);
         }
 
         throw new InvalidOperationException("Could not choose a unique ESP serial port. Connect only the ESP flash port, then retry.");
     }
 
-    private async Task RunEspFlashAsync(string port, string boardType)
+    private async Task RunEspFlashAsync(string port, string boardType, bool alreadyInBootloader)
     {
         if (IsFlashing) return;
 
@@ -577,9 +595,9 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
             psi.ArgumentList.Add("--baud");
             psi.ArgumentList.Add("460800");
             psi.ArgumentList.Add("--before");
-            psi.ArgumentList.Add("default_reset");
+            psi.ArgumentList.Add(alreadyInBootloader ? "no-reset" : "default-reset");
             psi.ArgumentList.Add("--after");
-            psi.ArgumentList.Add("hard_reset");
+            psi.ArgumentList.Add("hard-reset");
             psi.ArgumentList.Add("--bootloader-offset");
             psi.ArgumentList.Add(assets.BootloaderOffset);
             psi.ArgumentList.Add("--flash-freq");
@@ -626,6 +644,16 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
 
             if (process.ExitCode != 0)
             {
+                var helperOutput = string.Join("\n", _espHelperRawLines);
+                if (helperOutput.Contains("Connecting", StringComparison.OrdinalIgnoreCase) ||
+                    helperOutput.Contains("Failed to connect", StringComparison.OrdinalIgnoreCase) ||
+                    helperOutput.Contains("Wrong boot mode", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"ESP bootloader did not answer on {port}. Hold BOOT, tap RESET, keep BOOT held until flashing starts, then retry. " +
+                        "If Refresh already detected the bootloader, Windows will now flash without toggling reset first.");
+                }
+
                 throw new InvalidOperationException("ESP flashing helper failed. See activity log for details.");
             }
 

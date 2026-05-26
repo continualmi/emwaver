@@ -48,7 +48,7 @@ def cmd_list_ports(_: argparse.Namespace) -> int:
 
 
 def cmd_chip_id(args: argparse.Namespace) -> int:
-    argv = ["--chip", args.chip, "--port", args.port, "--before", "no_reset", "--after", "no_reset"]
+    argv = ["--chip", args.chip, "--port", args.port, "--before", "no-reset", "--after", "no-reset"]
     if args.baud:
         argv.extend(["--baud", str(args.baud)])
     if args.no_stub:
@@ -126,6 +126,10 @@ def _require_file(path: str, label: str) -> str:
     return str(candidate)
 
 
+def _esptool_reset_choice(value: str) -> str:
+    return value.strip().lower().replace("_", "-")
+
+
 def cmd_flash(args: argparse.Namespace) -> int:
     bootloader = _require_file(args.bootloader, "bootloader")
     partition_table = _require_file(args.partition_table, "partition-table")
@@ -136,16 +140,16 @@ def cmd_flash(args: argparse.Namespace) -> int:
         "--chip", args.chip,
         "--port", args.port,
         "--baud", str(args.baud),
-        "--before", args.before,
-        "--after", args.after,
+        "--before", _esptool_reset_choice(args.before),
+        "--after", _esptool_reset_choice(args.after),
     ]
     if args.no_stub:
         argv.append("--no-stub")
     argv.extend([
-        "write_flash",
-        "--flash_mode", "dio",
-        "--flash_freq", args.flash_freq,
-        "--flash_size", "4MB",
+        "write-flash",
+        "--flash-mode", "dio",
+        "--flash-freq", args.flash_freq,
+        "--flash-size", "4MB",
         args.bootloader_offset, bootloader,
         "0x20000", app,
         "0x8000", partition_table,
@@ -183,8 +187,8 @@ def build_parser() -> argparse.ArgumentParser:
     flash.add_argument("--bootloader-offset", default="0x0")
     flash.add_argument("--flash-freq", default="80m")
     flash.add_argument("--baud", type=int, default=460800)
-    flash.add_argument("--before", default="default_reset")
-    flash.add_argument("--after", default="hard_reset")
+    flash.add_argument("--before", default="default-reset")
+    flash.add_argument("--after", default="hard-reset")
     flash.add_argument("--no-stub", action="store_true")
     flash.set_defaults(func=cmd_flash)
 

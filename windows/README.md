@@ -64,7 +64,7 @@ Auxiliary:
 
 Windows app communicates with EMWaver hardware over USB MIDI and ESP32 BLE, and hosts device operations from the desktop runtime.
 
-Transport logic lives under `Services/UsbMidiSysex.cs` and related device manager services. USB MIDI remains preferred when a wired device is available. When no wired MIDI port is found and auto-connect is enabled, Windows scans for the EMWaver BLE service and connects to ESP32 boards automatically. BLE carries the same SysEx/superframe envelope as USB MIDI so command opcodes and script behavior remain shared across transports.
+Transport logic lives under `Services/UsbMidiSysex.cs` and related device manager services. USB MIDI remains preferred when a wired device is available. When no wired MIDI port is found and auto-connect is enabled, Windows scans for the EMWaver BLE service and connects to ESP32 boards automatically. BLE carries the same SysEx/superframe envelope as USB MIDI so command opcodes and script behavior remain shared across transports. Classic ESP32 boards do not expose the USB MIDI runtime; on Windows they connect through BLE or a provisioned Wi-Fi endpoint after flashing the ESP32 target firmware. The Windows BLE writer mirrors the Apple clients by preferring GATT write-without-response when available, with chunked fallback for adapters that reject a full 48-byte SysEx write. The connection window intentionally avoids periodic ESP serial bootloader probes because opening the COM port can reset classic ESP32 boards and disrupt BLE; serial probing is limited to the firmware update flow.
 
 Windows also supports a manual ESP32 Wi-Fi runtime connection through the firmware WebSocket endpoint at `ws://<host>:3922/v1/ws`. The device menu and Device page expose `Connect Wi-Fi` for trusted LAN/VPN endpoints, and the Device page exposes Wi-Fi setup actions for sending, clearing, and checking ESP32 SSID/password provisioning over the active local transport. Wi-Fi uses the same 36-byte superframe payload path as USB MIDI and BLE; mDNS discovery remains planned separately.
 
@@ -78,7 +78,7 @@ The EMWaver protocol is a **single serial bus** — one stream of commands, resp
 
 **macOS:** Implemented in `MacUSBManager` (`transportSessionHeartbeatIntervalSeconds = 2.0`, `connectionPollIntervalSeconds = 5.0`). The heartbeat timer is created when a transport session is claimed and cancelled on disconnect.
 
-**Windows:** ✅ Implemented in `WindowsDeviceManager` (`_transportHeartbeatTimer`, 2000 ms interval). The heartbeat checks the response byte and disconnects after 2 consecutive misses. A 5-second connection poll timer (`_connectionPollTimer`) reconciles USB MIDI port presence and BLE device state. Started via `BeginConnectionMonitoring()` from `MainWindow` constructor.
+**Windows:** ✅ Implemented in `WindowsDeviceManager` (`_transportHeartbeatTimer`, 2000 ms interval). Windows now matches macOS by deferring ESP32 transport-session claims until the first script/provisioning operation instead of claiming during BLE/Wi-Fi connection setup. The heartbeat starts after that claim, checks the response byte, and disconnects after 2 consecutive misses. A 5-second connection poll timer (`_connectionPollTimer`) reconciles USB MIDI port presence and BLE device state. Started via `BeginConnectionMonitoring()` from `MainWindow` constructor.
 
 ## 3.2 Scripting UX
 

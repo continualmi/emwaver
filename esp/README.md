@@ -180,7 +180,9 @@ Planned EMWaver direction for ESP32:
 Classic ESP32 support is Wi-Fi + BLE only. It does not have native USB OTG, so
 the firmware builds the USB runtime stubs and excludes TinyUSB dependencies for
 this target. The target defaults enable NimBLE and move throughput-oriented
-Wi-Fi/PHY paths out of IRAM so the combined Wi-Fi + BLE firmware fits.
+Wi-Fi/PHY paths out of IRAM so the combined Wi-Fi + BLE firmware fits. BLE accepts
+both one-shot 48-byte SysEx superframe writes and ATT-sized chunked SysEx writes
+for Windows adapters that do not negotiate a large enough GATT write MTU.
 
 Expected target capabilities:
 - ESP32: `board=esp32`, `cap=wifi,ble`

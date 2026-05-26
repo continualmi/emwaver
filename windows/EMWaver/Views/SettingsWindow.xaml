@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:converters="clr-namespace:EMWaver.Converters"
     Title="Settings"
-    Width="560" Height="560"
+    Width="560" Height="455"
     WindowStartupLocation="CenterOwner"
     WindowStyle="ToolWindow"
     ResizeMode="NoResize">
@@ -34,25 +34,14 @@
                 </StackPanel>
             </GroupBox>
 
-            <!-- Device access section -->
-            <GroupBox Header="Device access" Padding="12" Margin="0,0,0,12">
+            <!-- Script diagnostics section -->
+            <GroupBox Header="Script diagnostics" Padding="12" Margin="0,0,0,12">
                 <StackPanel>
-                    <TextBlock Text="Local scripts and hardware control work immediately."
+                    <TextBlock Text="Control what local runtime details are shown while scripts run."
                                FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}"
                                TextWrapping="Wrap" Margin="0,0,0,8" />
                     <CheckBox Content="Show transport log in Scripts"
                               IsChecked="{Binding ShowTransportLog, Mode=TwoWay}" />
-                </StackPanel>
-            </GroupBox>
-
-            <!-- Device diagnostics section -->
-            <GroupBox Header="Device diagnostics" Padding="12" Margin="0,0,0,12">
-                <StackPanel>
-                    <CheckBox Content="Log transport packets on ESP serial"
-                              IsChecked="{Binding TransportDebugLoggingEnabled, Mode=TwoWay}" />
-                    <TextBlock Text="When enabled, ESP32 firmware logs BLE, USB, and Wi-Fi command packets on the serial monitor."
-                               FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}"
-                               TextWrapping="Wrap" Margin="0,8,0,0" />
                 </StackPanel>
             </GroupBox>
 

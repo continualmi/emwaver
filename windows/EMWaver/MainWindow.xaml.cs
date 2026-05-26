@@ -146,10 +146,21 @@ public partial class MainWindow : Window
     {
         var device = _device;
 
-        // ESP bootloader takes priority over a stale transport IsConnected.
-        // Without a heartbeat, BLE/Wi-Fi connections stay IsConnected after
-        // the device physically changes mode.
-        if (_firmwareUpdater.EspBootloaderConnected)
+        // A live Run Mode transport is authoritative. ESP serial bootloader
+        // detection is a point-in-time probe and can be stale after the user
+        // resets the board back into BLE/USB/Wi-Fi runtime.
+        if (device.IsConnected)
+        {
+            _firmwareUpdater.ClearEspBootloaderPresence();
+            DeviceStatusText.Text = BoardDisplayName(device.ConnectedBoardType ?? device.LastDetectedBoardType) ?? (device.ConnectedPort?.DisplayName ?? "Connected");
+            DeviceIconText.Text = device.ActiveTransport switch
+            {
+                DeviceTransport.Ble => "📡",
+                DeviceTransport.Wifi => "📶",
+                _ => "🔌",
+            };
+        }
+        else if (_firmwareUpdater.EspBootloaderConnected)
         {
             DeviceStatusText.Text = "ESP Bootloader";
             DeviceIconText.Text = "💾";
@@ -158,16 +169,6 @@ public partial class MainWindow : Window
         {
             DeviceStatusText.Text = "Update Mode";
             DeviceIconText.Text = "🔄";
-        }
-        else if (device.IsConnected)
-        {
-            DeviceStatusText.Text = BoardDisplayName(device.ConnectedBoardType ?? device.LastDetectedBoardType) ?? (device.ConnectedPort?.DisplayName ?? "Connected");
-            DeviceIconText.Text = device.ActiveTransport switch
-            {
-                DeviceTransport.Ble => "📡",
-                DeviceTransport.Wifi => "📶",
-                _ => "🔌",
-            };
         }
         else if (device.IsBleConnecting)
         {

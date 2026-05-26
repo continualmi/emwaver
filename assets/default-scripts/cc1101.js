@@ -29,13 +29,15 @@ function isNumericPinValue(value) {
 }
 
 function espPinLabel(pin, board) {
-  if (pin === 2) return "GPIO2 (GDO0 default)";
   if (board === "esp32") {
+    if (pin === 4) return "GPIO4 (GDO0 default)";
     if (pin === 18) return "GPIO18 (SPI SCK default)";
     if (pin === 19) return "GPIO19 (SPI MISO default)";
     if (pin === 21) return "GPIO21 (CC1101 CS default)";
     if (pin === 23) return "GPIO23 (SPI MOSI default)";
   } else {
+    if (pin === 1 && board === "esp32s3") return "GPIO1 (GDO0 default)";
+    if (pin === 2 && board !== "esp32s3") return "GPIO2 (GDO0 default)";
     if (pin === 10) return "GPIO10 (CC1101 CS default)";
     if (pin === 11) return "GPIO11 (SPI MOSI default)";
     if (pin === 12) return "GPIO12 (SPI SCK default)";
@@ -88,12 +90,17 @@ function defaultCc1101CsPinForBoard(type) {
 }
 
 function defaultGdo0PinForBoard(type) {
+  if (type === "esp32") return 4;
+  if (type === "esp32s3") return 1;
   return 2;
 }
 
 function spiSummaryForBoard(type) {
   if (type === "esp32") {
-    return "Board mode: ESP32. Default CC1101 wiring: CS=GPIO21, MOSI=GPIO23, MISO=GPIO19, SCK=GPIO18, GDO0=GPIO2. SPI bus auto-initializes on first transfer.";
+    return "Board mode: ESP32. Default CC1101 wiring: CS=GPIO21, MOSI=GPIO23, MISO=GPIO19, SCK=GPIO18, GDO0=GPIO4. SPI bus auto-initializes on first transfer.";
+  }
+  if (type === "esp32s3") {
+    return "Board mode: ESP32-S3. Default CC1101 wiring: CS=GPIO10, MOSI=GPIO11, MISO=GPIO13, SCK=GPIO12, GDO0=GPIO1. SPI bus auto-initializes on first transfer.";
   }
   return isEspBoard(type)
     ? "Board mode: ESP32. Default CC1101 wiring: CS=GPIO10, MOSI=GPIO11, MISO=GPIO13, SCK=GPIO12, GDO0=GPIO2. SPI bus auto-initializes on first transfer."

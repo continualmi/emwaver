@@ -31,10 +31,11 @@ public partial class DeviceConnectionWindow : Window
         _refreshTimer.Tick += async (_, __) =>
         {
             await _device.RefreshPortsAsync();
-            // Include ESP serial probe so the modal detects bootloader plug-ins
-            // while it is already open. list-ports with VID:PID filtering is stable
-            // and does not open the COM port, so this is safe for periodic polling.
-            await _updater.RefreshDfuPresenceAsync(includeEspSerialProbe: true);
+            // Keep the connection window passive for ESP serial ports. Bootloader
+            // probing opens the COM port and can reset classic ESP32 boards via
+            // DTR/RTS, which disrupts BLE runtime connection attempts. The firmware
+            // update window performs explicit ESP serial probing when flashing.
+            await _updater.RefreshDfuPresenceAsync(includeEspSerialProbe: false);
         };
 
         Closed += (_, __) =>
@@ -49,7 +50,7 @@ public partial class DeviceConnectionWindow : Window
         {
             RefreshDeviceList();
             RefreshFirmwareState();
-            await _updater.RefreshDfuPresenceAsync(includeEspSerialProbe: true);
+            await _updater.RefreshDfuPresenceAsync(includeEspSerialProbe: false);
             _refreshTimer.Start();
             _device.StartBleDiscovery();
             _device.StartWiFiDiscovery();

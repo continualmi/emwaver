@@ -280,6 +280,7 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
     }
     private System.Threading.Timer? _transportHeartbeatTimer;
+    private bool _transportSessionClaimed;
     private int _transportHeartbeatInFlight;
     private int _heartbeatMissedCount;
     private System.Threading.Timer? _connectionPollTimer;
@@ -326,6 +327,7 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
         var target = _activeConnectionState.SetTarget(deviceId, transport);
         var session = SetActiveBufferSession(target.DeviceId, resetSession: true);
         ActiveTransport = target.Transport;
+        _transportSessionClaimed = false;
         AppendActivityLog($"Active transport: {target.Transport} session={target.DeviceId}");
         return session;
     }
@@ -392,6 +394,7 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
     private void ClearActiveDeviceTarget()
     {
         _activeConnectionState.Clear();
+        _transportSessionClaimed = false;
         ActiveTransport = DeviceTransport.None;
     }
 
@@ -484,7 +487,6 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
             }
 
             ConnectedPort = port;
-            await ClaimTransportSessionAsync(DeviceTransport.UsbMidi);
 
             // Validate the device by querying its EMWaver version (same handshake as macOS).
             var version = await QueryDeviceVersionAsync(timeoutMs: 1500);
@@ -805,6 +807,10 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
         {
             return null;
         }
+        if (!await EnsureTransportSessionClaimedAsync())
+        {
+            return null;
+        }
 
         // Protocol rule: requests must fit within a single 18-byte command lane.
         if (payload.Length > LaneSizeBytes)
@@ -965,14 +971,6 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
             _bleConnection = opened.Connection;
             _activeConnectionState.SetConnection(_bleConnection);
 
-            var claimed = await ClaimTransportSessionAsync(DeviceTransport.Ble);
-            if (!claimed)
-            {
-                LastErrorText = "BLE device did not accept the EMWaver transport session";
-                Disconnect();
-                return;
-            }
-
             var version = await QueryDeviceVersionAsync(timeoutMs: 1500);
             if (version == null)
             {
@@ -1059,6 +1057,34 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
         };
     }
 
+    private bool RequiresTransportSession()
+    {
+        if (ActiveTransport == DeviceTransport.Ble || ActiveTransport == DeviceTransport.Wifi)
+        {
+            return true;
+        }
+        if (ActiveTransport == DeviceTransport.UsbMidi)
+        {
+            var board = ConnectedBoardType ?? LastDetectedBoardType ?? string.Empty;
+            return board.StartsWith("esp", StringComparison.OrdinalIgnoreCase);
+        }
+        return false;
+    }
+
+    private async Task<bool> EnsureTransportSessionClaimedAsync()
+    {
+        if (!RequiresTransportSession())
+        {
+            return true;
+        }
+        if (_transportSessionClaimed)
+        {
+            return true;
+        }
+
+        return await ClaimTransportSessionAsync(ActiveTransport);
+    }
+
     private async Task<bool> ClaimTransportSessionAsync(DeviceTransport transport)
     {
         var source = TransportSourceFor(transport);
@@ -1066,7 +1092,7 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
 
         var response = await SendCommandAsync(
             new byte[] { EmwOpcode.TransportSession, TransportSessionOpcode.Connect, source },
-            timeoutMs: 1000,
+            timeoutMs: 1500,
             ActiveBufferSession,
             lane => lane.Length > 0 && (lane[0] == 0x80 || lane[0] == 0x81 || lane[0] == 0x82));
 
@@ -1077,6 +1103,7 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
 
         if (ok)
         {
+            _transportSessionClaimed = true;
             StartTransportSessionHeartbeat(transport);
         }
         return ok;
@@ -1287,7 +1314,6 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
             _wifiConnection = connection;
             _activeConnectionState.SetConnection(connection);
             ConnectedPort = new DevicePort(connection.DisplayName, string.Empty, string.Empty);
-            await ClaimTransportSessionAsync(DeviceTransport.Wifi);
 
             var version = await QueryDeviceVersionAsync(timeoutMs: 1500);
             if (version == null)
@@ -1352,6 +1378,11 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
             FinishWiFiProvisioning("Connect a Wi-Fi-capable ESP32 board before provisioning Wi-Fi.", isError: true);
             return;
         }
+        if (!await EnsureTransportSessionClaimedAsync())
+        {
+            FinishWiFiProvisioning("The ESP32 board did not accept the local transport session.", isError: true);
+            return;
+        }
 
         foreach (var command in commands)
         {
@@ -1371,6 +1402,11 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
         if (!IsConnected)
         {
             FinishWiFiProvisioning("Connect a Wi-Fi-capable ESP32 board before clearing Wi-Fi setup.", isError: true);
+            return;
+        }
+        if (!await EnsureTransportSessionClaimedAsync())
+        {
+            FinishWiFiProvisioning("The ESP32 board did not accept the local transport session.", isError: true);
             return;
         }
 
@@ -1393,6 +1429,11 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
         if (!IsConnected)
         {
             FinishWiFiProvisioning("Connect a Wi-Fi-capable ESP32 board before checking Wi-Fi status.", isError: true);
+            return;
+        }
+        if (!await EnsureTransportSessionClaimedAsync())
+        {
+            FinishWiFiProvisioning("The ESP32 board did not accept the local transport session.", isError: true);
             return;
         }
 

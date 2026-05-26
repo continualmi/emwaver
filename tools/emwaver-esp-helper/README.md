@@ -9,8 +9,9 @@ Current contract:
 - `flash --chip esp32|esp32s2|esp32s3 --port ... --bootloader-offset ... --flash-freq ... --bootloader ... --partition-table ... --ota-data ... --app ... [--baud ...] [--before ...] [--after ...] [--no-stub]`
 
 The flash command defaults to the same fast path ESP-IDF uses for normal
-`idf.py flash`: 460800 baud, `default_reset`, hard reset after flashing, and
-the esptool RAM stub enabled. Use `--no-stub` only as a recovery fallback.
+`idf.py flash`: 460800 baud, `default-reset`, hard reset after flashing, and
+the esptool RAM stub enabled. Use `--before no-reset` when the board is already
+manually held in the ROM bootloader. Use `--no-stub` only as a recovery fallback.
 
 Build a standalone helper with:
 
