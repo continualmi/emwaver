@@ -912,6 +912,7 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
         var discovered = new WindowsBleTransport.DiscoveredDevice(
             WindowsBleTransport.SessionId(args.BluetoothAddress),
             args.BluetoothAddress,
+            args.BluetoothAddressType,
             WindowsBleTransport.DisplayName(args),
             WindowsBleTransport.BoardType(WindowsBleTransport.DisplayName(args)),
             DateTime.Now);
@@ -931,15 +932,15 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
 
         IsBleConnecting = true;
         StopBleScan();
-        _ = ConnectBleAsync(args.BluetoothAddress, discovered.DisplayName);
+        _ = ConnectBleAsync(args.BluetoothAddress, args.BluetoothAddressType, discovered.DisplayName);
     }
 
     internal Task ConnectBleAsync(WindowsBleTransport.DiscoveredDevice device)
     {
-        return ConnectBleAsync(device.BluetoothAddress, device.DisplayName);
+        return ConnectBleAsync(device.BluetoothAddress, device.AddressType, device.DisplayName);
     }
 
-    private async Task ConnectBleAsync(ulong bluetoothAddress, string displayName)
+    private async Task ConnectBleAsync(ulong bluetoothAddress, BluetoothAddressType addressType, string displayName)
     {
         try
         {
@@ -951,7 +952,8 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
             CloseBleDevice();
             var session = SetActiveDeviceTarget(WindowsBleTransport.SessionId(bluetoothAddress), DeviceTransport.Ble);
 
-            var opened = await WindowsBleTransport.OpenConnectionAsync(bluetoothAddress, displayName, OnBleValueChanged, session);
+            AppendActivityLog($"BLE open {displayName} address=0x{bluetoothAddress:X} type={addressType}");
+            var opened = await WindowsBleTransport.OpenConnectionAsync(bluetoothAddress, addressType, displayName, OnBleValueChanged, session);
             if (opened.Connection == null)
             {
                 LastErrorText = opened.Error;

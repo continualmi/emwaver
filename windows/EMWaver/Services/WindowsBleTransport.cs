@@ -20,6 +20,7 @@ internal static class WindowsBleTransport
     public sealed record DiscoveredDevice(
         string Id,
         ulong BluetoothAddress,
+        BluetoothAddressType AddressType,
         string DisplayName,
         string BoardType,
         DateTime LastSeen);
@@ -181,18 +182,23 @@ internal static class WindowsBleTransport
         return "esp32";
     }
 
-    internal static async Task<BluetoothLEDevice?> OpenDeviceAsync(ulong bluetoothAddress)
+    internal static async Task<BluetoothLEDevice?> OpenDeviceAsync(
+        ulong bluetoothAddress,
+        BluetoothAddressType? addressType = null)
     {
-        return await BluetoothLEDevice.FromBluetoothAddressAsync(bluetoothAddress);
+        return addressType.HasValue
+            ? await BluetoothLEDevice.FromBluetoothAddressAsync(bluetoothAddress, addressType.Value)
+            : await BluetoothLEDevice.FromBluetoothAddressAsync(bluetoothAddress);
     }
 
     internal static async Task<(Connection? Connection, string? Error)> OpenConnectionAsync(
         ulong bluetoothAddress,
+        BluetoothAddressType? addressType,
         string displayName,
         TypedEventHandler<GattCharacteristic, GattValueChangedEventArgs> notifyHandler,
         ITransportDeviceSession? session = null)
     {
-        var device = await OpenDeviceAsync(bluetoothAddress);
+        var device = await OpenDeviceAsync(bluetoothAddress, addressType);
         if (device == null)
         {
             return (null, "Failed to open BLE device");
@@ -202,7 +208,7 @@ internal static class WindowsBleTransport
         if (service == null)
         {
             device.Dispose();
-            return (null, "BLE EMWaver service not found");
+            return (null, $"BLE EMWaver service not found ({addressType?.ToString() ?? "unknown address type"})");
         }
 
         var commandCharacteristic = await FindCommandCharacteristicAsync(service);
