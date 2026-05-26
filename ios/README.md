@@ -126,24 +126,24 @@ Release commands from the repo root:
 ```sh
 scripts/ios-release.sh test
 scripts/ios-release.sh archive
-scripts/ios-release.sh beta
+scripts/ios-release.sh release_upload
 scripts/ios-release.sh release
 ```
 
 Lanes:
 - `test` runs the `EMWaver` scheme tests on the default simulator.
 - `archive` creates `build/ios/EMWaver.ipa` without uploading.
-- `beta` builds and uploads the IPA to TestFlight.
-- `app_store_upload` builds and uploads an App Store Connect binary candidate through TestFlight processing, but does not submit for App Review.
+- `release_upload` builds and uploads the IPA to App Store Connect/TestFlight processing.
+- `beta` and `app_store_upload` remain compatibility aliases for `release_upload`.
 - `release` uploads metadata and the latest local IPA when present, but does not submit for App Review.
 
 Apple review remains a manual App Store Connect checkpoint: select the processed build, confirm compliance/review answers, and click the review submission button.
 
 Fastlane metadata lives in `ios/fastlane/metadata/en-US/`. Screenshots can be added under `ios/fastlane/screenshots/en-US/` and will be uploaded by the `release` lane.
 
-## 6.1 GitHub Actions TestFlight release
+## 6.1 GitHub Actions iOS release upload
 
-`.github/workflows/ios-testflight-release.yml` can build a signed IPA on a GitHub macOS runner and upload it to TestFlight. Configure a protected GitHub Environment named `app-store` and store these environment secrets there:
+`.github/workflows/ios-release-upload.yml` (`iOS Release Upload`) can build a signed IPA on a GitHub macOS runner and upload it to App Store Connect. After Apple processes it, the same build appears in TestFlight and can be selected for App Store review. Configure a protected GitHub Environment named `app-store` and store these environment secrets there:
 
 ```text
 APP_STORE_CONNECT_API_KEY_ID
@@ -164,13 +164,9 @@ base64 -i distribution.p12 | pbcopy
 base64 -i EMWaver_AppStore.mobileprovision | pbcopy
 ```
 
-The workflow runs manually from GitHub Actions or when pushing tags matching `ios-v*` or `emwaver-ios-v*`. Keep the `app-store` environment protected with required reviewers so Apple signing secrets are only exposed after explicit approval.
+The workflow runs manually from GitHub Actions or when pushing tags matching `ios-v*` or `emwaver-ios-v*`. It validates that the IPA bundles the JavaScript `DefaultScripts/*.js` assets and contains no legacy `.emw` scripts before upload. Keep the `app-store` environment protected with required reviewers so Apple signing secrets are only exposed after explicit approval.
 
-## 6.2 GitHub Actions App Store upload
-
-`.github/workflows/ios-app-store-upload.yml` can build a signed production IPA and upload it to App Store Connect for TestFlight/build processing. It validates that the IPA bundles the JavaScript `DefaultScripts/*.js` assets and contains no legacy `.emw` scripts before upload. It uses the same `app-store` environment secrets as the TestFlight workflow, runs manually only, and does not submit the app for App Review.
-
-After the workflow completes and Apple finishes processing the build, finish the release in App Store Connect by selecting the processed build, confirming review details, and submitting for review manually. `ios/EMWaver/Info.plist` sets `ITSAppUsesNonExemptEncryption` to `false`, so standard Apple export-compliance encryption prompts should be pre-answered for new builds.
+After the workflow completes and Apple finishes processing the build, finish the release in App Store Connect by testing in TestFlight or selecting the processed build, confirming review details, and submitting for review manually. `ios/EMWaver/Info.plist` sets `ITSAppUsesNonExemptEncryption` to `false`, so standard Apple export-compliance encryption prompts should be pre-answered for new builds.
 
 ---
 

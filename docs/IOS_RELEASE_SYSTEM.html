@@ -5,674 +5,100 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>EMWaver — iOS Release System</title>
 <style>
-  :root {
-    --bg: #0d1117;
-    --surface: #161b22;
-    --border: #30363d;
-    --text: #e6edf3;
-    --muted: #8b949e;
-    --accent: #58a6ff;
-    --green: #3fb950;
-    --orange: #d2991d;
-    --red: #f85149;
-    --code-bg: #1c2128;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    line-height: 1.6;
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 40px 24px;
-  }
-  h1 { font-size: 2rem; margin-bottom: 8px; }
-  h2 { font-size: 1.4rem; margin-top: 40px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
-  h3 { font-size: 1.1rem; margin-top: 28px; margin-bottom: 10px; }
-  p, li { color: var(--muted); }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  .subtitle { color: var(--muted); font-size: 0.95rem; margin-bottom: 32px; }
-
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 24px;
-    margin: 20px 0;
-  }
-  .card h3 { margin-top: 0; border: none; padding: 0; }
-
-  code {
-    font-family: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, monospace;
-    font-size: 0.88em;
-    background: var(--code-bg);
-    padding: 2px 6px;
-    border-radius: 4px;
-    border: 1px solid var(--border);
-  }
-
-  pre {
-    background: var(--code-bg);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 16px;
-    overflow-x: auto;
-    font-size: 0.88em;
-    line-height: 1.5;
-    margin: 12px 0;
-  }
-  pre code { background: none; border: none; padding: 0; }
-
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    margin: 16px 0;
-    font-size: 0.92em;
-  }
-  th, td {
-    text-align: left;
-    padding: 10px 14px;
-    border-bottom: 1px solid var(--border);
-  }
-  th {
-    font-weight: 600;
-    color: var(--text);
-    background: var(--surface);
-    position: sticky;
-    top: 0;
-  }
-  td { color: var(--muted); }
-  td:first-child { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.88em; white-space: nowrap; }
-
-  .badge {
-    display: inline-block;
-    padding: 2px 10px;
-    border-radius: 12px;
-    font-size: 0.8em;
-    font-weight: 600;
-    margin-right: 6px;
-  }
-  .badge-green { background: rgba(63, 185, 80, 0.15); color: var(--green); }
-  .badge-orange { background: rgba(210, 153, 29, 0.15); color: var(--orange); }
-  .badge-blue { background: rgba(88, 166, 255, 0.15); color: var(--accent); }
-
-  .flow { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 16px 0; }
-  .flow-step {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 10px 16px;
-    font-size: 0.9em;
-    white-space: nowrap;
-  }
-  .flow-arrow { color: var(--muted); font-size: 1.2em; }
-
-  .note {
-    background: rgba(88, 166, 255, 0.08);
-    border-left: 3px solid var(--accent);
-    padding: 12px 16px;
-    margin: 16px 0;
-    border-radius: 0 6px 6px 0;
-    font-size: 0.92em;
-    color: var(--muted);
-  }
-
-  .warn {
-    background: rgba(210, 153, 29, 0.08);
-    border-left: 3px solid var(--orange);
-    padding: 12px 16px;
-    margin: 16px 0;
-    border-radius: 0 6px 6px 0;
-    font-size: 0.92em;
-    color: var(--muted);
-  }
-
-  .step-num {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px; height: 24px;
-    border-radius: 50%;
-    background: var(--accent);
-    color: #fff;
-    font-size: 0.8em;
-    font-weight: 700;
-    margin-right: 8px;
-    flex-shrink: 0;
-  }
-
-  details {
-    margin: 16px 0;
-  }
-  summary {
-    cursor: pointer;
-    color: var(--accent);
-    font-weight: 500;
-    padding: 4px 0;
-  }
-  summary:hover { text-decoration: underline; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; padding: 40px; line-height: 1.55; color: #172033; background: #f7f9fc; }
+  main { max-width: 980px; margin: 0 auto; }
+  h1, h2, h3 { color: #0f172a; }
+  code { background: #e8eef8; padding: 0.15rem 0.35rem; border-radius: 4px; }
+  pre { background: #0f172a; color: #e2e8f0; padding: 1rem; border-radius: 10px; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; background: white; border-radius: 10px; overflow: hidden; margin: 1rem 0; }
+  th, td { border: 1px solid #d8e0ef; padding: 0.75rem; text-align: left; vertical-align: top; }
+  th { background: #e8eef8; }
+  .card, .note, .warn { background: white; border: 1px solid #d8e0ef; border-radius: 12px; padding: 1rem 1.25rem; margin: 1rem 0; }
+  .note { border-left: 5px solid #2563eb; }
+  .warn { border-left: 5px solid #d97706; }
 </style>
 </head>
 <body>
-
+<main>
 <h1>EMWaver — iOS Release System</h1>
-<p class="subtitle">Reference for the two iOS distribution paths: TestFlight (internal/external testing) and App Store (production).</p>
+<p>The iOS release path is intentionally a single upload workflow. A signed App Store IPA uploaded to App Store Connect is processed by Apple, appears in TestFlight, and can later be selected for App Store review.</p>
 
-<!-- ═══════════════════════════════════════════════════════════════════ -->
-<h2>1. Overview</h2>
-
-<p>EMWaver iOS releases travel through <strong>two distinct paths</strong>, each served by its own GitHub Actions workflow. Unlike Android, there is no unsigned IPA distribution path — all iOS builds must be signed and go through Apple's official channels.</p>
-
-<div class="card">
+<h2>Workflow</h2>
 <table>
+  <tr><th>Workflow</th><th>Triggers</th><th>Fastlane lane</th><th>Destination</th></tr>
   <tr>
-    <th>Path</th>
-    <th>Workflow</th>
-    <th>Trigger tags</th>
-    <th>Artifact</th>
-    <th>Signing</th>
-    <th>Destination</th>
-  </tr>
-  <tr>
-    <td>TestFlight</td>
-    <td><code>ios-testflight-release.yml</code></td>
-    <td><code>ios-v*</code> / <code>emwaver-ios-v*</code></td>
-    <td>Signed IPA</td>
-    <td><span class="badge badge-green">Distribution cert</span></td>
-    <td>TestFlight (internal only, no external groups)</td>
-  </tr>
-  <tr>
-    <td>App Store Upload</td>
-    <td><code>ios-app-store-upload.yml</code></td>
-    <td>Workflow dispatch only</td>
-    <td>Signed IPA</td>
-    <td><span class="badge badge-green">Distribution cert</span></td>
-    <td>App Store Connect (draft, not submitted for review)</td>
+    <td><code>.github/workflows/ios-release-upload.yml</code><br><strong>iOS Release Upload</strong></td>
+    <td><code>workflow_dispatch</code>, plus tags matching <code>ios-v*</code> or <code>emwaver-ios-v*</code></td>
+    <td><code>fastlane ios release_upload</code></td>
+    <td>App Store Connect processing; then TestFlight and App Store build selection</td>
   </tr>
 </table>
-</div>
 
 <div class="note">
-  <strong>Key distinction:</strong> The TestFlight workflow supports both tag-based triggering and manual dispatch; it uploads to TestFlight only. The App Store workflow is <strong>dispatch-only</strong> (no tag trigger) and uploads a production candidate to App Store Connect as a draft — final submission for App Review must be confirmed manually in App Store Connect.
+  <strong>Why one workflow?</strong> App Store Connect does not need separate binaries for TestFlight and App Store review. Upload once, test the processed build in TestFlight, then promote/select that same build for App Store review manually in App Store Connect.
 </div>
 
 <div class="warn">
-  <strong>No unsigned IPA distribution.</strong> Unlike Android (which offers a signed direct APK download via GitHub Releases), iOS has no unsigned distribution path. All iOS builds are code-signed and must flow through Apple's App Store Connect infrastructure. External testers must be invited through TestFlight; there is no side-loading equivalent.
+  <strong>No unsigned IPA distribution.</strong> iOS builds must be signed and distributed through Apple channels. There is no public unsigned IPA equivalent to the Android APK download path.
 </div>
 
-<!-- ═══════════════════════════════════════════════════════════════════ -->
-<h2>2. Path 1 — TestFlight</h2>
+<h2>Manual dispatch inputs</h2>
+<ul>
+  <li><code>build_number</code> — optional App Store build number override. Blank means auto-increment from the latest TestFlight build.</li>
+  <li><code>changelog</code> — optional App Store Connect/TestFlight changelog text.</li>
+</ul>
 
-<h3>Workflow: <code>ios-testflight-release.yml</code></h3>
+<h2>What the workflow does</h2>
+<ol>
+  <li>Checks out the repository and selects Xcode on the macOS runner.</li>
+  <li>Installs the Fastlane bundle from <code>ios/</code>.</li>
+  <li>Installs the App Store Connect API key, distribution certificate, and provisioning profile from the protected <code>app-store</code> GitHub Environment.</li>
+  <li>Writes App Store export options for <code>com.emwaver.EMWaver</code>.</li>
+  <li>Runs <code>fastlane ios release_upload</code>.</li>
+  <li>Uploads the IPA as a GitHub Actions artifact for troubleshooting.</li>
+</ol>
 
-<div class="card">
-  <h3>Triggers</h3>
-  <ul>
-    <li><code>workflow_dispatch</code> — manual trigger with optional inputs:
-      <ul>
-        <li><code>build_number</code> — override auto-incremented build number</li>
-        <li><code>changelog</code> — TestFlight "What to Test" text</li>
-      </ul>
-    </li>
-    <li>Push of any tag matching <code>ios-v*</code> or <code>emwaver-ios-v*</code></li>
-  </ul>
-</div>
+<h2>Fastlane lane</h2>
+<p><code>release_upload</code>:</p>
+<ol>
+  <li>Resolves the App Store Connect API key.</li>
+  <li>Auto-increments the build number unless <code>EMWAVER_IOS_BUILD_NUMBER</code> is set.</li>
+  <li>Configures App Store signing.</li>
+  <li>Builds the Release scheme to <code>build/ios/EMWaver.ipa</code>.</li>
+  <li>Validates that bundled default scripts are JavaScript assets and no legacy <code>.emw</code> files remain.</li>
+  <li>Uploads the IPA to App Store Connect/TestFlight processing with <code>skip_waiting_for_build_processing: true</code>.</li>
+</ol>
+<p><code>beta</code> and <code>app_store_upload</code> remain compatibility aliases for <code>release_upload</code>.</p>
 
-<h3>What it does</h3>
+<h2>Secrets required</h2>
+<p>The workflow uses the protected GitHub Environment named <code>app-store</code> with these secrets:</p>
+<ul>
+  <li><code>APP_STORE_CONNECT_API_KEY_ID</code></li>
+  <li><code>APP_STORE_CONNECT_API_ISSUER_ID</code></li>
+  <li><code>APP_STORE_CONNECT_API_KEY_BASE64</code></li>
+  <li><code>IOS_DISTRIBUTION_CERTIFICATE_BASE64</code></li>
+  <li><code>IOS_DISTRIBUTION_CERTIFICATE_PASSWORD</code></li>
+  <li><code>IOS_PROVISIONING_PROFILE_BASE64</code></li>
+  <li><code>IOS_PROVISIONING_PROFILE_NAME</code></li>
+  <li><code>IOS_KEYCHAIN_PASSWORD</code></li>
+</ul>
 
-<div class="flow">
-  <div class="flow-step">Checkout</div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-step">Select Xcode</div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-step">Bundle install</div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-step">Install ASC API key</div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-step">Install cert + profile</div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-step">Write export options</div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-step"><code>fastlane ios beta</code></div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-step">Upload IPA artifact</div>
-</div>
+<h2>Release procedure</h2>
+<ol>
+  <li>Run <strong>Actions → iOS Release Upload → Run workflow</strong>, or push an <code>ios-v*</code>/<code>emwaver-ios-v*</code> tag.</li>
+  <li>Approve the protected <code>app-store</code> environment if required.</li>
+  <li>Let Apple finish build processing in App Store Connect.</li>
+  <li>Use the processed build in TestFlight for internal/external testing.</li>
+  <li>When ready for production, open App Store Connect, select the same processed build for the version, confirm review/compliance details, and submit for review manually.</li>
+</ol>
 
-<div class="card">
-  <h3>Fastlane lane: <code>beta</code></h3>
-  <ol>
-    <li>Resolves App Store Connect API key from environment</li>
-    <li>Auto-increments build number (queries latest TestFlight build + 1, or uses explicit <code>EMWAVER_IOS_BUILD_NUMBER</code>)</li>
-    <li>Configures manual code signing (team <code>9VA9KTUXXN</code>, profile from <code>IOS_PROVISIONING_PROFILE_NAME</code>)</li>
-    <li>Builds the Release scheme → signed IPA at <code>build/ios/EMWaver.ipa</code></li>
-    <li>Uploads to TestFlight with:
-      <ul>
-        <li><code>skip_waiting_for_build_processing: true</code> — returns immediately, build appears in TestFlight when processing completes</li>
-        <li><code>distribute_external: false</code> — only internal TestFlight group; external distribution must be enabled manually in App Store Connect</li>
-        <li><code>changelog</code> — optional "What to Test" from <code>EMWAVER_IOS_CHANGELOG</code></li>
-      </ul>
-    </li>
-  </ol>
-</div>
+<h2>Local commands</h2>
+<pre><code>scripts/ios-release.sh test
+scripts/ios-release.sh archive
+scripts/ios-release.sh release_upload
+scripts/ios-release.sh release</code></pre>
 
-<div class="card">
-  <h3>Characteristics</h3>
-  <ul>
-    <li><span class="badge badge-green">Signed</span> — distribution certificate + App Store provisioning profile</li>
-    <li><span class="badge badge-blue">Internal only</span> — uploaded to TestFlight internal group; no external testers auto-invited</li>
-    <li><span class="badge badge-blue">Auto build number</span> — queries latest TestFlight build and increments unless overridden</li>
-    <li>Runner: <code>macos-26</code></li>
-    <li>GitHub environment: <code>app-store</code></li>
-    <li>Concurrency group: <code>ios-testflight-release</code> (no parallel runs)</li>
-  </ul>
-</div>
-
-<h3>How to release to TestFlight</h3>
-
-<div class="card">
-  <p><span class="step-num">1</span> Create a tag: <code>git tag -a ios-v0.2.0 -m "TestFlight build 0.2.0"</code></p>
-  <p><span class="step-num">2</span> Push the tag: <code>git push origin ios-v0.2.0</code></p>
-  <p><span class="step-num">3</span> The workflow runs automatically and uploads to TestFlight.</p>
-  <p><span class="step-num">4</span> Or trigger manually from the Actions tab with <code>workflow_dispatch</code> and optional changelog.</p>
-  <p><span class="step-num">5</span> Wait ~10–30 minutes for Apple to process the binary. It will appear under TestFlight → Builds.</p>
-  <p><span class="step-num">6</span> Add internal testers in App Store Connect under <strong>TestFlight → Internal Testing</strong>.</p>
-  <p><span class="step-num">7</span> For external testers, create an external group, add the build, and submit for Beta App Review.</p>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════════ -->
-<h2>3. Path 2 — App Store Upload (Production Candidate)</h2>
-
-<h3>Workflow: <code>ios-app-store-upload.yml</code></h3>
-
-<div class="card">
-  <h3>Triggers</h3>
-  <ul>
-    <li><code>workflow_dispatch</code> <strong>only</strong> — no tag-based trigger. Manual dispatch with optional inputs:
-      <ul>
-        <li><code>build_number</code> — override auto-incremented build number</li>
-        <li><code>release_notes</code> — App Store release notes for this version (written to <code>fastlane/metadata/en-US/release_notes.txt</code>)</li>
-      </ul>
-    </li>
-  </ul>
-</div>
-
-<div class="note">
-  <strong>Why dispatch-only?</strong> Production App Store uploads are intentionally gated behind manual dispatch. There is no tag-triggered path to production. This prevents accidental production uploads from tag pushes and ensures every App Store candidate is shipped intentionally.
-</div>
-
-<h3>What it does</h3>
-
-<div class="flow">
-  <div class="flow-step">Checkout</div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-step">Select Xcode</div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-step">Bundle install</div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-step">Install ASC API key</div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-step">Install cert + profile</div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-step">Write export options</div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-step">Apply release notes</div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-step"><code>fastlane ios app_store_upload</code></div>
-  <div class="flow-arrow">→</div>
-  <div class="flow-step">Upload IPA artifact</div>
-</div>
-
-<div class="card">
-  <h3>Fastlane lane: <code>app_store_upload</code></h3>
-  <ol>
-    <li>Resolves App Store Connect API key from environment</li>
-    <li>Auto-increments build number (same logic as TestFlight lane: query + 1 or explicit override)</li>
-    <li>Configures manual code signing</li>
-    <li>Builds the Release scheme → signed IPA</li>
-    <li>Calls internal <code>upload_app_store_candidate</code> which runs <code>deliver</code> (formerly <code>ipa</code>) with:
-      <ul>
-        <li>IPA: <code>build/ios/EMWaver.ipa</code></li>
-        <li>Metadata path: <code>fastlane/metadata</code></li>
-        <li>Screenshots path: <code>fastlane/screenshots</code> (skipped if the directory doesn't exist)</li>
-        <li><code>submit_for_review: false</code> — the upload is a draft; you must submit for App Review manually in App Store Connect</li>
-        <li><code>force: true</code> — overwrites existing metadata/screenshots</li>
-        <li><code>run_precheck_before_submit: false</code> — skips precheck (run separately if needed)</li>
-      </ul>
-    </li>
-  </ol>
-</div>
-
-<div class="card">
-  <h3>Characteristics</h3>
-  <ul>
-    <li><span class="badge badge-green">Signed</span> — same distribution certificate and App Store provisioning profile as TestFlight</li>
-    <li><span class="badge badge-orange">Dispatch-only</span> — no tag trigger; must be invoked manually from the Actions tab</li>
-    <li><span class="badge badge-blue">Draft upload</span> — the build appears in App Store Connect but is <strong>not</strong> submitted for review</li>
-    <li><span class="badge badge-blue">Metadata included</span> — uploads app metadata (description, keywords, promotional text, etc.) and screenshots alongside the binary</li>
-    <li>Runner: <code>macos-26</code></li>
-    <li>GitHub environment: <code>app-store</code></li>
-    <li>Concurrency group: <code>ios-app-store-upload</code> (no parallel runs)</li>
-  </ul>
-</div>
-
-<h3>How to upload a production candidate</h3>
-
-<div class="card">
-  <p><span class="step-num">1</span> Go to <strong>Actions → iOS App Store Upload → Run workflow</strong></p>
-  <p><span class="step-num">2</span> Optionally set a <code>build_number</code> and <code>release_notes</code></p>
-  <p><span class="step-num">3</span> Click <strong>Run workflow</strong></p>
-  <p><span class="step-num">4</span> Wait for the build and upload to complete (~15–40 minutes)</p>
-  <p><span class="step-num">5</span> Open <strong>App Store Connect → [Your App] → App Store → iOS App</strong></p>
-  <p><span class="step-num">6</span> Select the uploaded build under the version entry</p>
-  <p><span class="step-num">7</span> Complete any remaining store listing fields (privacy policy, export compliance, content rights)</p>
-  <p><span class="step-num">8</span> Click <strong>Submit for Review</strong></p>
-</div>
-
-<div class="warn">
-  <strong>App Review is manual.</strong> App Store Connect does not automatically submit uploaded builds for App Review. After upload, you must go to App Store Connect, select the build for your version, and explicitly submit it. Apple's review process typically takes 24–48 hours.
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════════ -->
-<h2>4. Secrets required</h2>
-
-<p>Both workflows share the same <code>app-store</code> GitHub environment and the same set of secrets:</p>
-
-<table>
-  <tr>
-    <th>Secret</th>
-    <th>Purpose</th>
-    <th>How to obtain / generate</th>
-  </tr>
-  <tr>
-    <td><code>APP_STORE_CONNECT_API_KEY_ID</code></td>
-    <td>App Store Connect API key ID (e.g. <code>ABC123XYZ8</code>)</td>
-    <td>App Store Connect → Users and Access → Integrations → API Keys</td>
-  </tr>
-  <tr>
-    <td><code>APP_STORE_CONNECT_API_ISSUER_ID</code></td>
-    <td>App Store Connect API issuer ID (UUID)</td>
-    <td>App Store Connect → Users and Access → Integrations → API Keys</td>
-  </tr>
-  <tr>
-    <td><code>APP_STORE_CONNECT_API_KEY_BASE64</code></td>
-    <td>Base64-encoded <code>.p8</code> private key file</td>
-    <td>Download <code>.p8</code> from App Store Connect, then: <code>base64 -w0 AuthKey_ABC123XYZ8.p8</code></td>
-  </tr>
-  <tr>
-    <td><code>IOS_DISTRIBUTION_CERTIFICATE_BASE64</code></td>
-    <td>Base64-encoded distribution certificate (PKCS#12 / <code>.p12</code>)</td>
-    <td>Export from Keychain Access as <code>.p12</code>, then: <code>base64 -w0 distribution.p12</code></td>
-  </tr>
-  <tr>
-    <td><code>IOS_DISTRIBUTION_CERTIFICATE_PASSWORD</code></td>
-    <td>Password for the <code>.p12</code> archive</td>
-    <td>Set when exporting the certificate from Keychain Access</td>
-  </tr>
-  <tr>
-    <td><code>IOS_PROVISIONING_PROFILE_BASE64</code></td>
-    <td>Base64-encoded App Store provisioning profile (<code>.mobileprovision</code>)</td>
-    <td>Download from Apple Developer → Profiles, then: <code>base64 -w0 EMWaver_AppStore.mobileprovision</code></td>
-  </tr>
-  <tr>
-    <td><code>IOS_PROVISIONING_PROFILE_NAME</code></td>
-    <td>Provisioning profile display name (e.g. <code>EMWaver AppStore</code>)</td>
-    <td>Apple Developer → Profiles → profile name</td>
-  </tr>
-  <tr>
-    <td><code>IOS_KEYCHAIN_PASSWORD</code></td>
-    <td>Password for the temporary build keychain</td>
-    <td>Choose any strong password; used only within the CI run, not a persistent secret</td>
-  </tr>
-</table>
-
-<div class="card">
-  <h3>GitHub environment</h3>
-  <p>Both workflows run in the <code>app-store</code> GitHub environment. This must exist in the repo at:</p>
-  <p><strong>Settings → Environments → New environment → name: <code>app-store</code></strong></p>
-  <p>The eight secrets above should be scoped to this environment.</p>
-</div>
-
-<div class="note">
-  <strong>API key vs. Apple ID:</strong> The workflows use App Store Connect API keys (JSON Web Token-based authentication), not an Apple ID username/password. This avoids 2FA friction and session expiry. The API key must have <strong>Developer</strong> or <strong>App Manager</strong> role in App Store Connect.
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════════ -->
-<h2>5. Fastlane lanes reference</h2>
-
-<div class="card">
-  <table>
-    <tr><th>Lane</th><th>Command</th><th>Purpose</th><th>Used by workflow</th></tr>
-    <tr><td><code>test</code></td><td><code>fastlane ios test</code></td><td>Run unit tests on simulator</td><td>None (local / CI debug)</td></tr>
-    <tr><td><code>archive</code></td><td><code>fastlane ios archive</code></td><td>Build signed IPA without uploading</td><td>None (local / manual testing)</td></tr>
-    <tr><td><code>beta</code></td><td><code>fastlane ios beta</code></td><td>Build + upload to TestFlight</td><td><code>ios-testflight-release.yml</code></td></tr>
-    <tr><td><code>release</code></td><td><code>fastlane ios release</code></td><td>Upload metadata + existing IPA to App Store</td><td>None (convenience lane)</td></tr>
-    <tr><td><code>app_store_upload</code></td><td><code>fastlane ios app_store_upload</code></td><td>Build + upload App Store candidate (draft)</td><td><code>ios-app-store-upload.yml</code></td></tr>
-  </table>
-</div>
-
-<div class="note">
-  <strong>Appfile:</strong> <code>ios/fastlane/Appfile</code> sets the app identifier to <code>com.emwaver.EMWaver</code> and the team ID to <code>9VA9KTUXXN</code>. Apple ID and ITC team ID are optionally set via <code>EMWAVER_APPLE_ID</code> and <code>EMWAVER_ITC_TEAM_ID</code> environment variables but are not required when using API key authentication.
-</div>
-
-<h3>Metadata directory</h3>
-<p>The App Store upload lane (<code>app_store_upload</code>) includes metadata from <code>ios/fastlane/metadata/en-US/</code>:</p>
-
-<table>
-  <tr><th>File</th><th>Content</th></tr>
-  <tr><td><code>name.txt</code></td><td>App name as shown on the App Store</td></tr>
-  <tr><td><code>subtitle.txt</code></td><td>Subtitle (displayed below the app name)</td></tr>
-  <tr><td><code>description.txt</code></td><td>Full app description</td></tr>
-  <tr><td><code>keywords.txt</code></td><td>Search keywords (comma-separated)</td></tr>
-  <tr><td><code>promotional_text.txt</code></td><td>Promotional text (can be updated without a new build)</td></tr>
-  <tr><td><code>release_notes.txt</code></td><td>Version release notes (overwritten by <code>release_notes</code> dispatch input)</td></tr>
-</table>
-
-<!-- ═══════════════════════════════════════════════════════════════════ -->
-<h2>6. TestFlight strategy</h2>
-
-<p>The TestFlight workflow uploads builds to the <strong>internal</strong> group only. Distribution to external testers is a manual step in App Store Connect.</p>
-
-<table>
-  <tr>
-    <th>Group</th>
-    <th>Auto-distributed?</th>
-    <th>Max testers</th>
-    <th>App Review</th>
-  </tr>
-  <tr>
-    <td>Internal</td>
-    <td><span class="badge badge-orange">No</span> — must add build to group manually</td>
-    <td>100 (App Store Connect team members)</td>
-    <td>Not required</td>
-  </tr>
-  <tr>
-    <td>External</td>
-    <td><span class="badge badge-orange">No</span> — must add build and submit for Beta App Review</td>
-    <td>Up to 10,000</td>
-    <td>Required (first build only, then lighter reviews)</td>
-  </tr>
-</table>
-
-<h3>Promotion flow (TestFlight → App Store)</h3>
-
-<div class="card">
-  <p><span class="step-num">1</span> Push tag <code>ios-v1.0.0</code> → build uploaded to TestFlight (internal)</p>
-  <p><span class="step-num">2</span> Wait for processing (~10–30 min); install and test internally via TestFlight app</p>
-  <p><span class="step-num">3</span> When ready for broader testing, create an <strong>External Testers</strong> group in App Store Connect</p>
-  <p><span class="step-num">4</span> Add the build and submit for Beta App Review (first external build only)</p>
-  <p><span class="step-num">5</span> After testing is complete, trigger <code>ios-app-store-upload</code> from Actions tab</p>
-  <p><span class="step-num">6</span> In App Store Connect, select the build for the version and submit for App Review</p>
-</div>
-
-<div class="note">
-  <strong>Same build can go to production.</strong> If the TestFlight build is the exact binary you want in production, you can promote it directly in App Store Connect without running a separate App Store upload workflow. The separate <code>app_store_upload</code> workflow is useful when the production binary differs (e.g., different build number, updated metadata, or a fresh build from a different commit).
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════════ -->
-<h2>7. Pre-launch checklist</h2>
-
-<div class="card">
-  <h3>Apple Developer Program</h3>
-  <table>
-    <tr><td><input type="checkbox"> Paid Apple Developer Program membership (required for distribution)</td></tr>
-    <tr><td><input type="checkbox"> App ID registered with bundle ID <code>com.emwaver.EMWaver</code></td></tr>
-    <tr><td><input type="checkbox"> Distribution certificate created and stored</td></tr>
-    <tr><td><input type="checkbox"> App Store provisioning profile created (App Store distribution, tied to the App ID and cert)</td></tr>
-    <tr><td><input type="checkbox"> Team ID confirmed: <code>9VA9KTUXXN</code></td></tr>
-  </table>
-</div>
-
-<div class="card">
-  <h3>App Store Connect</h3>
-  <table>
-    <tr><td><input type="checkbox"> App created in App Store Connect with bundle ID <code>com.emwaver.EMWaver</code></td></tr>
-    <tr><td><input type="checkbox"> App Store Connect API key created with <strong>Developer</strong> or <strong>App Manager</strong> role</td></tr>
-    <tr><td><input type="checkbox"> API key <code>.p8</code> file downloaded and base64-encoded</td></tr>
-  </table>
-</div>
-
-<div class="card">
-  <h3>GitHub Repository</h3>
-  <table>
-    <tr><td><input type="checkbox"> <code>app-store</code> environment exists (Settings → Environments)</td></tr>
-    <tr><td><input type="checkbox"> <code>APP_STORE_CONNECT_API_KEY_ID</code> secret set</td></tr>
-    <tr><td><input type="checkbox"> <code>APP_STORE_CONNECT_API_ISSUER_ID</code> secret set</td></tr>
-    <tr><td><input type="checkbox"> <code>APP_STORE_CONNECT_API_KEY_BASE64</code> secret set</td></tr>
-    <tr><td><input type="checkbox"> <code>IOS_DISTRIBUTION_CERTIFICATE_BASE64</code> secret set</td></tr>
-    <tr><td><input type="checkbox"> <code>IOS_DISTRIBUTION_CERTIFICATE_PASSWORD</code> secret set</td></tr>
-    <tr><td><input type="checkbox"> <code>IOS_PROVISIONING_PROFILE_BASE64</code> secret set</td></tr>
-    <tr><td><input type="checkbox"> <code>IOS_PROVISIONING_PROFILE_NAME</code> secret set</td></tr>
-    <tr><td><input type="checkbox"> <code>IOS_KEYCHAIN_PASSWORD</code> secret set</td></tr>
-  </table>
-</div>
-
-<div class="card">
-  <h3>App Store Listing</h3>
-  <table>
-    <tr><td><input type="checkbox"> App name, subtitle, description</td></tr>
-    <tr><td><input type="checkbox"> Keywords</td></tr>
-    <tr><td><input type="checkbox"> Promotional text</td></tr>
-    <tr><td><input type="checkbox"> App icon (1024×1024, no alpha)</td></tr>
-    <tr><td><input type="checkbox"> Screenshots (iPhone 6.7" + iPhone 6.5" + iPad 12.9" minimum sets)</td></tr>
-    <tr><td><input type="checkbox"> Privacy policy URL</td></tr>
-    <tr><td><input type="checkbox"> App category and subcategory selected</td></tr>
-    <tr><td><input type="checkbox"> Age rating questionnaire completed</td></tr>
-    <tr><td><input type="checkbox"> Export compliance (encryption) determined</td></tr>
-    <tr><td><input type="checkbox"> Content rights declaration</td></tr>
-    <tr><td><input type="checkbox"> App privacy details (data collection, tracking) completed</td></tr>
-  </table>
-</div>
-
-<div class="card">
-  <h3>Xcode Project</h3>
-  <table>
-    <tr><td><input type="checkbox"> Bundle ID matches <code>com.emwaver.EMWaver</code></td></tr>
-    <tr><td><input type="checkbox"> Version and build numbering scheme is consistent</td></tr>
-    <tr><td><input type="checkbox"> Release scheme builds cleanly with <code>xcodebuild archive</code></td></tr>
-    <tr><td><input type="checkbox"> All required capabilities declared (no push notifications, no HealthKit, etc. unless needed)</td></tr>
-    <tr><td><input type="checkbox"> <code>ios/fastlane/metadata/en-US/</code> files are up to date</td></tr>
-  </table>
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════════ -->
-<h2>8. Tag convention reference</h2>
-
-<div class="card">
-  <table>
-    <tr><th>Prefix</th><th>Workflow triggered</th><th>Artifact</th><th>Destination</th></tr>
-    <tr><td><code>ios-v*</code></td><td><code>ios-testflight-release.yml</code></td><td>Signed IPA</td><td>TestFlight (internal)</td></tr>
-    <tr><td><code>emwaver-ios-v*</code></td><td><code>ios-testflight-release.yml</code></td><td>Signed IPA</td><td>TestFlight (internal)</td></tr>
-    <tr><td><em>(none — dispatch only)</em></td><td><code>ios-app-store-upload.yml</code></td><td>Signed IPA</td><td>App Store Connect (draft)</td></tr>
-  </table>
-</div>
-
-<div class="warn">
-  <strong>Important:</strong> Tag pushes <strong>only</strong> trigger TestFlight uploads. There is no tag-triggered production upload for iOS. Production App Store candidates must be dispatched manually from the Actions tab. This is an intentional safety guard — production builds should never be accidental.
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════════ -->
-<h2>9. Signing architecture</h2>
-
-<p>iOS code signing in CI uses <strong>manual signing</strong> with a pre-generated distribution certificate and provisioning profile:</p>
-
-<div class="card">
-  <h3>Signing assets</h3>
-  <table>
-    <tr><th>Asset</th><th>Format</th><th>Lifetime</th><th>Notes</th></tr>
-    <tr><td>Distribution certificate</td><td><code>.p12</code> (PKCS#12, base64-encoded)</td><td>1 year (renewable)</td><td>Created in Apple Developer → Certificates → Distribution → iOS Distribution</td></tr>
-    <tr><td>Provisioning profile</td><td><code>.mobileprovision</code> (base64-encoded)</td><td>1 year (renewable)</td><td>Tied to the App ID, distribution certificate, and team</td></tr>
-    <tr><td>App Store Connect API key</td><td><code>.p8</code> private key (base64-encoded)</td><td>Until revoked</td><td>Used for upload, not for code signing</td></tr>
-  </table>
-</div>
-
-<div class="card">
-  <h3>CI signing flow</h3>
-  <ol>
-    <li>Create a temporary keychain with a one-time password</li>
-    <li>Import the distribution certificate (<code>.p12</code>) into the keychain</li>
-    <li>Set key partition list to allow <code>codesign</code> access without interactive prompt</li>
-    <li>Install the provisioning profile to <code>~/Library/MobileDevice/Provisioning Profiles/</code></li>
-    <li>The <code>exportOptions.plist</code> tells <code>xcodebuild</code> to use manual signing with the named profile for <code>com.emwaver.EMWaver</code></li>
-  </ol>
-</div>
-
-<div class="note">
-  <strong>Certificate expiration:</strong> Distribution certificates expire after 1 year. When a certificate expires, a new one must be generated, base64-encoded, and updated in the <code>IOS_DISTRIBUTION_CERTIFICATE_BASE64</code> secret. The provisioning profile must also be regenerated against the new certificate and updated in <code>IOS_PROVISIONING_PROFILE_BASE64</code>. These secrets should be rotated together.
-</div>
-
-<!-- ═══════════════════════════════════════════════════════════════════ -->
-<h2>10. Comparison with Android release system</h2>
-
-<p>The iOS release system works alongside the Android system. Key structural differences:</p>
-
-<table>
-  <tr><th>iOS</th><th>Android</th></tr>
-  <tr>
-    <td>Two separate workflows for TestFlight and App Store</td>
-    <td>One workflow (<code>android-play-release.yml</code>) with a <code>track</code> parameter</td>
-  </tr>
-  <tr>
-    <td>No unsigned distribution path</td>
-    <td><code>android-apk-release.yml</code> → signed APK on GitHub Releases</td>
-  </tr>
-  <tr>
-    <td>Tag push → TestFlight only</td>
-    <td>Tag push → internal track only; production via dispatch or promotion</td>
-  </tr>
-  <tr>
-    <td>App Store production: dispatch-only (no tag trigger)</td>
-    <td>Play Store production: dispatch with <code>track: production</code> or promote in console</td>
-  </tr>
-  <tr>
-    <td>Ghost (<code>macos-26</code>)</td>
-    <td>Runner (<code>ubuntu-latest</code>)</td>
-  </tr>
-  <tr>
-    <td>GitHub environment: <code>app-store</code></td>
-    <td>GitHub environment: <code>play-store</code></td>
-  </tr>
-  <tr>
-    <td>8 secrets (ASC API key + signing cert/provisioning profile)</td>
-    <td>5 secrets (upload keystore + Google service account)</td>
-  </tr>
-  <tr>
-    <td>Tag prefixes: <code>ios-v*</code>, <code>emwaver-ios-v*</code></td>
-    <td>Tag prefixes: <code>android-v*</code>, <code>emwaver-android-v*</code> (play); <code>emwaver-v*</code> (apk)</td>
-  </tr>
-</table>
-
-<div class="note">
-  <strong>Workflow files:</strong> All workflows live in <code>.github/workflows/</code>:
-  <ul>
-    <li><code>ios-testflight-release.yml</code></li>
-    <li><code>ios-app-store-upload.yml</code></li>
-    <li><code>android-apk-release.yml</code></li>
-    <li><code>android-play-release.yml</code></li>
-  </ul>
-  Fastlane config: <code>ios/fastlane/Fastfile</code> and <code>android/fastlane/Fastfile</code>.
-</div>
-
+<p><code>ios/EMWaver/Info.plist</code> sets <code>ITSAppUsesNonExemptEncryption</code> to <code>false</code>, so standard Apple export-compliance encryption prompts should be pre-answered for new builds.</p>
+</main>
 </body>
 </html>

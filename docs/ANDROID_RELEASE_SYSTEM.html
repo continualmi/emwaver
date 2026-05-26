@@ -487,17 +487,13 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <h2>8. Comparison with iOS release system</h2>
 
-<p>For reference, the iOS side has two separate workflows (mirroring what Android achieves with one workflow + track parameter):</p>
+<p>For reference, the iOS side now uses one upload workflow. A signed App Store IPA uploaded to App Store Connect appears in TestFlight after Apple processing and can later be selected for App Store review.</p>
 
 <table>
   <tr><th>iOS</th><th>Android</th></tr>
   <tr>
-    <td><code>ios-testflight-release.yml</code> → TestFlight</td>
-    <td><code>android-play-release.yml</code> with <code>track: internal</code></td>
-  </tr>
-  <tr>
-    <td><code>ios-app-store-upload.yml</code> → App Store candidate</td>
-    <td><code>android-play-release.yml</code> with <code>track: production</code></td>
+    <td><code>ios-release-upload.yml</code> → App Store Connect/TestFlight processing</td>
+    <td><code>android-play-release.yml</code> with <code>track: internal</code>, <code>closed</code>, or <code>production</code></td>
   </tr>
   <tr>
     <td>No unsigned IPA distribution</td>
@@ -506,12 +502,11 @@
 </table>
 
 <div class="note">
-  <strong>Workflow files:</strong> All four live in <code>.github/workflows/</code>:
+  <strong>Workflow files:</strong> Main mobile release workflows live in <code>.github/workflows/</code>:
   <ul>
     <li><code>android-apk-release.yml</code></li>
     <li><code>android-play-release.yml</code></li>
-    <li><code>ios-testflight-release.yml</code></li>
-    <li><code>ios-app-store-upload.yml</code></li>
+    <li><code>ios-release-upload.yml</code></li>
   </ul>
   Fastlane config: <code>android/fastlane/Fastfile</code> and <code>ios/fastlane/Fastfile</code>.
 </div>

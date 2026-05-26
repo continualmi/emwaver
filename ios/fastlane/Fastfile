@@ -36,43 +36,13 @@ platform :ios do
     validate_ios_bundle_assets
   end
 
-  desc "Upload a build to TestFlight"
+  desc "Compatibility alias for release_upload"
   lane :beta do
-    api_key = app_store_connect_api_key_from_env
-    increment_build_number_for_upload(api_key: api_key)
-    configure_ci_app_store_signing
-
-    build_app(
-      project: "EMWaver.xcodeproj",
-      scheme: "EMWaver",
-      configuration: "Release",
-      export_options: export_options_path,
-      output_directory: "../build/ios",
-      output_name: "EMWaver.ipa",
-      clean: true,
-      xcargs: xcode_args
-    )
-
-    validate_ios_bundle_assets
-
-    upload_to_testflight(
-      api_key: api_key,
-      ipa: "../build/ios/EMWaver.ipa",
-      skip_waiting_for_build_processing: true,
-      distribute_external: false,
-      changelog: changelog_text
-    )
+    release_upload
   end
 
-  desc "Upload App Store metadata and the latest local IPA. Final App Review submission is still confirmed in App Store Connect."
-  lane :release do
-    api_key = app_store_connect_api_key_from_env
-
-    upload_app_store_candidate(api_key: api_key)
-  end
-
-  desc "Build and upload an App Store production candidate. Final App Review submission is still confirmed in App Store Connect."
-  lane :app_store_upload do
+  desc "Build and upload an iOS release build to App Store Connect/TestFlight processing"
+  lane :release_upload do
     api_key = app_store_connect_api_key_from_env
     increment_build_number_for_upload(api_key: api_key)
     configure_ci_app_store_signing
@@ -90,6 +60,18 @@ platform :ios do
 
     validate_ios_bundle_assets
     upload_binary_to_app_store_connect(api_key: api_key)
+  end
+
+  desc "Upload App Store metadata and the latest local IPA. Final App Review submission is still confirmed in App Store Connect."
+  lane :release do
+    api_key = app_store_connect_api_key_from_env
+
+    upload_app_store_candidate(api_key: api_key)
+  end
+
+  desc "Compatibility alias for release_upload"
+  lane :app_store_upload do
+    release_upload
   end
 
   private_lane :upload_binary_to_app_store_connect do |options|

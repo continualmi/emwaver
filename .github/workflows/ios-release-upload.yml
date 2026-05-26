@@ -1,4 +1,4 @@
-name: iOS TestFlight Release
+name: iOS Release Upload
 
 on:
   workflow_dispatch:
@@ -8,7 +8,7 @@ on:
         required: false
         type: string
       changelog:
-        description: "Optional TestFlight changelog"
+        description: "Optional App Store Connect/TestFlight changelog"
         required: false
         type: string
   push:
@@ -20,12 +20,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: ios-testflight-release
+  group: ios-release-upload
   cancel-in-progress: false
 
 jobs:
-  testflight:
-    name: Build and upload iOS app
+  upload:
+    name: Build and upload iOS release
     runs-on: macos-26
     environment: app-store
     timeout-minutes: 60
@@ -116,9 +116,9 @@ jobs:
           PLIST
           plutil -lint ci-exportOptions.plist
 
-      - name: Upload to TestFlight
+      - name: Upload to App Store Connect
         working-directory: ios
-        run: bundle exec fastlane ios beta
+        run: bundle exec fastlane ios release_upload
 
       - name: Upload IPA artifact
         if: always()

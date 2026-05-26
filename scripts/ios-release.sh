@@ -3,12 +3,12 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ios_dir="${repo_root}/ios"
-lane="${1:-beta}"
+lane="${1:-release_upload}"
 
 case "${lane}" in
-  test|archive|beta|release) ;;
+  test|archive|beta|release_upload|app_store_upload|release) ;;
   *)
-    echo "Usage: scripts/ios-release.sh [test|archive|beta|release]" >&2
+    echo "Usage: scripts/ios-release.sh [test|archive|beta|release_upload|app_store_upload|release]" >&2
     exit 2
     ;;
 esac

@@ -30,7 +30,7 @@ gh release create 1.0.3 --title "EMWaver 1.0.3" --latest --notes "EMWaver 1.0.3"
 
 5. Run the direct-download GitHub Actions workflows manually. Leave the `tag` field blank to use the root `VERSION`, or enter the existing release tag explicitly.
 6. Confirm the GitHub Release has the expected assets. Re-running a workflow overwrites the asset with the same filename on that release.
-7. Run the store workflows separately for iOS App Store/TestFlight and Google Play, using the same product version and new platform build numbers/codes as required by each store.
+7. Run the store workflows separately for iOS release upload and Google Play, using the same product version and new platform build numbers/codes as required by each store.
 
 ## Public download links
 
@@ -95,7 +95,7 @@ Use `.github/workflows/android-play-release.yml` for Google Play internal/closed
 
 ## iOS
 
-Use `.github/workflows/ios-testflight-release.yml` for TestFlight and `.github/workflows/ios-app-store-upload.yml` for App Store candidates. There is no public unsigned IPA distribution path.
+Use `.github/workflows/ios-release-upload.yml` (`iOS Release Upload`) to build and upload the iOS IPA to App Store Connect. The processed build appears in TestFlight and can be selected for App Store review in App Store Connect. There is no public unsigned IPA distribution path.
 
 ## macOS
 
