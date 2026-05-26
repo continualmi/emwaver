@@ -24,13 +24,8 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!-- Product title. Build details live in Settings. -->
-                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="EMWaver" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
-                </StackPanel>
-
                 <!-- Device picker -->
-                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="DeviceMenuButton" Click="OnDeviceMenuClick"
                             Padding="8,4" Background="Transparent" BorderThickness="0">
                         <StackPanel Orientation="Horizontal">
