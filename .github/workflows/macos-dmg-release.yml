@@ -1,5 +1,6 @@
 name: macOS DMG Release
 
+# Builds the direct-download macOS DMG, then signs, notarizes, and appcasts it.
 on:
   workflow_dispatch:
     inputs:
