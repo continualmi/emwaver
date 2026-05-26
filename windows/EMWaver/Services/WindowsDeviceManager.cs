@@ -253,6 +253,7 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
     private WindowsWiFiTransport.Connection? _wifiConnection;
     private readonly TransportDeviceConnectionState _activeConnectionState = new();
     private bool _bleConnecting;
+    private static readonly TimeSpan BleDiscoveryTtl = TimeSpan.FromSeconds(12);
     private bool _isBleScanning;
     public bool IsBleScanning
     {
@@ -422,6 +423,7 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
             });
 
             DfuConnected = dfuTask.Result;
+            PruneBleDiscoveredDevices();
 
             if (AutoConnectEnabled && !IsConnected)
             {
@@ -869,6 +871,23 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
         IsBleScanning = false;
     }
 
+    internal void PruneBleDiscoveredDevices()
+    {
+        RunOnUi(PruneBleDiscoveredDevicesOnUi);
+    }
+
+    private void PruneBleDiscoveredDevicesOnUi()
+    {
+        var cutoff = DateTime.Now - BleDiscoveryTtl;
+        for (var i = BleDiscoveredDevices.Count - 1; i >= 0; i--)
+        {
+            if (BleDiscoveredDevices[i].LastSeen < cutoff)
+            {
+                BleDiscoveredDevices.RemoveAt(i);
+            }
+        }
+    }
+
     private void OnBleAdvertisementReceived(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementReceivedEventArgs args)
     {
         var name = args.Advertisement.LocalName ?? string.Empty;
@@ -886,6 +905,7 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
 
         RunOnUi(() =>
         {
+            PruneBleDiscoveredDevicesOnUi();
             var existing = BleDiscoveredDevices.FirstOrDefault(d => d.BluetoothAddress == discovered.BluetoothAddress);
             if (existing != null) BleDiscoveredDevices.Remove(existing);
             BleDiscoveredDevices.Add(discovered);
@@ -926,8 +946,14 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
 
             _bleConnection = opened.Connection;
             _activeConnectionState.SetConnection(_bleConnection);
-            ConnectedPort = new DevicePort(_bleConnection.DisplayName, string.Empty, string.Empty);
-            await ClaimTransportSessionAsync(DeviceTransport.Ble);
+
+            var claimed = await ClaimTransportSessionAsync(DeviceTransport.Ble);
+            if (!claimed)
+            {
+                LastErrorText = "BLE device did not accept the EMWaver transport session";
+                Disconnect();
+                return;
+            }
 
             var version = await QueryDeviceVersionAsync(timeoutMs: 1500);
             if (version == null)
@@ -936,6 +962,14 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
                 version = await QueryDeviceVersionAsync(timeoutMs: 1500);
             }
 
+            if (version == null)
+            {
+                LastErrorText = "BLE device did not respond like an EMWaver device";
+                Disconnect();
+                return;
+            }
+
+            ConnectedPort = new DevicePort(_bleConnection.DisplayName, string.Empty, string.Empty);
             DeviceEmwaverVersion = version;
             var reportedBoardType = await QueryBoardTypeAsync(timeoutMs: 2000);
             ConnectedBoardType = reportedBoardType ?? WindowsBleTransport.BoardType(displayName);

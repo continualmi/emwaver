@@ -76,6 +76,7 @@ public partial class DeviceConnectionWindow : Window
 
     private void RefreshDeviceList()
     {
+        _device.PruneBleDiscoveredDevices();
         var ports = _device.AvailablePorts.ToList();
         var bleDevices = _device.BleDiscoveredDevices.ToList();
         var wifiDevices = _device.WiFiDiscoveredDevices.ToList();
