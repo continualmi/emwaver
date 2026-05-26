@@ -232,9 +232,8 @@ jobs:
             "${sparkle_bin}/generate_appcast" \
               --ed-key-file - \
               --download-url-prefix "https://github.com/continualmi/emwaver/releases/download/${EMWAVER_RELEASE_TAG}/" \
-              -o appcast.xml \
+              -o dist/appcast.xml \
               dist/sparkle
-          cp dist/sparkle/appcast.xml dist/appcast.xml
 
       - name: Verify target GitHub Release exists
         env:
