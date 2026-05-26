@@ -101,11 +101,18 @@ Runtime boundary:
 
 Local Debug builds create a derived-data-only ESP helper wrapper from `tools/emwaver-esp-helper/emwaver_esp_helper.py` when PyInstaller is unavailable. Release packaging should still use a frozen helper bundle.
 
+Desktop app updates:
+- macOS uses Sparkle 2 for the app-level `Check for Updates...` menu item.
+- the Sparkle feed URL is `https://emwaver.ai/updates/macos/appcast.xml`;
+- release builds need a real Sparkle EdDSA public key in `SPARKLE_PUBLIC_ED_KEY`, with release artifacts signed by the matching private key;
+- app updates are independent of EMWaver accounts, Agent API keys, and local hardware access.
+
 ## 2.3 UI surfaces
 
 Representative views:
 - `SettingsView.swift`
 - firmware/device connection sheets.
+- app update menu entry through Sparkle (`MacAppUpdateController.swift`).
 
 Script sessions:
 - macOS owns local multi-session script runs through a native session manager.

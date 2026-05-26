@@ -1,0 +1,55 @@
+<Window
+    x:Class="EMWaver.Views.AppUpdateWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="App Updates"
+    Width="520" Height="330"
+    WindowStartupLocation="CenterOwner"
+    WindowStyle="ToolWindow"
+    ResizeMode="NoResize">
+
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+            <TextBlock Text="EMWaver updates"
+                       FontSize="20" FontWeight="SemiBold"
+                       Margin="0,0,0,8" />
+            <TextBlock x:Name="StatusText"
+                       Text="Check for a newer desktop app release."
+                       Foreground="{DynamicResource AppTextSecondaryBrush}"
+                       TextWrapping="Wrap"
+                       Margin="0,0,0,16" />
+
+            <Border BorderBrush="{DynamicResource EditorSurfaceBorderBrush}"
+                    BorderThickness="1" CornerRadius="4" Padding="12" Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock x:Name="VersionText" Text="Current version" FontWeight="SemiBold" />
+                    <TextBlock x:Name="DetailsText"
+                               Foreground="{DynamicResource AppTextSecondaryBrush}"
+                               TextWrapping="Wrap"
+                               Margin="0,6,0,0" />
+                </StackPanel>
+            </Border>
+
+            <ProgressBar x:Name="DownloadProgress"
+                         Minimum="0" Maximum="100"
+                         Height="8"
+                         Visibility="Collapsed"
+                         Margin="0,4,0,0" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button x:Name="NotesButton" Content="Release Notes" Width="105" Margin="0,0,8,0"
+                    Click="OnNotesClick" IsEnabled="False" />
+            <Button x:Name="CheckButton" Content="Check" Width="80" Margin="0,0,8,0"
+                    Click="OnCheckClick" />
+            <Button x:Name="InstallButton" Content="Install" Width="80" Margin="0,0,8,0"
+                    Click="OnInstallClick" IsEnabled="False" />
+            <Button Content="Close" Width="80" IsCancel="True" Click="OnCloseClick" />
+        </StackPanel>
+    </Grid>
+</Window>

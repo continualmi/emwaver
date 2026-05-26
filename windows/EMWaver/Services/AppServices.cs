@@ -14,6 +14,7 @@ internal static class AppServices
     internal static readonly AppSettings Settings = new();
 
     internal static readonly HttpClient Http = new();
+    internal static readonly AppUpdateService AppUpdates = new(Http);
     internal static readonly AgentApiKeyStore AgentKeys = new();
     internal static readonly AgentChatStore AgentChats = new();
     internal static readonly AgentApi AgentApi = new(Http, AgentKeys);

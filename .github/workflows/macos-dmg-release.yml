@@ -14,6 +14,8 @@ permissions:
 jobs:
   build:
     runs-on: macos-15
+    env:
+      SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
 
     steps:
       - name: Check out repository
@@ -62,6 +64,7 @@ jobs:
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
             MARKETING_VERSION="${EMWAVER_RELEASE_VERSION}" \
+            SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY}" \
             build
 
       - name: Create DMG
@@ -96,4 +99,3 @@ jobs:
           overwrite_files: true
           fail_on_unmatched_files: true
           files: dist/EMWaver-macos.dmg
-

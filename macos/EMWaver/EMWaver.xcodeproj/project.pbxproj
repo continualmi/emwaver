@@ -10,6 +10,7 @@
 		A1E0A1B22F6B4D7C8E9F1006 /* EMWaverScriptsUI in Frameworks */ = {isa = PBXBuildFile; productRef = A1E0A1B22F6B4D7C8E9F1005 /* EMWaverScriptsUI */; };
 		A1E0A1B22F6B4D7C8E9F1007 /* EMWaverScriptRuntime in Frameworks */ = {isa = PBXBuildFile; productRef = A1E0A1B22F6B4D7C8E9F1008 /* EMWaverScriptRuntime */; };
 		A1E0A1B22F6B4D7C8E9F1009 /* EMWaverTransport in Frameworks */ = {isa = PBXBuildFile; productRef = A1E0A1B22F6B4D7C8E9F1010 /* EMWaverTransport */; };
+		A1E0A1B22F6B4D7C8E9F3002 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A1E0A1B22F6B4D7C8E9F3001 /* Sparkle */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -61,6 +62,7 @@
 				A1E0A1B22F6B4D7C8E9F1006 /* EMWaverScriptsUI in Frameworks */,
 				A1E0A1B22F6B4D7C8E9F1007 /* EMWaverScriptRuntime in Frameworks */,
 				A1E0A1B22F6B4D7C8E9F1009 /* EMWaverTransport in Frameworks */,
+				A1E0A1B22F6B4D7C8E9F3002 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -126,6 +128,7 @@
 				A1E0A1B22F6B4D7C8E9F1005 /* EMWaverScriptsUI */,
 				A1E0A1B22F6B4D7C8E9F1008 /* EMWaverScriptRuntime */,
 				A1E0A1B22F6B4D7C8E9F1010 /* EMWaverTransport */,
+				A1E0A1B22F6B4D7C8E9F3001 /* Sparkle */,
 			);
 			productName = EMWaver;
 			productReference = 4635BDDD2F2B896400A7489D /* EMWaver.app */;
@@ -211,6 +214,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				A1E0A1B22F6B4D7C8E9F1004 /* XCLocalSwiftPackageReference "../../apple/EMWaverAppleCore" */,
+				A1E0A1B22F6B4D7C8E9F3000 /* XCRemoteSwiftPackageReference "Sparkle" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 4635BDDE2F2B896400A7489D /* Products */;
@@ -276,17 +280,17 @@
 			inputPaths = (
 				"$(SRCROOT)/../../firmware/emwaver.bin",
 				"$(SRCROOT)/../../firmware/emwaver-esp32-app.bin",
-					"$(SRCROOT)/../../firmware/emwaver-esp32-bootloader.bin",
-					"$(SRCROOT)/../../firmware/emwaver-esp32-ota-data.bin",
-					"$(SRCROOT)/../../firmware/emwaver-esp32-partition-table.bin",
-					"$(SRCROOT)/../../firmware/emwaver-esp32s2-app.bin",
-					"$(SRCROOT)/../../firmware/emwaver-esp32s2-bootloader.bin",
-					"$(SRCROOT)/../../firmware/emwaver-esp32s2-ota-data.bin",
-					"$(SRCROOT)/../../firmware/emwaver-esp32s2-partition-table.bin",
-					"$(SRCROOT)/../../firmware/emwaver-esp32s3-app.bin",
-					"$(SRCROOT)/../../firmware/emwaver-esp32s3-bootloader.bin",
-					"$(SRCROOT)/../../firmware/emwaver-esp32s3-ota-data.bin",
-					"$(SRCROOT)/../../firmware/emwaver-esp32s3-partition-table.bin",
+				"$(SRCROOT)/../../firmware/emwaver-esp32-bootloader.bin",
+				"$(SRCROOT)/../../firmware/emwaver-esp32-ota-data.bin",
+				"$(SRCROOT)/../../firmware/emwaver-esp32-partition-table.bin",
+				"$(SRCROOT)/../../firmware/emwaver-esp32s2-app.bin",
+				"$(SRCROOT)/../../firmware/emwaver-esp32s2-bootloader.bin",
+				"$(SRCROOT)/../../firmware/emwaver-esp32s2-ota-data.bin",
+				"$(SRCROOT)/../../firmware/emwaver-esp32s2-partition-table.bin",
+				"$(SRCROOT)/../../firmware/emwaver-esp32s3-app.bin",
+				"$(SRCROOT)/../../firmware/emwaver-esp32s3-bootloader.bin",
+				"$(SRCROOT)/../../firmware/emwaver-esp32s3-ota-data.bin",
+				"$(SRCROOT)/../../firmware/emwaver-esp32s3-partition-table.bin",
 				"$(SRCROOT)/../../tools/emwaver-esp-helper/requirements-freeze.txt",
 				"$(SRCROOT)/Tools/emwaver-dfu-helper",
 				"$(SRCROOT)/Tools/emwaver-esp-helper",
@@ -478,6 +482,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "EMWaver uses Bluetooth to connect to nearby ESP32 boards for local scripts and hardware control.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_SUFeedURL = "https://emwaver.ai/updates/macos/appcast.xml";
+				INFOPLIST_KEY_SUPublicEDKey = "$(SPARKLE_PUBLIC_ED_KEY)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -487,6 +493,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.emwaver.EMWaver;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
+				SPARKLE_PUBLIC_ED_KEY = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -513,6 +520,8 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "EMWaver uses Bluetooth to connect to nearby ESP32 boards for local scripts and hardware control.";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_SUFeedURL = "https://emwaver.ai/updates/macos/appcast.xml";
+				INFOPLIST_KEY_SUPublicEDKey = "$(SPARKLE_PUBLIC_ED_KEY)";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -522,6 +531,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.emwaver.EMWaver;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
+				SPARKLE_PUBLIC_ED_KEY = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -659,6 +669,17 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		A1E0A1B22F6B4D7C8E9F3000 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.7.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		A1E0A1B22F6B4D7C8E9F1005 /* EMWaverScriptsUI */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -674,6 +695,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = A1E0A1B22F6B4D7C8E9F1004 /* XCLocalSwiftPackageReference "../../apple/EMWaverAppleCore" */;
 			productName = EMWaverTransport;
+		};
+		A1E0A1B22F6B4D7C8E9F3001 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A1E0A1B22F6B4D7C8E9F3000 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

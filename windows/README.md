@@ -44,6 +44,7 @@ Core service layer:
 - `Services/ScriptRepository.cs` (script storage)
 - `Services/FirmwareUpdateManager.cs` + `Services/Dfu.cs` (firmware/update)
 - `Services/AppSettings.cs` / `Services/AppServices.cs`
+- `Services/AppUpdateService.cs` (desktop app update manifest, download, installer launch)
 
 Scripting/runtime:
 - `Scripting/ScriptEngine.cs`
@@ -112,6 +113,9 @@ Windows now follows the same board-class split as macOS:
 Settings surface includes app-level preferences such as:
 - script diagnostics visibility,
 - local Agent API key configuration.
+- desktop app update checks.
+
+Desktop app updates are local-first and account-free. Windows checks the EMWaver-owned manifest at `https://emwaver.ai/updates/windows/latest.json`, with a GitHub Release metadata fallback, then downloads the version-pinned installer URL declared by that manifest. The installer is verified with the manifest SHA-256 when present and launched with Inno Setup silent/restart-safe arguments.
 
 The Windows app intentionally ships a single stable light UI theme; the former dark theme option is disabled.
 

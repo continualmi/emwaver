@@ -48,6 +48,7 @@ Expected public assets:
 - `EMWaver-macos.dmg` — macOS preview DMG
 - `EMWaverSetup-windows-x64.exe` — Windows installer
 - `EMWaver-windows-x64.zip` — Windows portable package
+- `emwaver-windows-update.json` — Windows desktop update metadata fallback
 - `EMWaver-linux-amd64.deb` — Linux Debian/Ubuntu preview package, published only when Linux packaging is ready for preview
 - `EMWaver-linux-x64.tar.gz` — Linux generic tarball, published only when Linux packaging is ready for preview
 
@@ -100,6 +101,8 @@ Use `.github/workflows/ios-testflight-release.yml` for TestFlight and `.github/w
 
 `.github/workflows/macos-dmg-release.yml` builds and publishes `EMWaver-macos.dmg`. Treat this as the preview desktop artifact unless/until Developer ID signing and notarization are added.
 
+The macOS app includes Sparkle for app-level update checks. Production-quality Sparkle updates require Developer ID signing/notarization plus Sparkle EdDSA signing. The public appcast URL is `https://emwaver.ai/updates/macos/appcast.xml`; keep it EMWaver-owned even when the DMG payload is hosted by GitHub Releases.
+
 ## Linux
 
 `.github/workflows/linux-deb-release.yml` (`Linux DEB Release`) builds the native Rust + GTK4/libadwaita app on Ubuntu, runs Linux support-crate tests, and publishes:
@@ -118,3 +121,5 @@ Linux release packages are preview artifacts for now; keep Linux off public inst
 - `WINDOWS_CODE_SIGNING_CERT_BASE64`
 - `WINDOWS_CODE_SIGNING_CERT_PASSWORD`
 - `WINDOWS_SIGNING_TIMESTAMP_URL` (optional; defaults to DigiCert timestamping)
+
+The Windows app checks `https://emwaver.ai/updates/windows/latest.json` for app updates and falls back to the same metadata published as `emwaver-windows-update.json` on the GitHub Release. The manifest should use a version-pinned installer URL and include the installer SHA-256.

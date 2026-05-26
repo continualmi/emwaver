@@ -80,6 +80,7 @@
                                 <MenuItem Header="Rename" Click="OnRenameClick" />
                                 <MenuItem Header="Delete" Click="OnDeleteClick" />
                                 <Separator />
+                                <MenuItem Header="Check for Updates…" Click="OnCheckForUpdatesClick" />
                                 <MenuItem Header="Settings…" Click="OnSettingsClick" />
                             </ContextMenu>
                         </Button.ContextMenu>

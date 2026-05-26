@@ -130,6 +130,14 @@ public partial class MainWindow : Window
         MoreButton.ContextMenu.PlacementTarget = MoreButton;
         MoreButton.ContextMenu.IsOpen = true;
     }
+    private void OnCheckForUpdatesClick(object sender, RoutedEventArgs e)
+    {
+        var window = new AppUpdateWindow(AppServices.AppUpdates)
+        {
+            Owner = this,
+        };
+        window.ShowDialog();
+    }
     private void OnSettingsClick(object sender, RoutedEventArgs e)
     {
         var vm = new ViewModels.SettingsViewModel(AppServices.Settings);

@@ -26,6 +26,7 @@ struct EMWaverApp: App {
     @StateObject private var previewManager = ScriptPreviewManager()
     @StateObject private var scriptSessions = MacScriptSessionManager()
     @StateObject private var appRouter = AppRouter()
+    @StateObject private var appUpdater = MacAppUpdateController()
 
     var body: some Scene {
         WindowGroup {
@@ -40,6 +41,12 @@ struct EMWaverApp: App {
                 }
         }
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") {
+                    appUpdater.checkForUpdates()
+                }
+            }
+
             CommandMenu("Device") {
                 if device.isConnected {
                     Text("Status: Connected")

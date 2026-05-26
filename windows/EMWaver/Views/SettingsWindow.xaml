@@ -40,6 +40,16 @@
                 </StackPanel>
             </GroupBox>
 
+            <!-- App updates section -->
+            <GroupBox Header="App updates" Padding="12" Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="Check for desktop app updates. Local scripts and device access do not require an account."
+                               FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}"
+                               TextWrapping="Wrap" Margin="0,0,0,8" />
+                    <Button Content="Check for Updates…" Width="150" HorizontalAlignment="Left" Click="OnCheckForUpdatesClick" />
+                </StackPanel>
+            </GroupBox>
+
         </StackPanel>
 
         <StackPanel Grid.Row="1" HorizontalAlignment="Right" Margin="0,16,0,0">

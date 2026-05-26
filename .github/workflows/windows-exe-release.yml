@@ -142,6 +142,25 @@ jobs:
           if (-not $signtool) { throw "signtool.exe was not found." }
           & $signtool.FullName sign /fd SHA256 /tr $timestampUrl /td SHA256 /a dist/EMWaverSetup-windows-x64.exe
 
+      - name: Generate Windows update manifest
+        shell: pwsh
+        run: |
+          $installer = "dist/EMWaverSetup-windows-x64.exe"
+          $hash = (Get-FileHash -Algorithm SHA256 $installer).Hash.ToLowerInvariant()
+          $size = (Get-Item $installer).Length
+          $tag = $env:EMWAVER_RELEASE_TAG
+          $version = $env:EMWAVER_RELEASE_VERSION
+          $manifest = [ordered]@{
+            version = $version
+            url = "https://github.com/continualmi/emwaver/releases/download/$tag/EMWaverSetup-windows-x64.exe"
+            sha256 = $hash
+            size = $size
+            notes = "https://github.com/continualmi/emwaver/releases/tag/$tag"
+            publishedAt = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+            minimumSupportedVersion = "1.0.0"
+          }
+          $manifest | ConvertTo-Json -Depth 4 | Out-File -FilePath dist/emwaver-windows-update.json -Encoding utf8
+
       - name: Verify target GitHub Release exists
         env:
           GH_TOKEN: ${{ github.token }}
@@ -154,6 +173,7 @@ jobs:
           path: |
             dist/EMWaverSetup-windows-x64.exe
             dist/EMWaver-windows-x64.zip
+            dist/emwaver-windows-update.json
 
       - name: Publish release asset
         uses: softprops/action-gh-release@v2
@@ -166,3 +186,4 @@ jobs:
           files: |
             dist/EMWaverSetup-windows-x64.exe
             dist/EMWaver-windows-x64.zip
+            dist/emwaver-windows-update.json

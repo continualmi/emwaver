@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+  <channel>
+    <title>EMWaver macOS Updates</title>
+    <link>https://emwaver.ai/updates/macos/appcast.xml</link>
+    <description>Public EMWaver macOS update feed.</description>
+  </channel>
+</rss>

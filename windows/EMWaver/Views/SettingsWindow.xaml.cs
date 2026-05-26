@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Windows;
+using EMWaver;
 using EMWaver.ViewModels;
 
 namespace EMWaver.Views;
@@ -21,5 +22,14 @@ public partial class SettingsWindow : Window
     private void OnMgptLinkClick(object sender, RoutedEventArgs e)
     {
         Process.Start(new ProcessStartInfo("https://mdl.continualmi.com/mgpt-api") { UseShellExecute = true });
+    }
+
+    private void OnCheckForUpdatesClick(object sender, RoutedEventArgs e)
+    {
+        var window = new AppUpdateWindow(AppServices.AppUpdates)
+        {
+            Owner = this,
+        };
+        window.ShowDialog();
     }
 }
