@@ -22,8 +22,8 @@ import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
 import android.widget.ProgressBar;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -51,13 +51,17 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
     private static final String[] ESP_TARGET_LABELS = {"ESP32-S3", "ESP32-S2", "ESP32"};
     private static final String[] ESP_TARGET_VALUES = {"esp32s3", "esp32s2", "esp32"};
 
-    private TextView dfuConnectedBanner;
-    private View instructionsCard;
+    private TextView titleText;
+    private TextView subtitleText;
+    private View stmPanel;
+    private View stmPromptCard;
+    private TextView stmPromptTitle;
+    private TextView stmPromptBody;
+    private View espPanel;
     private View espTargetContainer;
     private Spinner espTargetSpinner;
-
-    private TextView dfuInstructions;
-    private Button enterUpdateModeButton;
+    private TextView espBootloaderText;
+    private Button espRefreshButton;
 
     private TextView errorText;
     private View progressContainer;
@@ -67,6 +71,8 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
 
     private TextView doneText;
     private Button updateButton;
+    private Button notNowButton;
+    private Button tryAgainButton;
     private Button closeButton;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -109,12 +115,17 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
     ) {
         View root = inflater.inflate(R.layout.dialog_update_device, container, false);
 
-        instructionsCard = root.findViewById(R.id.instructions_card);
+        titleText = root.findViewById(R.id.update_title);
+        subtitleText = root.findViewById(R.id.update_subtitle);
+        stmPanel = root.findViewById(R.id.stm_panel);
+        stmPromptCard = root.findViewById(R.id.stm_prompt_card);
+        stmPromptTitle = root.findViewById(R.id.stm_prompt_title);
+        stmPromptBody = root.findViewById(R.id.stm_prompt_body);
+        espPanel = root.findViewById(R.id.esp_panel);
         espTargetContainer = root.findViewById(R.id.esp_target_container);
         espTargetSpinner = root.findViewById(R.id.esp_target_spinner);
-        dfuInstructions = root.findViewById(R.id.dfu_instructions);
-        enterUpdateModeButton = root.findViewById(R.id.enter_update_mode_button);
-        dfuConnectedBanner = root.findViewById(R.id.dfu_connected_banner);
+        espBootloaderText = root.findViewById(R.id.esp_bootloader_text);
+        espRefreshButton = root.findViewById(R.id.esp_refresh_button);
         errorText = root.findViewById(R.id.update_error_text);
         progressContainer = root.findViewById(R.id.progress_container);
         progressMessage = root.findViewById(R.id.progress_message);
@@ -122,6 +133,8 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
         progressBar = root.findViewById(R.id.progress_bar);
         doneText = root.findViewById(R.id.update_done_text);
         updateButton = root.findViewById(R.id.update_device_button);
+        notNowButton = root.findViewById(R.id.not_now_button);
+        tryAgainButton = root.findViewById(R.id.try_again_button);
         closeButton = root.findViewById(R.id.close_button);
 
         closeButton.setOnClickListener(v -> {
@@ -130,10 +143,22 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
             }
         });
 
-        updateButton.setOnClickListener(v -> startUpdate());
-
-        if (enterUpdateModeButton != null) {
-            enterUpdateModeButton.setOnClickListener(v -> enterUpdateMode());
+        updateButton.setOnClickListener(v -> handlePrimaryAction());
+        if (notNowButton != null) {
+            notNowButton.setOnClickListener(v -> {
+                if (!isFlashing) {
+                    dismiss();
+                }
+            });
+        }
+        if (tryAgainButton != null) {
+            tryAgainButton.setOnClickListener(v -> {
+                clearError();
+                handlePrimaryAction();
+            });
+        }
+        if (espRefreshButton != null) {
+            espRefreshButton.setOnClickListener(v -> updateDfuStateUi());
         }
         if (espTargetSpinner != null) {
             ArrayAdapter<String> adapter = new ArrayAdapter<>(
@@ -155,6 +180,10 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
     @Override
     public void onStart() {
         super.onStart();
+        if (getDialog() != null && getDialog().getWindow() != null) {
+            int width = Math.min(dp(540), getResources().getDisplayMetrics().widthPixels - dp(32));
+            getDialog().getWindow().setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
+        }
         DeviceConnectionManager mgr = DeviceConnectionManager.getInstance(requireContext());
         usbService = mgr.getUsbService();
         if (usbService != null) {
@@ -222,42 +251,16 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
         }
 
         boolean dfuReady = dfuDevicePresent && hasPermission;
-        boolean espBoardConnected = isEspBoardConnected() || espSerialDevicePresent;
-        boolean canEnterUpdate = runConnected && !dfuDevicePresent && !espBoardConnected;
         boolean espRunModeConnected = isEspBoardConnected();
+        boolean espWorkflow = espRunModeConnected || espSerialDevicePresent;
+        boolean hasError = hasError();
         String espBoardType = espRunModeConnected ? normalizeBoardType(usbService.getConnectedBoardType()) : null;
         selectEspTarget(espBoardType);
 
-        if (espBoardConnected && !isFlashing && !updateDone) {
-            showError(espUpdateUnavailableMessage());
-        }
-        if (espTargetContainer != null) {
-            espTargetContainer.setVisibility((espBoardConnected && !updateDone) ? View.VISIBLE : View.GONE);
-            espTargetContainer.setEnabled(!espRunModeConnected);
-        }
-        if (espTargetSpinner != null) {
-            espTargetSpinner.setEnabled(!espRunModeConnected && !isFlashing);
-        }
-
-        if (instructionsCard != null) {
-            instructionsCard.setVisibility((!dfuReady && !espBoardConnected && !updateDone) ? View.VISIBLE : View.GONE);
-        }
-        if (dfuConnectedBanner != null) {
-            dfuConnectedBanner.setVisibility((dfuReady && !updateDone) ? View.VISIBLE : View.GONE);
-        }
-        if (dfuInstructions != null) {
-            dfuInstructions.setVisibility((!dfuReady && !espBoardConnected && !updateDone) ? View.VISIBLE : View.GONE);
-        }
-
-        if (enterUpdateModeButton != null) {
-            enterUpdateModeButton.setEnabled(canEnterUpdate && !isFlashing);
-        }
-
-        if (updateButton != null) {
-            updateButton.setEnabled(((dfuReady && !espBoardConnected) || espBoardConnected) && !isFlashing);
-        }
-        if (closeButton != null) {
-            closeButton.setEnabled(!isFlashing);
+        if (espWorkflow) {
+            showEspState(espSerialDevicePresent, espRunModeConnected, hasError);
+        } else {
+            showStmState(runConnected, dfuReady, hasError);
         }
     }
 
@@ -284,11 +287,23 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
         } catch (Throwable ignored) {
         }
         mgr.disconnect();
-
-        if (dfuInstructions != null) {
-            dfuInstructions.setVisibility(View.VISIBLE);
-        }
         updateDfuStateUi();
+    }
+
+    private void handlePrimaryAction() {
+        if (isFlashing) {
+            return;
+        }
+        if (isEspBoardConnected() || findEspSerialDevice() != null) {
+            startUpdate();
+            return;
+        }
+        boolean dfuReady = usbService != null && usbService.isFlashDeviceConnected() && usbService.hasUsbPermission();
+        if (dfuReady) {
+            startUpdate();
+            return;
+        }
+        enterUpdateMode();
     }
 
     private void startUpdate() {
@@ -452,6 +467,87 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
             index = 0;
         }
         return ESP_TARGET_VALUES[index];
+    }
+
+    private void showStmState(boolean runConnected, boolean dfuReady, boolean hasError) {
+        setVisible(stmPanel, true);
+        setVisible(espPanel, false);
+        setVisible(stmPromptCard, !hasError && !isFlashing && !updateDone);
+
+        if (titleText != null) {
+            titleText.setText(updateDone ? "Reconnect device" : dfuReady ? "Flash device" : "Install firmware");
+        }
+        if (subtitleText != null) {
+            subtitleText.setText(updateDone
+                    ? "Firmware installed. Disconnect and reconnect the device to continue."
+                    : dfuReady
+                    ? "The device is in Update Mode and ready to flash."
+                    : runConnected
+                    ? "This firmware can be updated from the local app."
+                    : "Follow the prompts to keep the device on managed EMWaver firmware.");
+        }
+        if (stmPromptTitle != null && stmPromptBody != null) {
+            if (dfuReady) {
+                stmPromptTitle.setText("Do you want to flash the device?");
+                stmPromptBody.setText("The board is connected in Update Mode. Flashing will install the managed EMWaver firmware bundled with this app.");
+            } else if (runConnected) {
+                stmPromptTitle.setText("Do you want to put this device into Update Mode?");
+                stmPromptBody.setText("EMWaver can talk to the board. The app can switch it into Update Mode and prepare the local flash flow for you.");
+            } else {
+                stmPromptTitle.setText("Waiting for a firmware action");
+                stmPromptBody.setText("Connect a supported board in Run Mode or Update Mode and EMWaver will guide the next step.");
+            }
+        }
+
+        setVisible(notNowButton, !isFlashing && !updateDone && !hasError && (runConnected || dfuReady));
+        setVisible(tryAgainButton, !isFlashing && !updateDone && hasError && (runConnected || dfuReady));
+        setPrimaryVisible(!isFlashing && !updateDone && !hasError && (runConnected || dfuReady));
+        if (updateButton != null) {
+            updateButton.setText(dfuReady ? "Flash" : "Enter Update Mode");
+            updateButton.setEnabled(runConnected || dfuReady);
+        }
+        if (closeButton != null) {
+            closeButton.setText(updateDone ? "Done" : "Close");
+            closeButton.setEnabled(!isFlashing);
+        }
+    }
+
+    private void showEspState(boolean espSerialDevicePresent, boolean espRunModeConnected, boolean hasError) {
+        setVisible(stmPanel, false);
+        setVisible(espPanel, true);
+
+        if (titleText != null) {
+            titleText.setText("Flash ESP32");
+        }
+        if (subtitleText != null) {
+            subtitleText.setText("Use the board's flash-capable serial USB connection.");
+        }
+        if (espBootloaderText != null) {
+            espBootloaderText.setText(espSerialDevicePresent
+                    ? "Detected."
+                    : "Not detected yet. Put the board in bootloader mode, then tap Refresh.");
+            espBootloaderText.setTextColor(getResources().getColor(
+                    espSerialDevicePresent ? R.color.colorPrimary : R.color.textSecondary));
+        }
+
+        setVisible(espTargetContainer, !updateDone);
+        if (espTargetSpinner != null) {
+            espTargetSpinner.setEnabled(!espRunModeConnected && !isFlashing);
+        }
+        if (espRefreshButton != null) {
+            espRefreshButton.setEnabled(!isFlashing);
+        }
+        setVisible(notNowButton, false);
+        setVisible(tryAgainButton, !isFlashing && !updateDone && hasError);
+        setPrimaryVisible(!isFlashing && !updateDone && !hasError);
+        if (updateButton != null) {
+            updateButton.setText("Flash firmware");
+            updateButton.setEnabled(espSerialDevicePresent || espRunModeConnected);
+        }
+        if (closeButton != null) {
+            closeButton.setText(updateDone ? "Done" : "Close");
+            closeButton.setEnabled(!isFlashing);
+        }
     }
 
     private void readBlockOrFail(byte[] buffer, int block, int numBytes) throws Exception {
@@ -697,6 +793,7 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
             errorText.setText(message != null ? message : "");
             errorText.setVisibility(View.VISIBLE);
         }
+        updateDfuStateUi();
     }
 
     private void clearError() {
@@ -704,6 +801,27 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
             errorText.setText("");
             errorText.setVisibility(View.GONE);
         }
+    }
+
+    private boolean hasError() {
+        return errorText != null
+                && errorText.getVisibility() == View.VISIBLE
+                && errorText.getText() != null
+                && errorText.getText().toString().trim().length() > 0;
+    }
+
+    private void setPrimaryVisible(boolean visible) {
+        setVisible(updateButton, visible);
+    }
+
+    private static void setVisible(@Nullable View view, boolean visible) {
+        if (view != null) {
+            view.setVisibility(visible ? View.VISIBLE : View.GONE);
+        }
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     private final BroadcastReceiver connectReceiver = new BroadcastReceiver() {
