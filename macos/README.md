@@ -113,6 +113,7 @@ Representative views:
 - `SettingsView.swift`
 - firmware/device connection sheets.
 - app update menu entry through Sparkle (`MacAppUpdateController.swift`).
+- app version/build display through `MacAppBuildInfo.swift`.
 
 Script sessions:
 - macOS owns local multi-session script runs through a native session manager.

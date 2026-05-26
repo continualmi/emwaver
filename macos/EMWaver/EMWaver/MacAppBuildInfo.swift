@@ -1,0 +1,29 @@
+import Foundation
+
+enum MacAppBuildInfo {
+    static var toolbarVersionText: String {
+        let suffix = commitShort.isEmpty ? buildNumber : commitShort
+        return suffix.isEmpty || suffix == "unknown"
+            ? "App \(displayVersion)"
+            : "App \(displayVersion) \(suffix)"
+    }
+
+    static var displayVersion: String {
+        let version = bundleValue("CFBundleShortVersionString")
+        return version.isEmpty ? "unknown" : version
+    }
+
+    static var buildNumber: String {
+        let build = bundleValue("CFBundleVersion")
+        return build.isEmpty ? "unknown" : build
+    }
+
+    static var commitShort: String {
+        let commit = bundleValue("EMWaverCommit")
+        return commit.isEmpty ? "" : String(commit.prefix(7))
+    }
+
+    private static func bundleValue(_ key: String) -> String {
+        Bundle.main.object(forInfoDictionaryKey: key) as? String ?? ""
+    }
+}

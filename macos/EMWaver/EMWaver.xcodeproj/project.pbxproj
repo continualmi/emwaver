@@ -480,7 +480,9 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				EMWAVER_COMMIT = "";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "EMWaver uses Bluetooth to connect to nearby ESP32 boards for local scripts and hardware control.";
+				INFOPLIST_KEY_EMWaverCommit = "$(EMWAVER_COMMIT)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_SUFeedURL = "https://emwaver.ai/updates/macos/appcast.xml";
 				INFOPLIST_KEY_SUPublicEDKey = "$(SPARKLE_PUBLIC_ED_KEY)";
@@ -518,7 +520,9 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				EMWAVER_COMMIT = "";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "EMWaver uses Bluetooth to connect to nearby ESP32 boards for local scripts and hardware control.";
+				INFOPLIST_KEY_EMWaverCommit = "$(EMWAVER_COMMIT)";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_SUFeedURL = "https://emwaver.ai/updates/macos/appcast.xml";
 				INFOPLIST_KEY_SUPublicEDKey = "$(SPARKLE_PUBLIC_ED_KEY)";

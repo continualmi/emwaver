@@ -58,6 +58,7 @@ jobs:
         working-directory: macos/EMWaver
         run: |
           set -euo pipefail
+          short_sha="${GITHUB_SHA:0:7}"
           xcodebuild \
             -project EMWaver.xcodeproj \
             -scheme EMWaver \
@@ -66,6 +67,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             MARKETING_VERSION="${EMWAVER_RELEASE_VERSION}" \
             SPARKLE_PUBLIC_ED_KEY="${SPARKLE_PUBLIC_ED_KEY}" \
+            EMWAVER_COMMIT="${short_sha}" \
             build
 
       - name: Create DMG

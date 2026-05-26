@@ -14,6 +14,7 @@ struct ContentView: View {
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
     @ObservedObject var hostSessions: HostSessionManager
     @ObservedObject var scriptSessions: MacScriptSessionManager
+    @ObservedObject var appUpdater: MacAppUpdateController
     @EnvironmentObject private var auth: AuthenticationManager
     @EnvironmentObject private var appRouter: AppRouter
     @Environment(\.openURL) private var openURL
@@ -167,6 +168,13 @@ struct ContentView: View {
                 localDevicePicker
             }
 
+            ToolbarItem(placement: .automatic) {
+                Text(MacAppBuildInfo.toolbarVersionText)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .help("EMWaver app version")
+            }
+
         }
         .sheet(isPresented: $auth.isSignInSheetPresented) {
             SignInSheet()
@@ -186,7 +194,7 @@ struct ContentView: View {
             FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
         }
         .sheet(isPresented: $showingSettings) {
-            SettingsView(device: device)
+            SettingsView(device: device, appUpdater: appUpdater)
         }
         // Agent lives in the right-side drawer (ScriptsRootView) on macOS.
         .task {
@@ -391,6 +399,7 @@ struct ContentView: View {
         firmwareUpdater: FirmwareUpdateManager(),
         hostSessions: HostSessionManager(),
         scriptSessions: MacScriptSessionManager(),
+        appUpdater: MacAppUpdateController(),
         previewManager: ScriptPreviewManager()
     )
     .environmentObject(AuthenticationManager())

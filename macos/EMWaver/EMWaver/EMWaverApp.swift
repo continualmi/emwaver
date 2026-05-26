@@ -30,7 +30,7 @@ struct EMWaverApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(device: device, firmwareUpdater: firmwareUpdater, hostSessions: hostSessions, scriptSessions: scriptSessions, previewManager: previewManager)
+            ContentView(device: device, firmwareUpdater: firmwareUpdater, hostSessions: hostSessions, scriptSessions: scriptSessions, appUpdater: appUpdater, previewManager: previewManager)
                 .environmentObject(auth)
                 .environmentObject(appRouter)
                 .task {

@@ -3,11 +3,13 @@ import SwiftUI
 /// App-level settings hub.
 struct SettingsView: View {
     @ObservedObject var device: MacUSBManager
+    @ObservedObject var appUpdater: MacAppUpdateController
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @AppStorage(MacUSBManager.transportDebugLoggingEnabledDefaultsKey) private var transportDebugLoggingEnabled = true
 
     private let mgptApiURL = URL(string: "https://mdl.continualmi.com/mgpt-api")!
+    private let updateFeedURL = URL(string: "https://emwaver.ai/updates/macos/appcast.xml")!
 
     var body: some View {
         NavigationStack {
@@ -24,6 +26,22 @@ struct SettingsView: View {
 
                 Section("Device access") {
                     Text("Local scripts and hardware control work immediately.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("App") {
+                    LabeledContent("Version", value: MacAppBuildInfo.displayVersion)
+                    LabeledContent("Build", value: MacAppBuildInfo.buildNumber)
+                    if !MacAppBuildInfo.commitShort.isEmpty {
+                        LabeledContent("Commit", value: MacAppBuildInfo.commitShort)
+                    }
+
+                    Button("Check for Updates…") {
+                        appUpdater.checkForUpdates()
+                    }
+
+                    Text("Updates are checked from \(updateFeedURL.absoluteString). Local scripts and hardware control do not require an account.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -53,5 +71,5 @@ struct SettingsView: View {
 }
 
 #Preview {
-    SettingsView(device: MacUSBManager())
+    SettingsView(device: MacUSBManager(), appUpdater: MacAppUpdateController())
 }
