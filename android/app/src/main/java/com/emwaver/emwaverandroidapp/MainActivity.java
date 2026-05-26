@@ -225,8 +225,8 @@ public class MainActivity extends AppCompatActivity {
             commit = commit.substring(0, 7);
         }
         return commit.isEmpty()
-                ? String.format(Locale.US, "EMWaver App %s", version)
-                : String.format(Locale.US, "EMWaver App %s %s", version, commit);
+                ? String.format(Locale.US, "EMWaver %s", version)
+                : String.format(Locale.US, "EMWaver %s %s", version, commit);
     }
 
     private int connectionIconRes(

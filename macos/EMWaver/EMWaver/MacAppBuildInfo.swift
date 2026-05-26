@@ -2,10 +2,7 @@ import Foundation
 
 enum MacAppBuildInfo {
     static var toolbarVersionText: String {
-        let suffix = commitShort.isEmpty ? buildNumber : commitShort
-        return suffix.isEmpty || suffix == "unknown"
-            ? "App \(displayVersion)"
-            : "App \(displayVersion) \(suffix)"
+        commitShort.isEmpty ? displayVersion : "\(displayVersion) \(commitShort)"
     }
 
     static var displayVersion: String {

@@ -31,9 +31,9 @@ public partial class MainWindow : Window
 
         // Set window icon and visible build/version marker.
         TrySetWindowIcon();
-        AppVersionText.Text = $"App {AppBuildInfo.ShortVersion}";
+        AppVersionText.Text = AppBuildInfo.ShortVersion;
         AppVersionText.ToolTip = AppBuildInfo.DiagnosticsLine;
-        Title = $"EMWaver {AppVersionText.Text}";
+        Title = $"EMWaver {AppBuildInfo.ShortVersion}";
 
         // Subscribe to device state changes.
         _device.PropertyChanged += (_, __) => Dispatcher.Invoke(UpdateDeviceStatus);
