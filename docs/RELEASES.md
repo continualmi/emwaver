@@ -70,7 +70,7 @@ To refresh the current public release assets manually from the CLI, run:
 gh workflow run android-apk-release.yml
 gh workflow run macos-dmg-release.yml
 gh workflow run windows-exe-release.yml
-gh workflow run linux-release.yml
+gh workflow run linux-deb-release.yml
 ```
 
 To update a non-current existing release, pass it explicitly, for example `-f tag=1.0.2`.
@@ -102,7 +102,7 @@ Use `.github/workflows/ios-testflight-release.yml` for TestFlight and `.github/w
 
 ## Linux
 
-`.github/workflows/linux-release.yml` builds the native Rust + GTK4/libadwaita app on Ubuntu, runs Linux support-crate tests, and publishes:
+`.github/workflows/linux-deb-release.yml` (`Linux DEB Release`) builds the native Rust + GTK4/libadwaita app on Ubuntu, runs Linux support-crate tests, and publishes:
 
 - `EMWaver-linux-amd64.deb`
 - `EMWaver-linux-x64.tar.gz`

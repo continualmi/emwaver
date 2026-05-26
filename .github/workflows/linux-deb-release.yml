@@ -1,4 +1,4 @@
-name: Linux Release
+name: Linux DEB Release
 
 on:
   workflow_dispatch:

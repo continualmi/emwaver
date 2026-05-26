@@ -1,4 +1,4 @@
-name: Deploy EMWaver static site to Azure Storage
+name: Deploy emwaver.ai site
 
 on:
   workflow_dispatch:
@@ -28,7 +28,7 @@ jobs:
         working-directory: web
         run: npm run build:static-sites
 
-      - name: Upload EMWaver static files to Azure Storage
+      - name: Upload emwaver.ai site
         uses: azure/cli@v2
         env:
           AZURE_EMWAVER_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_EMWAVER_STORAGE_CONNECTION_STRING }}

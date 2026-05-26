@@ -127,7 +127,7 @@ Full JavaScript runtime parity beyond the initial command/gpio/device API, local
 
 ## Packaging
 
-Linux preview packaging is owned by `.github/workflows/linux-release.yml` and `linux/scripts/package-linux.sh`.
+Linux preview packaging is owned by `.github/workflows/linux-deb-release.yml` (`Linux DEB Release`) and `linux/scripts/package-linux.sh`.
 
 The packaging path currently produces:
 
