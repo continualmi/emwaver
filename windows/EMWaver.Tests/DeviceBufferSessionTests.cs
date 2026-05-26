@@ -78,6 +78,24 @@ public sealed class DeviceBufferSessionTests
         Assert.Equal(blePacket, ble.GetTxSnapshot());
     }
 
+    [Fact]
+    public void SysexParserAcceptsBlePaddedNotifications()
+    {
+        var session = new DeviceBufferSession("ble:test");
+        var command = Packet(0x77);
+        var emptyStream = new byte[NativeBufferRust.PacketSizeBytes];
+        var sysex = UsbMidiSysex.EncodeSuperframe(Superframe(command, emptyStream));
+
+        Assert.NotNull(sysex);
+        var padded = new byte[64];
+        Array.Copy(sysex!, padded, sysex!.Length);
+
+        session.FeedSysexBytes(padded, 700);
+
+        Assert.Equal((ulong)1, session.GetRxPacketCount());
+        Assert.Equal(command, session.NextRxPacket()!.Value.packet);
+    }
+
     private static byte[] Packet(byte value)
     {
         return Enumerable.Repeat(value, NativeBufferRust.PacketSizeBytes).ToArray();

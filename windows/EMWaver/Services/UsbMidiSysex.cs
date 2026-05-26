@@ -52,8 +52,11 @@ internal static class UsbMidiSysex
 
     internal static byte[]? DecodeSysexToSuperframe(ReadOnlySpan<byte> sysex)
     {
-        // Minimal validation.
-        if (sysex.Length < 1 + 1 + Header.Length + EncodedLen + 1)
+        // Minimal validation. ESP BLE firmware may deliver command responses as a
+        // 64-byte padded notification with the real 48-byte SysEx packet at the
+        // start and zero padding after F7, so validate the embedded fixed frame.
+        int expectedLen = 1 + 1 + Header.Length + EncodedLen + 1;
+        if (sysex.Length < expectedLen)
         {
             return null;
         }
@@ -61,22 +64,22 @@ internal static class UsbMidiSysex
         {
             return null;
         }
-        if (sysex[sysex.Length - 1] != SysExEnd)
+        if (sysex[expectedLen - 1] != SysExEnd)
         {
             return null;
+        }
+        for (int i = expectedLen; i < sysex.Length; i++)
+        {
+            if (sysex[i] != 0)
+            {
+                return null;
+            }
         }
         if (sysex[1] != ManufacturerId)
         {
             return null;
         }
         if (sysex[2] != Header[0] || sysex[3] != Header[1] || sysex[4] != Header[2])
-        {
-            return null;
-        }
-
-        // Fixed-size frame: require the exact payload length.
-        int expectedLen = 1 + 1 + Header.Length + EncodedLen + 1;
-        if (sysex.Length != expectedLen)
         {
             return null;
         }
