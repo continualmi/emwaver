@@ -4,13 +4,6 @@ using System.Text.Json;
 
 namespace EMWaver.Services;
 
-public enum AppThemeMode
-{
-    System,
-    Light,
-    Dark
-}
-
 public sealed class AppSettings
 {
     private static readonly object _lock = new();
@@ -19,12 +12,9 @@ public sealed class AppSettings
 
     private sealed class SettingsModel
     {
-        // App appearance selection.
-        public string AppTheme { get; set; } = "system";
         public bool ShowTransportLog { get; set; } = false;
         public bool TransportDebugLoggingEnabled { get; set; } = true;
         public string? LastOpenScript { get; set; }
-
     }
 
     private static string GetSettingsPath()
@@ -46,10 +36,12 @@ public sealed class AppSettings
 
             var json = File.ReadAllText(path);
 
-            // Migration: Windows used to have editor-mode settings ("Code (JS)" vs "Simple").
-            // We no longer support variants on Windows; ignore and scrub those keys when present.
+            // Migration: Windows used to have editor-mode settings ("Code (JS)" vs "Simple")
+            // and app theme settings. We no longer support those variants on Windows;
+            // ignore and scrub those keys when present.
             var needsScrub = json.Contains("\"EditorMode\"", StringComparison.OrdinalIgnoreCase)
-                || json.Contains("\"UseMonacoEditor\"", StringComparison.OrdinalIgnoreCase);
+                || json.Contains("\"UseMonacoEditor\"", StringComparison.OrdinalIgnoreCase)
+                || json.Contains("\"AppTheme\"", StringComparison.OrdinalIgnoreCase);
 
             var model = JsonSerializer.Deserialize<SettingsModel>(json) ?? new SettingsModel();
 
@@ -142,46 +134,5 @@ public sealed class AppSettings
             }
             Changed?.Invoke();
         }
-    }
-
-    public AppThemeMode Theme
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return ParseTheme(Load().AppTheme);
-            }
-        }
-        set
-        {
-            lock (_lock)
-            {
-                var m = Load();
-                m.AppTheme = ToStorageValue(value);
-                Save(m);
-            }
-            Changed?.Invoke();
-        }
-    }
-
-    private static AppThemeMode ParseTheme(string? value)
-    {
-        return (value ?? "").Trim().ToLowerInvariant() switch
-        {
-            "light" => AppThemeMode.Light,
-            "dark" => AppThemeMode.Dark,
-            _ => AppThemeMode.System,
-        };
-    }
-
-    private static string ToStorageValue(AppThemeMode value)
-    {
-        return value switch
-        {
-            AppThemeMode.Light => "light",
-            AppThemeMode.Dark => "dark",
-            _ => "system",
-        };
     }
 }

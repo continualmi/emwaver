@@ -110,8 +110,10 @@ Windows now follows the same board-class split as macOS:
 ## 3.5 App settings and appearance
 
 Settings surface includes app-level preferences such as:
-- appearance mode (`System`, `Light`, `Dark`),
+- script diagnostics visibility,
 - local Agent API key configuration.
+
+The Windows app intentionally ships a single stable light UI theme; the former dark theme option is disabled.
 
 The Agent pane stores local chat conversations and messages in SQLite at
 `%LOCALAPPDATA%/EMWaver/agent-chat.sqlite`. The stored chats are local UI state;

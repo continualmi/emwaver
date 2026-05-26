@@ -10,7 +10,7 @@ public partial class App : Application
     private void OnStartup(object sender, StartupEventArgs e)
     {
         EnvBootstrap.LoadForDevIfAvailable();
-        ApplyTheme(AppServices.Settings.Theme);
+        ApplyTheme();
         AppServices.Settings.Changed += OnSettingsChanged;
 
         var mainWindow = new MainWindow();
@@ -19,22 +19,14 @@ public partial class App : Application
 
     private void OnSettingsChanged()
     {
-        Dispatcher.Invoke(() => ApplyTheme(AppServices.Settings.Theme));
+        Dispatcher.Invoke(ApplyTheme);
     }
 
-    internal void ApplyTheme(AppThemeMode theme)
+    internal void ApplyTheme()
     {
-        // Clear existing theme dictionaries and reload.
+        // Windows intentionally ships a single stable light UI theme.
         Resources.MergedDictionaries.Clear();
-        var themePath = theme switch
-        {
-            AppThemeMode.Light => "Themes/Light.xaml",
-            AppThemeMode.Dark => "Themes/Dark.xaml",
-            _ => "Themes/Light.xaml",
-        };
-
-        var uri = new Uri(themePath, UriKind.Relative);
-        Resources.MergedDictionaries.Add(new ResourceDictionary { Source = uri });
+        Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("Themes/Light.xaml", UriKind.Relative) });
     }
 
     protected override void OnExit(ExitEventArgs e)

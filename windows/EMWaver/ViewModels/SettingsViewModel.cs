@@ -14,19 +14,6 @@ public class SettingsViewModel : INotifyPropertyChanged
         _settings = settings;
     }
 
-    public AppThemeMode Theme
-    {
-        get => _settings.Theme;
-        set
-        {
-            if (_settings.Theme != value)
-            {
-                _settings.Theme = value;
-                OnPropertyChanged();
-            }
-        }
-    }
-
     public bool ShowTransportLog
     {
         get => _settings.ShowTransportLog;

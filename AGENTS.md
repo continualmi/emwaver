@@ -282,7 +282,9 @@ Workflow:
 - sync branch before work (`git pull --rebase`),
 - make focused commits when a logical unit of work is complete,
 - commit and push to `main` whenever new work is completed and verified,
-- agents must not leave completed verified work unpushed unless the user explicitly says not to commit or push for that work.
+- default end-of-task behavior is to run a compact validation/status check, commit the finished work, and push it to `main`,
+- if full validation is not practical in-agent (for example Windows/Xcode/hardware-only checks), still commit and push the focused change with a clear validation note instead of leaving it unpushed,
+- agents must not leave completed work unpushed unless the user explicitly says not to commit or push for that work.
 
 ## 9) Org Workspace
 
