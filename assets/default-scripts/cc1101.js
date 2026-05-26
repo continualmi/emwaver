@@ -8,7 +8,8 @@ import { spi } from "emw-spi";
 var SCRIPT_NAME = "cc1101";
 
 function normalizeBoardType(value) {
-  var board = String(value || "").trim().toLowerCase();
+  var board = String(value || "").trim().toLowerCase().replace("-", "");
+  if (board === "esp32") return "esp32";
   if (board === "esp32s2") return "esp32s2";
   if (board === "esp32s3") return "esp32s3";
   return "stm32f042";
@@ -27,19 +28,27 @@ function isNumericPinValue(value) {
   return typeof value === "number" && isFinite(value);
 }
 
-function espPinLabel(pin) {
+function espPinLabel(pin, board) {
   if (pin === 2) return "GPIO2 (GDO0 default)";
-  if (pin === 10) return "GPIO10 (CC1101 CS default)";
-  if (pin === 11) return "GPIO11 (SPI MOSI default)";
-  if (pin === 12) return "GPIO12 (SPI SCK default)";
-  if (pin === 13) return "GPIO13 (SPI MISO default)";
+  if (board === "esp32") {
+    if (pin === 18) return "GPIO18 (SPI SCK default)";
+    if (pin === 19) return "GPIO19 (SPI MISO default)";
+    if (pin === 21) return "GPIO21 (CC1101 CS default)";
+    if (pin === 23) return "GPIO23 (SPI MOSI default)";
+  } else {
+    if (pin === 10) return "GPIO10 (CC1101 CS default)";
+    if (pin === 11) return "GPIO11 (SPI MOSI default)";
+    if (pin === 12) return "GPIO12 (SPI SCK default)";
+    if (pin === 13) return "GPIO13 (SPI MISO default)";
+  }
   return "GPIO" + String(pin);
 }
 
-function buildEspPins() {
+function buildEspPins(board) {
   var out = [];
-  for (var pin = 0; pin <= 48; pin += 1) {
-    out.push({ label: espPinLabel(pin), value: String(pin) });
+  var maxPin = board === "esp32" ? 39 : 48;
+  for (var pin = 0; pin <= maxPin; pin += 1) {
+    out.push({ label: espPinLabel(pin, board), value: String(pin) });
   }
   return out;
 }
@@ -62,19 +71,20 @@ function buildStmPins() {
 var detectedBoardType = detectBoardType();
 var boardType = detectedBoardType;
 var BOARD_TYPE_OPTIONS = [
+  { label: "ESP32", value: "esp32" },
   { label: "ESP32-S2", value: "esp32s2" },
   { label: "ESP32-S3", value: "esp32s3" },
   { label: "STM32F042", value: "stm32f042" },
 ];
 
 function isEspBoard(type) {
-  return type === "esp32s2" || type === "esp32s3";
+  return type === "esp32" || type === "esp32s2" || type === "esp32s3";
 }
 
 function defaultCc1101CsPinForBoard(type) {
-  return isEspBoard(type)
-      ? 10
-      : 4;
+  if (type === "esp32") return 21;
+  if (type === "esp32s2" || type === "esp32s3") return 10;
+  return 4;
 }
 
 function defaultGdo0PinForBoard(type) {
@@ -82,13 +92,16 @@ function defaultGdo0PinForBoard(type) {
 }
 
 function spiSummaryForBoard(type) {
+  if (type === "esp32") {
+    return "Board mode: ESP32. Default CC1101 wiring: CS=GPIO21, MOSI=GPIO23, MISO=GPIO19, SCK=GPIO18, GDO0=GPIO2. SPI bus auto-initializes on first transfer.";
+  }
   return isEspBoard(type)
     ? "Board mode: ESP32. Default CC1101 wiring: CS=GPIO10, MOSI=GPIO11, MISO=GPIO13, SCK=GPIO12, GDO0=GPIO2. SPI bus auto-initializes on first transfer."
     : "Board mode: STM32F042. Default CC1101 wiring: CS=A4, MOSI=A7, MISO=A6, SCK=A5, GDO0=A2.";
 }
 
 function pinOptionsForBoard(type) {
-  return isEspBoard(type) ? buildEspPins() : buildStmPins();
+  return isEspBoard(type) ? buildEspPins(type) : buildStmPins();
 }
 
 var DEFAULT_CC1101_CS = defaultCc1101CsPinForBoard(boardType);
@@ -1103,7 +1116,10 @@ function paTableTiles() {
 }
 
 function boardLabel(type) {
-  return type === "esp32s2" ? "ESP32-S2" : type === "esp32s3" ? "ESP32-S3" : "STM32F042";
+  if (type === "esp32") return "ESP32";
+  if (type === "esp32s2") return "ESP32-S2";
+  if (type === "esp32s3") return "ESP32-S3";
+  return "STM32F042";
 }
 
 function render() {
