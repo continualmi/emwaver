@@ -1,12 +1,12 @@
 # EMWaver ESP Helper
 
-Freeze-friendly Python source for the ESP32-S3 serial flashing helper used by desktop apps.
+Freeze-friendly Python source for the ESP32 serial flashing helper used by desktop apps.
 
 Current contract:
 - `list-ports`
-- `chip-id --port ... [--baud ...] [--no-stub]`
+- `chip-id --port ... [--chip auto|esp32|esp32s3] [--baud ...] [--no-stub]`
 - `read-identity --port ... [--baud ...]`
-- `flash --port ... --bootloader ... --partition-table ... --ota-data ... --app ... [--baud ...] [--before ...] [--after ...] [--no-stub]`
+- `flash --chip esp32|esp32s3 --port ... --bootloader-offset ... --flash-freq ... --bootloader ... --partition-table ... --ota-data ... --app ... [--baud ...] [--before ...] [--after ...] [--no-stub]`
 
 Build a standalone helper with:
 

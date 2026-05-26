@@ -8,6 +8,16 @@ import UniformTypeIdentifiers
 #endif
 
 final class FirmwareUpdateManager: ObservableObject {
+    private struct EspFirmwareAssets {
+        let chip: String
+        let bootloaderOffset: String
+        let flashFrequency: String
+        let bootloader: URL
+        let partitionTable: URL
+        let otaData: URL
+        let app: URL
+    }
+
     @Published var isPresented: Bool = false
     @Published var dfuConnected: Bool = false
     @Published var espBootloaderConnected: Bool = false
@@ -347,7 +357,7 @@ final class FirmwareUpdateManager: ObservableObject {
         return nil
     }
 
-    private func espFirmwareURLs() throws -> (bootloader: URL, partitionTable: URL, otaData: URL, app: URL) {
+    private func espFirmwareURLs(boardType: String) throws -> EspFirmwareAssets {
         func require(_ name: String) throws -> URL {
             if let url = Bundle.main.url(forResource: name, withExtension: "bin") {
                 return url
@@ -359,12 +369,40 @@ final class FirmwareUpdateManager: ObservableObject {
             )
         }
 
-        return (
-            bootloader: try require("emwaver-esp32s3-bootloader"),
-            partitionTable: try require("emwaver-esp32s3-partition-table"),
-            otaData: try require("emwaver-esp32s3-ota-data"),
-            app: try require("emwaver-esp32s3-app")
-        )
+        switch Self.normalizedEspBoardType(boardType) {
+        case "esp32":
+            return EspFirmwareAssets(
+                chip: "esp32",
+                bootloaderOffset: "0x1000",
+                flashFrequency: "40m",
+                bootloader: try require("emwaver-esp32-bootloader"),
+                partitionTable: try require("emwaver-esp32-partition-table"),
+                otaData: try require("emwaver-esp32-ota-data"),
+                app: try require("emwaver-esp32-app")
+            )
+        case "esp32s3":
+            return EspFirmwareAssets(
+                chip: "esp32s3",
+                bootloaderOffset: "0x0",
+                flashFrequency: "80m",
+                bootloader: try require("emwaver-esp32s3-bootloader"),
+                partitionTable: try require("emwaver-esp32s3-partition-table"),
+                otaData: try require("emwaver-esp32s3-ota-data"),
+                app: try require("emwaver-esp32s3-app")
+            )
+        case "esp32s2":
+            throw NSError(
+                domain: "FirmwareUpdateManager",
+                code: 19,
+                userInfo: [NSLocalizedDescriptionKey: "Bundled ESP32-S2 firmware is not available yet."]
+            )
+        default:
+            throw NSError(
+                domain: "FirmwareUpdateManager",
+                code: 20,
+                userInfo: [NSLocalizedDescriptionKey: "Unknown ESP board type for firmware flashing."]
+            )
+        }
     }
 
     private func espFlashPortCandidates() throws -> [String] {
@@ -431,9 +469,12 @@ final class FirmwareUpdateManager: ObservableObject {
             appendLog("Run Mode remains separate from flashing; using serial port discovery.")
         }
 
+        let boardType = effectiveBoardType(for: device)
+        appendLog("ESP board type: \(boardType)")
+
         let port = try resolveEspFlashPort()
         appendLog("ESP flash port: \(port)")
-        try runEspFlash(port: port)
+        try runEspFlash(port: port, boardType: boardType)
     }
 
     private func runEspHelperAndWait(arguments: [String]) throws -> (terminationStatus: Int32, stdout: String, stderr: String) {
@@ -456,12 +497,13 @@ final class FirmwareUpdateManager: ObservableObject {
         return (process.terminationStatus, stdoutStr, stderrStr)
     }
 
-    private func runEspFlash(port: String) throws {
+    private func runEspFlash(port: String, boardType: String) throws {
         if flashProcess != nil {
             return
         }
 
-        let assets = try espFirmwareURLs()
+        let assets = try espFirmwareURLs(boardType: boardType)
+        appendLog("ESP chip: \(assets.chip)")
         appendLog("ESP bootloader: \(assets.bootloader.lastPathComponent)")
         appendLog("ESP partition table: \(assets.partitionTable.lastPathComponent)")
         appendLog("ESP OTA data: \(assets.otaData.lastPathComponent)")
@@ -475,11 +517,14 @@ final class FirmwareUpdateManager: ObservableObject {
         process.executableURL = try espHelperURL()
         process.arguments = [
             "flash",
+            "--chip", assets.chip,
             "--port", port,
             "--baud", "115200",
             "--before", "no_reset",
             "--after", "hard_reset",
             "--no-stub",
+            "--bootloader-offset", assets.bootloaderOffset,
+            "--flash-freq", assets.flashFrequency,
             "--bootloader", assets.bootloader.path,
             "--partition-table", assets.partitionTable.path,
             "--ota-data", assets.otaData.path,

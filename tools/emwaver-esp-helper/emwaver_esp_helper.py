@@ -13,7 +13,17 @@ CHIP_FEATURE_EMB_FLASH = 1 << 0
 CHIP_FEATURE_WIFI_BGN = 1 << 1
 CHIP_FEATURE_BLE = 1 << 4
 CHIP_FEATURE_EMB_PSRAM = 1 << 7
-CHIP_ESP32S3 = 9
+
+
+def _chip_id_for_name(chip_name: str) -> int:
+    normalized = chip_name.strip().lower().replace("-", "")
+    if normalized == "esp32":
+        return 0
+    if normalized == "esp32s2":
+        return 2
+    if normalized == "esp32s3":
+        return 9
+    return -1
 
 
 def _run_esptool(argv: list[str]) -> int:
@@ -38,7 +48,7 @@ def cmd_list_ports(_: argparse.Namespace) -> int:
 
 
 def cmd_chip_id(args: argparse.Namespace) -> int:
-    argv = ["--chip", "esp32s3", "--port", args.port, "--before", "no_reset", "--after", "no_reset"]
+    argv = ["--chip", args.chip, "--port", args.port, "--before", "no_reset", "--after", "no_reset"]
     if args.baud:
         argv.extend(["--baud", str(args.baud)])
     if args.no_stub:
@@ -90,7 +100,7 @@ def cmd_read_identity(args: argparse.Namespace) -> int:
 
         print(f"CHIP_NAME={esp.CHIP_NAME}")
         print(f"MAC={':'.join(f'{b:02X}' for b in mac)}")
-        print(f"CHIP_MODEL={CHIP_ESP32S3}")
+        print(f"CHIP_MODEL={_chip_id_for_name(str(esp.CHIP_NAME))}")
         print(f"CHIP_REVISION={revision}")
         print(f"FEATURES=0x{features:04X}")
         print(f"CORES={cores}")
@@ -123,7 +133,7 @@ def cmd_flash(args: argparse.Namespace) -> int:
     app = _require_file(args.app, "app")
 
     argv = [
-        "--chip", "esp32s3",
+        "--chip", args.chip,
         "--port", args.port,
         "--baud", str(args.baud),
         "--before", args.before,
@@ -134,9 +144,9 @@ def cmd_flash(args: argparse.Namespace) -> int:
     argv.extend([
         "write_flash",
         "--flash_mode", "dio",
-        "--flash_freq", "80m",
+        "--flash_freq", args.flash_freq,
         "--flash_size", "4MB",
-        "0x0", bootloader,
+        args.bootloader_offset, bootloader,
         "0x20000", app,
         "0x8000", partition_table,
         "0x10000", ota_data,
@@ -153,6 +163,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     chip_id = sub.add_parser("chip-id")
     chip_id.add_argument("--port", required=True)
+    chip_id.add_argument("--chip", default="auto")
     chip_id.add_argument("--baud", type=int, default=115200)
     chip_id.add_argument("--no-stub", action="store_true")
     chip_id.set_defaults(func=cmd_chip_id)
@@ -163,11 +174,14 @@ def build_parser() -> argparse.ArgumentParser:
     read_identity.set_defaults(func=cmd_read_identity)
 
     flash = sub.add_parser("flash")
+    flash.add_argument("--chip", default="esp32s3")
     flash.add_argument("--port", required=True)
     flash.add_argument("--bootloader", required=True)
     flash.add_argument("--partition-table", required=True)
     flash.add_argument("--ota-data", required=True)
     flash.add_argument("--app", required=True)
+    flash.add_argument("--bootloader-offset", default="0x0")
+    flash.add_argument("--flash-freq", default="80m")
     flash.add_argument("--baud", type=int, default=115200)
     flash.add_argument("--before", default="no_reset")
     flash.add_argument("--after", default="hard_reset")
