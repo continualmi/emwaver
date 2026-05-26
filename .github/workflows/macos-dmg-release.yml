@@ -11,11 +11,6 @@ on:
   repository_dispatch:
     types:
       - macos-dmg-release
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/macos-dmg-release.yml"
 
 permissions:
   contents: write
@@ -137,10 +132,22 @@ jobs:
 
           test -d "${app}" || (echo "Missing built app at ${app}" >&2; exit 1)
 
+          sign_code() {
+            local code_path="$1"
+            test -e "${code_path}" || return 0
+            codesign \
+              --force \
+              --timestamp \
+              --options runtime \
+              --preserve-metadata=identifier,entitlements \
+              --sign "${identity}" \
+              "${code_path}"
+          }
+
           sign_macho_file() {
             local file_path="$1"
             if file "${file_path}" | grep -Eq 'Mach-O|current ar archive random library'; then
-              codesign --force --timestamp --options runtime --sign "${identity}" "${file_path}"
+              sign_code "${file_path}"
             fi
           }
 
@@ -153,7 +160,14 @@ jobs:
             done < <(find "${app}/Contents/Resources/emwaver-esp-helper" -type f -print0)
           fi
 
-          codesign --force --timestamp --options runtime --sign "${identity}" "${app}"
+          sparkle_version="${app}/Contents/Frameworks/Sparkle.framework/Versions/B"
+          sign_code "${sparkle_version}/XPCServices/Downloader.xpc"
+          sign_code "${sparkle_version}/XPCServices/Installer.xpc"
+          sign_code "${sparkle_version}/Updater.app"
+          sign_code "${sparkle_version}/Autoupdate"
+          sign_code "${app}/Contents/Frameworks/Sparkle.framework"
+
+          sign_code "${app}"
           codesign --verify --deep --strict --verbose=2 "${app}"
 
       - name: Create DMG
