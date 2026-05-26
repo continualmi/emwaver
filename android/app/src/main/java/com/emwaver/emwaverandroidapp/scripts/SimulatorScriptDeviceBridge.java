@@ -110,7 +110,8 @@ public final class SimulatorScriptDeviceBridge implements ScriptDeviceBridge {
                 return new byte[]{
                         (byte) STATUS_OK,
                         (byte) safeFirmwareVersion().major,
-                        (byte) safeFirmwareVersion().minor
+                        (byte) safeFirmwareVersion().minor,
+                        (byte) safeFirmwareVersion().patch
                 };
             case 0x02:
                 return ok();
@@ -385,6 +386,7 @@ public final class SimulatorScriptDeviceBridge implements ScriptDeviceBridge {
     private static final class FirmwareVersion {
         int major;
         int minor;
+        int patch;
     }
 
     private static final class GpioFixture {

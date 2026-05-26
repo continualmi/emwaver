@@ -399,7 +399,7 @@ public class USBService extends Service implements DeviceConnectionService {
                 connectedBoardType = null;
                 return;
             }
-            // EMW_OP_VERSION (0x01). Response: [0x80, major, minor, ...]
+            // EMW_OP_VERSION (0x01). Response: [0x80, major, minor, patch, ...]
             byte[] lane = sendCommand(new byte[]{(byte) EMW_OP_VERSION}, 900);
             if (lane == null || lane.length < 3) {
                 deviceFirmwareVersion = null;
@@ -408,7 +408,8 @@ public class USBService extends Service implements DeviceConnectionService {
             } else {
                 int major = lane[1] & 0xFF;
                 int minor = lane[2] & 0xFF;
-                deviceFirmwareVersion = major + "." + minor;
+                int patch = lane.length >= 4 ? lane[3] & 0xFF : 0;
+                deviceFirmwareVersion = major + "." + minor + "." + patch;
             }
             String boardTypeHint = queryBoardTypeHint();
             setConnectedBoardType(inferConnectedBoardType(boardTypeHint));

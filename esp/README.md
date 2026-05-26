@@ -149,6 +149,7 @@ Current reintegration status:
 - Firmware now enumerates as USB MIDI with target-aware ESP32-S2/ESP32-S3 product names and accepts STM32-style EMWaver SysEx framing.
 - BLE is active as the wireless direct-local transport. It advertises the EMWaver GATT service and accepts the same 36-byte EMWaver superframe encoded inside the same SysEx payload used by USB MIDI.
 - Binary opcode support now covers the core shared bring-up surface over USB and BLE: version/reset/help, hardware UID, board info, device name, GPIO, ADC pin reads, SPI xfer, sample start/stop, PWM freq/write/stop, and transmit start/stop.
+- Firmware version values live in `main/libraries/firmware_version.h`; USB/BLE version replies and Wi-Fi mDNS `fw` TXT metadata must use that shared `major.minor.patch` source.
 - USB sampling and retransmit now follow the STM32 runtime contract: 18-byte EMW stream lanes, command-lane piggyback during active streaming, `BS` flow-control status packets during retransmit, USB circular RX buffering for transmit data, and opcode-configurable sample/transmit tick timing.
 - Sampler streams now route to the transport that started sampling. Wi-Fi-started sampler sessions send stream lanes over the WebSocket using the same SysEx superframe payload used by USB MIDI and BLE.
 - Wi-Fi retransmit stream lanes now fill the same firmware circular RX buffer as USB retransmit data and return Wi-Fi `BS` buffer-status frames over the WebSocket using the same SysEx framing.

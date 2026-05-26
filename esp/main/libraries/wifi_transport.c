@@ -27,6 +27,7 @@
 #include "sdkconfig.h"
 #include "transport_debug.h"
 #include "transport_session.h"
+#include "firmware_version.h"
 #include "usb.h"
 
 #ifndef EMWAVER_ENABLE_WIFI_TRANSPORT
@@ -46,7 +47,6 @@
 #define WIFI_MAX_HOST 32u
 #define WIFI_CONTROL_PORT 3922
 #define WIFI_WS_PATH "/v1/ws"
-#define WIFI_FIRMWARE_VERSION "1.0.0"
 #define WIFI_RECONNECT_BASE_MS 1000u
 #define WIFI_RECONNECT_MAX_MS 30000u
 #define EMW_SYSEX_BYTES 48u
@@ -661,7 +661,7 @@ static bool publish_mdns(void)
     bool txt_ok = true;
     txt_ok = txt_ok && mdns_service_txt_item_set("_emwaver", "_tcp", "proto", "1") == ESP_OK;
     txt_ok = txt_ok && mdns_service_txt_item_set("_emwaver", "_tcp", "board", EMW_TARGET_BOARD_TYPE) == ESP_OK;
-    txt_ok = txt_ok && mdns_service_txt_item_set("_emwaver", "_tcp", "fw", WIFI_FIRMWARE_VERSION) == ESP_OK;
+    txt_ok = txt_ok && mdns_service_txt_item_set("_emwaver", "_tcp", "fw", EMWAVER_FIRMWARE_VERSION_STRING) == ESP_OK;
     txt_ok = txt_ok && mdns_service_txt_item_set("_emwaver", "_tcp", "cap", EMW_TARGET_CAPABILITIES) == ESP_OK;
     txt_ok = txt_ok && mdns_service_txt_item_set("_emwaver", "_tcp", "id", local_id) == ESP_OK;
     txt_ok = txt_ok && mdns_service_txt_item_set("_emwaver", "_tcp", "host", s_config.hostname) == ESP_OK;

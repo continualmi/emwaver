@@ -186,7 +186,7 @@ Opcode constants are in `Core/Inc/emw_proto.h`; handling is in `Core/Src/main.c`
 
 ## 6.1 System
 
-- `EMW_OP_VERSION (0x01)` → returns `[major, minor]` from firmware constants.
+- `EMW_OP_VERSION (0x01)` → returns `[major, minor, patch]` from firmware constants.
 - `EMW_OP_RESET (0x02)` → ACK then system reset.
 - `EMW_OP_HELP (0x03)` → ACK only (docs are host-side).
 - `EMW_OP_ENTER_DFU (0x06)` → destructive ROM DFU path (erase first flash pages + reset).

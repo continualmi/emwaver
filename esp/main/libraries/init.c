@@ -46,19 +46,17 @@
 #include "wifi_transport.h"
 #include "transport_debug.h"
 #include "transport_session.h"
+#include "firmware_version.h"
 #include "rfm69.h"
 #include "cc1101.h"
 #include "gpio_commands.h"
 
-#define FIRMWARE_VERSION "1.0.0"
 #define EMWAVER_FIRMWARE_WELCOME "Welcome to EMWaver firmware"
 #define CMD_QUEUE_LEN 10
 #define STARTUP_LED EMW_TARGET_STARTUP_LED
 #define IR_TX_PIN_SHIELD EMW_TARGET_IR_TX_PIN_SHIELD
 #define IR_TX_PIN_DEFAULT GPIO_NUM_4
 #define IR_LED_GUARD_PIN GPIO_NUM_5
-#define FW_VERSION_MAJOR 1u
-#define FW_VERSION_MINOR 0u
 #define DEVICE_NAME_NAMESPACE "emwaver"
 #define DEVICE_NAME_KEY "device_name"
 #define DEVICE_NAME_MAX_LEN 16u
@@ -247,7 +245,11 @@ static bool handle_binary_packet(const command_t *cmd)
     const uint8_t opcode = cmd->data[0];
     switch (opcode) {
         case EMW_OP_VERSION: {
-            const uint8_t out[] = {FW_VERSION_MAJOR, FW_VERSION_MINOR};
+            const uint8_t out[] = {
+                EMWAVER_FIRMWARE_VERSION_MAJOR,
+                EMWAVER_FIRMWARE_VERSION_MINOR,
+                EMWAVER_FIRMWARE_VERSION_PATCH,
+            };
             send_binary_ok(out, sizeof(out));
             return true;
         }
@@ -1051,7 +1053,7 @@ static void register_core_commands(void)
 
 static void version_command(void)
 {
-    static const char msg[] = EMWAVER_FIRMWARE_WELCOME " " FIRMWARE_VERSION;
+    static const char msg[] = EMWAVER_FIRMWARE_WELCOME " " EMWAVER_FIRMWARE_VERSION_STRING;
     command_send_ok((const uint8_t *)msg, sizeof(msg) - 1u);
 }
 

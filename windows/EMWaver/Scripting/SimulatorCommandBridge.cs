@@ -63,7 +63,7 @@ internal sealed class SimulatorCommandBridge
 
         return command[0] switch
         {
-            0x01 => new[] { StatusOk, _fixture.Board.FirmwareVersion.Major, _fixture.Board.FirmwareVersion.Minor },
+            0x01 => new[] { StatusOk, _fixture.Board.FirmwareVersion.Major, _fixture.Board.FirmwareVersion.Minor, _fixture.Board.FirmwareVersion.Patch },
             0x02 => Ok(),
             0x04 => OkText(_fixture.Board.Name),
             0x09 => OkText(_fixture.Board.Type),
@@ -307,7 +307,8 @@ internal sealed class SimulatorCommandBridge
 
     private sealed record SimulatorFirmwareVersion(
         [property: JsonPropertyName("major")] byte Major,
-        [property: JsonPropertyName("minor")] byte Minor
+        [property: JsonPropertyName("minor")] byte Minor,
+        [property: JsonPropertyName("patch")] byte Patch
     );
 
     private sealed record SimulatorGpioFixture(

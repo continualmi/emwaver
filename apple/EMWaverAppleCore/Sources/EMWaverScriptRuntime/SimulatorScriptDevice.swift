@@ -142,7 +142,8 @@ public final class SimulatorScriptDevice: ScriptDevice {
             return Data([
                 Self.statusOK,
                 fixture.board.firmwareVersion.major,
-                fixture.board.firmwareVersion.minor
+                fixture.board.firmwareVersion.minor,
+                fixture.board.firmwareVersion.patch
             ])
         case 0x02:
             return ok()
@@ -334,6 +335,7 @@ private struct SimulatorBoardFixture: Decodable {
 private struct SimulatorFirmwareVersion: Decodable {
     let major: UInt8
     let minor: UInt8
+    let patch: UInt8
 }
 
 private struct SimulatorGpioFixture: Decodable {

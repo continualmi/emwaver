@@ -75,7 +75,13 @@ if (emwaverStmMainC.exists()) {
     def mainC = emwaverStmMainC.getText('UTF-8')
     def m1 = (mainC =~ /#define\s+EMWAVER_FIRMWARE_VERSION_MAJOR\s+(\d+)u/)
     def m2 = (mainC =~ /#define\s+EMWAVER_FIRMWARE_VERSION_MINOR\s+(\d+)u/)
-    if (m1.find() && m2.find()) {
+    def m3 = (mainC =~ /#define\s+EMWAVER_FIRMWARE_VERSION_PATCH\s+(\d+)u/)
+    def hasMajor = m1.find()
+    def hasMinor = m2.find()
+    def hasPatch = m3.find()
+    if (hasMajor && hasMinor && hasPatch) {
+        emwaverBundledFwVersion = "${m1.group(1)}.${m2.group(1)}.${m3.group(1)}"
+    } else if (hasMajor && hasMinor) {
         emwaverBundledFwVersion = "${m1.group(1)}.${m2.group(1)}"
     }
 }
