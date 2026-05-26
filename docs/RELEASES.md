@@ -100,9 +100,28 @@ Use `.github/workflows/ios-release-upload.yml` (`iOS Release Upload`) to build a
 
 ## macOS
 
-`.github/workflows/macos-dmg-release.yml` builds and publishes `EMWaver-macos.dmg`. Treat this as the preview desktop artifact unless/until Developer ID signing and notarization are added.
+`.github/workflows/macos-dmg-release.yml` builds, Developer ID signs, notarizes, staples, and publishes `EMWaver-macos.dmg`. The `build` job uses the `app-store` GitHub Environment so it can reuse the App Store Connect API key secrets for notarization.
 
-The macOS app includes Sparkle for app-level update checks. Production-quality Sparkle updates require Developer ID signing/notarization plus Sparkle EdDSA signing. The macOS release workflow expects `SPARKLE_PUBLIC_ED_KEY` and `SPARKLE_PRIVATE_ED_KEY`, generates signed `appcast.xml`, publishes it as a release asset, and uploads it to `https://emwaver.ai/updates/macos/appcast.xml` through the static-site Azure storage account.
+The macOS app includes Sparkle for app-level update checks. The macOS release workflow expects `SPARKLE_PUBLIC_ED_KEY` and `SPARKLE_PRIVATE_ED_KEY`, generates signed `appcast.xml` from the notarized DMG, publishes it as a release asset, and uploads it to `https://emwaver.ai/updates/macos/appcast.xml` through the static-site Azure storage account.
+
+Required signing/notarization secrets:
+
+- `APP_STORE_CONNECT_API_KEY_ID`
+- `APP_STORE_CONNECT_API_ISSUER_ID`
+- `APP_STORE_CONNECT_API_KEY_BASE64`
+- `MACOS_DEVELOPER_ID_CERTIFICATE_BASE64`
+- `MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD`
+- `MACOS_KEYCHAIN_PASSWORD`
+- `MACOS_DEVELOPER_ID_APPLICATION_IDENTITY` (optional; defaults to `Developer ID Application`)
+
+The certificate secret must be a `.p12` export of an Apple **Developer ID Application** certificate for the team. To add the macOS-specific secrets with `gh`:
+
+```sh
+base64 -i DeveloperIDApplication.p12 | gh secret set MACOS_DEVELOPER_ID_CERTIFICATE_BASE64 --env app-store
+gh secret set MACOS_DEVELOPER_ID_CERTIFICATE_PASSWORD --env app-store --body '<p12-password>'
+openssl rand -base64 32 | gh secret set MACOS_KEYCHAIN_PASSWORD --env app-store
+gh secret set MACOS_DEVELOPER_ID_APPLICATION_IDENTITY --env app-store --body 'Developer ID Application: Continual MI, LLC (9VA9KTUXXN)'
+```
 
 ## Linux
 

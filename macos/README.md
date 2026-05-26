@@ -105,6 +105,7 @@ Desktop app updates:
 - macOS uses Sparkle 2 for the app-level `Check for Updates...` menu item.
 - the Sparkle feed URL is `https://emwaver.ai/updates/macos/appcast.xml`;
 - release builds need a real Sparkle EdDSA public key in `SPARKLE_PUBLIC_ED_KEY`, with release artifacts signed by the matching private key;
+- the macOS release workflow signs the app/DMG with a Developer ID Application certificate, notarizes the DMG with App Store Connect API credentials, staples the ticket, then generates the Sparkle appcast from the notarized DMG;
 - app updates are independent of EMWaver accounts, Agent API keys, and local hardware access.
 
 ## 2.3 UI surfaces
