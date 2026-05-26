@@ -1020,9 +1020,26 @@ public class USBService extends Service implements DeviceConnectionService {
         }
         if (response == null || response.length == 0 || response[0] != (byte) 0x80) {
             Log.w(TAG, "Heartbeat failed — session expired");
-            stopHeartbeat(deviceId);
-            showToast("Transport session ended for selected device");
+            markTransportSessionLost(deviceId);
         }
+    }
+
+    private void markTransportSessionLost(String deviceId) {
+        stopHeartbeat(deviceId);
+        ActiveTransport transport = activeTransport;
+        if (transport == ActiveTransport.USB) {
+            synchronized (midiLock) {
+                closeMidiLocked();
+            }
+        } else if (transport == ActiveTransport.BLE) {
+            bleProtocol.close();
+        } else if (transport == ActiveTransport.WIFI) {
+            wifiProtocol.close();
+        } else {
+            activeConnectionState.clear();
+            activeTransport = ActiveTransport.NONE;
+        }
+        showToast("Transport session lost. Reconnect the selected device.");
     }
 
     private void stopHeartbeat(String deviceId) {

@@ -72,7 +72,7 @@
     },
     {
       "id": "firmware.esp32_serial_update",
-      "description": "ESP32-S3 boards use a serial flashing path rather than the STM32 DFU flow.",
+      "description": "ESP32-family boards use a serial flashing path rather than the STM32 DFU flow.",
       "parity": "documented_exceptions",
       "platforms": {
         "macos": {
@@ -133,7 +133,7 @@
             {
               "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/ui/emwaver/EspSerialFirmwareUpdater.java",
               "contains": [
-                "BUNDLED_ESP_ASSET_PATH",
+                "assetsForBoardType",
                 "FLASH_BEGIN",
                 "FLASH_DATA",
                 "UsbSerialPort"

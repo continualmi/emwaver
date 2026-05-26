@@ -88,6 +88,16 @@ public final class AgentEndpointApi {
         }
     }
 
+    public static final class ScriptContext {
+        @Nullable public final String name;
+        @Nullable public final String source;
+
+        public ScriptContext(@Nullable String name, @Nullable String source) {
+            this.name = name;
+            this.source = source;
+        }
+    }
+
     // ── Instance ────────────────────────────────────────────────────
 
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
@@ -357,6 +367,14 @@ public final class AgentEndpointApi {
         String name = (scriptName != null && !scriptName.trim().isEmpty())
                 ? scriptName.trim() : "script.js";
         return text + "\n\nScript `" + name + "`:\n```emw\n" + source + "\n```";
+    }
+
+    @NonNull
+    public static String buildUserInput(@Nullable String message, @Nullable ScriptContext scriptContext) {
+        return buildUserInput(
+                message,
+                scriptContext != null ? scriptContext.name : null,
+                scriptContext != null ? scriptContext.source : null);
     }
 
     // ── response helpers ────────────────────────────────────────────

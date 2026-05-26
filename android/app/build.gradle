@@ -162,10 +162,13 @@ tasks.register("syncBundledFirmware", Copy) {
         into "firmware"
     }
 
-    // ESP32-S3 app firmware (ROM bootloader flashing)
-    from(new File(emwaverRepoFirmwareDir, "emwaver-esp32s3-app.bin")) {
-        into "ota"
-        rename { "emwaveresp.bin" }
+    // ESP family firmware images (ROM bootloader flashing)
+    ["esp32", "esp32s2", "esp32s3"].each { target ->
+        ["app", "bootloader", "partition-table", "ota-data"].each { kind ->
+            from(new File(emwaverRepoFirmwareDir, "emwaver-${target}-${kind}.bin")) {
+                into "firmware"
+            }
+        }
     }
 
     into(emwaverGeneratedFirmwareAssetsDir)
@@ -175,10 +178,16 @@ tasks.register("syncBundledFirmware", Copy) {
         if (!stmFw.exists()) {
             throw new GradleException("Missing STM32 firmware binary at: ${stmFw} (run stm/update_firmware_bins.sh first)")
         }
-        def espFw = new File(emwaverRepoFirmwareDir, "emwaver-esp32s3-app.bin")
-        if (!espFw.exists()) {
-            throw new GradleException("Missing ESP32-S3 firmware binary at: ${espFw} (run idf.py build in esp/ first)")
+        ["esp32", "esp32s2", "esp32s3"].each { target ->
+            ["app", "bootloader", "partition-table", "ota-data"].each { kind ->
+                def espFw = new File(emwaverRepoFirmwareDir, "emwaver-${target}-${kind}.bin")
+                if (!espFw.exists()) {
+                    throw new GradleException("Missing ESP firmware binary at: ${espFw} (run idf.py build in esp/ first)")
+                }
+            }
         }
+
+        delete emwaverGeneratedFirmwareAssetsDir
     }
 }
 

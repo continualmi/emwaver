@@ -35,6 +35,37 @@
         android:text="Update your device to the latest EMWaver version." />
 
     <LinearLayout
+        android:id="@+id/esp_target_container"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:padding="12dp"
+        android:orientation="vertical"
+        android:background="@color/surfaceCard"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/esp_target_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="ESP firmware target"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/esp_target_spinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" />
+
+        <TextView
+            android:id="@+id/esp_target_help"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Select the exact ESP family before flashing from serial bootloader mode." />
+    </LinearLayout>
+
+    <LinearLayout
         android:id="@+id/instructions_card"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

@@ -26,8 +26,11 @@ import java.util.List;
 import java.util.Locale;
 
 final class EspSerialFirmwareUpdater {
-    static final String BUNDLED_ESP_ASSET_PATH = "ota/emwaveresp.bin";
-    static final int APP_OFFSET = 0x10000;
+    static final int ESP_BOOTLOADER_OFFSET = 0x1000;
+    static final int ESP32S3_BOOTLOADER_OFFSET = 0x0;
+    static final int PARTITION_TABLE_OFFSET = 0x8000;
+    static final int OTA_DATA_OFFSET = 0x10000;
+    static final int APP_OFFSET = 0x20000;
     static final int BLOCK_SIZE = 0x400;
 
     private static final int BAUD = 115200;
@@ -43,6 +46,37 @@ final class EspSerialFirmwareUpdater {
 
     interface ProgressSink {
         void onProgress(String message);
+    }
+
+    static final class FirmwareAssets {
+        final String boardType;
+        final String chip;
+        final String displayName;
+        final int bootloaderOffset;
+        final String bootloaderAsset;
+        final String partitionTableAsset;
+        final String otaDataAsset;
+        final String appAsset;
+
+        private FirmwareAssets(
+                String boardType,
+                String chip,
+                String displayName,
+                int bootloaderOffset,
+                String bootloaderAsset,
+                String partitionTableAsset,
+                String otaDataAsset,
+                String appAsset
+        ) {
+            this.boardType = boardType;
+            this.chip = chip;
+            this.displayName = displayName;
+            this.bootloaderOffset = bootloaderOffset;
+            this.bootloaderAsset = bootloaderAsset;
+            this.partitionTableAsset = partitionTableAsset;
+            this.otaDataAsset = otaDataAsset;
+            this.appAsset = appAsset;
+        }
     }
 
     private EspSerialFirmwareUpdater() {}
@@ -88,12 +122,14 @@ final class EspSerialFirmwareUpdater {
             UsbManager manager,
             UsbDevice device,
             UsbDeviceConnection connection,
+            String boardType,
             ProgressSink progress
     ) throws Exception {
-        byte[] image = readAsset(context.getAssets(), BUNDLED_ESP_ASSET_PATH);
-        if (image.length == 0) {
-            throw new IOException("Bundled ESP firmware image is empty.");
-        }
+        FirmwareAssets assets = assetsForBoardType(boardType);
+        byte[] bootloader = readRequiredAsset(context.getAssets(), assets.bootloaderAsset);
+        byte[] partitionTable = readRequiredAsset(context.getAssets(), assets.partitionTableAsset);
+        byte[] otaData = readRequiredAsset(context.getAssets(), assets.otaDataAsset);
+        byte[] app = readRequiredAsset(context.getAssets(), assets.appAsset);
 
         UsbSerialDriver driver = UsbSerialProber.getDefaultProber().probeDevice(device);
         if (driver == null || driver.getPorts().isEmpty()) {
@@ -109,14 +145,59 @@ final class EspSerialFirmwareUpdater {
             port.setRTS(false);
             enterBootloader(port);
             sync(port, progress);
-            flashImage(port, image, APP_OFFSET, progress);
+            int totalBytes = bootloader.length + partitionTable.length + otaData.length + app.length;
+            int writtenBytes = 0;
+            writtenBytes += flashImage(port, bootloader, assets.bootloaderOffset, writtenBytes, totalBytes, "bootloader", progress);
+            writtenBytes += flashImage(port, partitionTable, PARTITION_TABLE_OFFSET, writtenBytes, totalBytes, "partition table", progress);
+            writtenBytes += flashImage(port, otaData, OTA_DATA_OFFSET, writtenBytes, totalBytes, "OTA data", progress);
+            flashImage(port, app, APP_OFFSET, writtenBytes, totalBytes, "app image", progress);
             command(port, FLASH_END, le32(0), 0, 5_000);
-            progress.onProgress("ESP firmware update complete. Reconnect the device in Run Mode. (100%)");
+            progress.onProgress(assets.displayName + " firmware update complete. Reconnect the device in Run Mode. (100%)");
         } finally {
             try {
                 port.close();
             } catch (IOException ignored) {
             }
+        }
+    }
+
+    static FirmwareAssets assetsForBoardType(String boardType) throws IOException {
+        switch (normalizeBoardType(boardType)) {
+            case "esp32":
+                return new FirmwareAssets(
+                        "esp32",
+                        "esp32",
+                        "ESP32",
+                        ESP_BOOTLOADER_OFFSET,
+                        "firmware/emwaver-esp32-bootloader.bin",
+                        "firmware/emwaver-esp32-partition-table.bin",
+                        "firmware/emwaver-esp32-ota-data.bin",
+                        "firmware/emwaver-esp32-app.bin"
+                );
+            case "esp32s2":
+                return new FirmwareAssets(
+                        "esp32s2",
+                        "esp32s2",
+                        "ESP32-S2",
+                        ESP_BOOTLOADER_OFFSET,
+                        "firmware/emwaver-esp32s2-bootloader.bin",
+                        "firmware/emwaver-esp32s2-partition-table.bin",
+                        "firmware/emwaver-esp32s2-ota-data.bin",
+                        "firmware/emwaver-esp32s2-app.bin"
+                );
+            case "esp32s3":
+                return new FirmwareAssets(
+                        "esp32s3",
+                        "esp32s3",
+                        "ESP32-S3",
+                        ESP32S3_BOOTLOADER_OFFSET,
+                        "firmware/emwaver-esp32s3-bootloader.bin",
+                        "firmware/emwaver-esp32s3-partition-table.bin",
+                        "firmware/emwaver-esp32s3-ota-data.bin",
+                        "firmware/emwaver-esp32s3-app.bin"
+                );
+            default:
+                throw new IOException("Choose an ESP32, ESP32-S2, or ESP32-S3 firmware target.");
         }
     }
 
@@ -208,14 +289,23 @@ final class EspSerialFirmwareUpdater {
         throw new IOException("Could not sync ESP bootloader. Hold BOOT, tap RESET, then retry.", last);
     }
 
-    private static void flashImage(UsbSerialPort port, byte[] image, int offset, ProgressSink progress) throws Exception {
+    private static int flashImage(
+            UsbSerialPort port,
+            byte[] image,
+            int offset,
+            int writtenBefore,
+            int totalBytes,
+            String label,
+            ProgressSink progress
+    ) throws Exception {
         int blocks = (image.length + BLOCK_SIZE - 1) / BLOCK_SIZE;
         ByteArrayOutputStream begin = new ByteArrayOutputStream();
         writeLe32(begin, image.length);
         writeLe32(begin, blocks);
         writeLe32(begin, BLOCK_SIZE);
         writeLe32(begin, offset);
-        progress.onProgress("Preparing ESP flash write... (12%)");
+        progress.onProgress(String.format(Locale.US, "Preparing ESP %s write at 0x%05X... (%d%%)",
+                label, offset, flashPct(writtenBefore, totalBytes)));
         command(port, FLASH_BEGIN, begin.toByteArray(), 0, 10_000);
 
         for (int seq = 0; seq < blocks; seq++) {
@@ -231,10 +321,15 @@ final class EspSerialFirmwareUpdater {
             writeLe32(data, 0);
             data.write(block, 0, block.length);
 
-            int pct = 12 + (int) (((seq + 1L) * 86L) / Math.max(1, blocks));
-            progress.onProgress(String.format(Locale.US, "Writing ESP block %d/%d... (%d%%)", seq + 1, blocks, pct));
+            int pct = flashPct(writtenBefore + Math.min(image.length, (seq + 1) * BLOCK_SIZE), totalBytes);
+            progress.onProgress(String.format(Locale.US, "Writing ESP %s block %d/%d... (%d%%)", label, seq + 1, blocks, pct));
             command(port, FLASH_DATA, data.toByteArray(), checksum(block), 10_000);
         }
+        return image.length;
+    }
+
+    private static int flashPct(int writtenBytes, int totalBytes) {
+        return 12 + (int) Math.min(86L, (writtenBytes * 86L) / Math.max(1, totalBytes));
     }
 
     private static void command(UsbSerialPort port, int op, byte[] data, int checksum, int timeoutMs) throws Exception {
@@ -284,6 +379,14 @@ final class EspSerialFirmwareUpdater {
         return decoded.length >= 8 && (decoded[0] & 0xFF) == 0x01 && (decoded[1] & 0xFF) == (op & 0xFF);
     }
 
+    private static byte[] readRequiredAsset(AssetManager assets, String path) throws IOException {
+        byte[] image = readAsset(assets, path);
+        if (image.length == 0) {
+            throw new IOException("Bundled ESP firmware image is empty: " + path);
+        }
+        return image;
+    }
+
     private static byte[] readAsset(AssetManager assets, String path) throws IOException {
         try (InputStream in = assets.open(path);
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
@@ -311,5 +414,19 @@ final class EspSerialFirmwareUpdater {
 
     private static String lower(@Nullable String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.US);
+    }
+
+    static String normalizeBoardType(@Nullable String value) {
+        String lower = lower(value).replace("-", "");
+        if ("esp32s3".equals(lower)) {
+            return "esp32s3";
+        }
+        if ("esp32s2".equals(lower)) {
+            return "esp32s2";
+        }
+        if ("esp32".equals(lower)) {
+            return "esp32";
+        }
+        return lower;
     }
 }
