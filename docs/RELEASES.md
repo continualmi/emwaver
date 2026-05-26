@@ -77,6 +77,14 @@ gh workflow run linux-deb-release.yml
 
 To update a non-current existing release, pass it explicitly, for example `-f tag=1.0.2`.
 
+If GitHub's workflow dispatch endpoint is temporarily unavailable, the macOS release workflow also accepts a repository dispatch fallback:
+
+```sh
+gh api repos/continualmi/emwaver/dispatches \
+  -f event_type=macos-dmg-release \
+  -F client_payload[tag]=1.0.2
+```
+
 ## Android APK signing
 
 The public direct APK workflow requires the same upload keystore secrets used by the Play workflow:

@@ -7,6 +7,9 @@ on:
         description: "Existing GitHub Release tag to update; blank uses VERSION"
         required: false
         default: ""
+  repository_dispatch:
+    types:
+      - macos-dmg-release
 
 permissions:
   contents: write
@@ -31,7 +34,7 @@ jobs:
 
       - name: Resolve release tag and version
         env:
-          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_TAG: ${{ inputs.tag || github.event.client_payload.tag }}
           REF_NAME: ${{ github.ref_name }}
           REF_TYPE: ${{ github.ref_type }}
         run: |
