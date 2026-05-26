@@ -213,17 +213,16 @@ jobs:
             dist/EMWaver-macos.dmg
             dist/appcast.xml
 
-      - name: Publish release asset
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ env.EMWAVER_RELEASE_TAG }}
-          prerelease: false
-          make_latest: true
-          overwrite_files: true
-          fail_on_unmatched_files: true
-          files: |
-            dist/EMWaver-macos.dmg
-            dist/appcast.xml
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release upload "${EMWAVER_RELEASE_TAG}" \
+            dist/EMWaver-macos.dmg \
+            dist/appcast.xml \
+            --clobber
+          gh release edit "${EMWAVER_RELEASE_TAG}" --latest --prerelease=false
 
   publish-update-metadata:
     runs-on: ubuntu-latest
