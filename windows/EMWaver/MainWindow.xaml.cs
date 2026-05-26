@@ -169,6 +169,11 @@ public partial class MainWindow : Window
                 _ => "🔌",
             };
         }
+        else if (device.IsBleConnecting)
+        {
+            DeviceStatusText.Text = "Connecting BLE";
+            DeviceIconText.Text = "📡";
+        }
         else if (device.IsBleScanning)
         {
             DeviceStatusText.Text = "Scanning";

@@ -253,6 +253,18 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
     private WindowsWiFiTransport.Connection? _wifiConnection;
     private readonly TransportDeviceConnectionState _activeConnectionState = new();
     private bool _bleConnecting;
+    public bool IsBleConnecting
+    {
+        get => _bleConnecting;
+        private set
+        {
+            if (_bleConnecting != value)
+            {
+                _bleConnecting = value;
+                OnPropertyChanged();
+            }
+        }
+    }
     private static readonly TimeSpan BleDiscoveryTtl = TimeSpan.FromSeconds(12);
     private bool _isBleScanning;
     public bool IsBleScanning
@@ -533,6 +545,7 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
 
         CloseBleDevice();
+        IsBleConnecting = false;
         CloseWiFiDevice();
         StopTransportSessionHeartbeat();
 
@@ -845,7 +858,7 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private void StartBleScan()
     {
-        if (_bleScanSession != null || _bleConnecting)
+        if (_bleScanSession != null || IsBleConnecting)
         {
             return;
         }
@@ -911,12 +924,12 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
             BleDiscoveredDevices.Add(discovered);
         });
 
-        if (_bleConnecting || IsConnected || !AutoConnectEnabled)
+        if (IsBleConnecting || IsConnected || !AutoConnectEnabled)
         {
             return;
         }
 
-        _bleConnecting = true;
+        IsBleConnecting = true;
         StopBleScan();
         _ = ConnectBleAsync(args.BluetoothAddress, discovered.DisplayName);
     }
@@ -930,17 +943,20 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
     {
         try
         {
+            IsBleConnecting = true;
             LastErrorText = null;
             DeviceEmwaverVersion = null;
             ConnectedBoardType = null;
-            var session = SetActiveDeviceTarget(WindowsBleTransport.SessionId(bluetoothAddress), DeviceTransport.Ble);
 
             CloseBleDevice();
+            var session = SetActiveDeviceTarget(WindowsBleTransport.SessionId(bluetoothAddress), DeviceTransport.Ble);
 
             var opened = await WindowsBleTransport.OpenConnectionAsync(bluetoothAddress, displayName, OnBleValueChanged, session);
             if (opened.Connection == null)
             {
                 LastErrorText = opened.Error;
+                AppendActivityLog($"BLE open failed: {opened.Error ?? "unknown error"}");
+                ClearActiveDeviceTarget();
                 return;
             }
 
@@ -983,7 +999,7 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
         finally
         {
-            _bleConnecting = false;
+            IsBleConnecting = false;
         }
     }
 
@@ -1028,7 +1044,6 @@ public sealed class WindowsDeviceManager : INotifyPropertyChanged
     {
         WindowsBleTransport.CloseHandles(_bleConnection);
         _bleConnection = null;
-        _bleConnecting = false;
     }
 
     private static byte TransportSourceFor(DeviceTransport transport)
