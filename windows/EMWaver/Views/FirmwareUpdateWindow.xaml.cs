@@ -38,10 +38,18 @@ public partial class FirmwareUpdateWindow : Window
 
         Loaded += async (_, __) =>
         {
+            // Render the board-appropriate content before probing. The initial
+            // ESP serial/DFU probe can take long enough on a cold app start for
+            // WPF to show the dialog with both panels still collapsed.
+            UpdateUi();
             await _updater.RefreshDfuPresenceAsync(includeEspSerialProbe: true);
             UpdateUi();
             _refreshTimer.Start();
         };
+
+        // The XAML starts with both workflow panels collapsed. Initialize the
+        // visible workflow immediately so the first dialog open is never blank.
+        UpdateUi();
     }
 
     private bool IsEspWorkflow
