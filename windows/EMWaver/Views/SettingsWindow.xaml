@@ -3,7 +3,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Settings"
-    Width="560" Height="455"
+    Width="560" Height="520"
     WindowStartupLocation="CenterOwner"
     WindowStyle="ToolWindow"
     ResizeMode="NoResize">
@@ -48,6 +48,26 @@
                                TextWrapping="Wrap" Margin="0,0,0,8" />
                     <Button Content="Check for Updates…" Width="150" HorizontalAlignment="Left" Click="OnCheckForUpdatesClick" />
                 </StackPanel>
+            </GroupBox>
+
+            <!-- App information section -->
+            <GroupBox Header="App" Padding="12" Margin="0,0,0,12">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Version" Margin="0,0,16,4" />
+                    <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding AppVersion}" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,0,0,4" />
+
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Commit" Margin="0,0,16,0" />
+                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding AppCommit}" Foreground="{DynamicResource AppTextSecondaryBrush}" />
+                </Grid>
             </GroupBox>
 
         </StackPanel>

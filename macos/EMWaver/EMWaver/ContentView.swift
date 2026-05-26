@@ -134,7 +134,7 @@ struct ContentView: View {
             },
             leadingHeaderItem: nil,
             agentLeadingToolbarItem: AnyView(agentKeyToolbarItem),
-            navigationTitleAccessoryText: MacAppBuildInfo.toolbarVersionText,
+            navigationTitleAccessoryText: nil,
             onRunScript: { request in
                 scriptSessions.run(request)
             },

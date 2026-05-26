@@ -49,7 +49,7 @@
 		46DC3FDA2DA99FB800423E8A /* EMWaver.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = EMWaver.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		46DC3FE72DA99FBD00423E8A /* EMWaverTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EMWaverTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		46DC3FF12DA99FBD00423E8A /* EMWaverUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EMWaverUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		A0E0A1B22F6B4D7C8E9F0002 /* firmware */ = {isa = PBXFileReference; lastKnownFileType = folder; name = firmware; path = ../../firmware; sourceTree = "<group>"; };
+		A0E0A1B22F6B4D7C8E9F0002 /* firmware */ = {isa = PBXFileReference; lastKnownFileType = folder; name = firmware; path = ../firmware; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */

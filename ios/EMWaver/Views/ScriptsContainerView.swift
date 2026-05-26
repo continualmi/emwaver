@@ -200,6 +200,7 @@ struct ScriptsContainerView: View {
     @StateObject private var scriptSessions = IOSScriptSessionManager()
     @State private var isWiFiConnectPresented = false
     @State private var isWiFiSetupPresented = false
+    @State private var isSettingsPresented = false
     @State private var wifiHost = ""
     @State private var wifiPort = String(WiFiTransport.defaultPort)
     @State private var wifiSSID = ""
@@ -221,7 +222,10 @@ struct ScriptsContainerView: View {
                 onRequestAgentUpgrade: {
                     auth.isSignInSheetPresented = true
                 },
-                navigationTitleAccessoryText: IOSAppBuildInfo.toolbarVersionText,
+                onRequestOpenSettings: {
+                    isSettingsPresented = true
+                },
+                navigationTitleAccessoryText: nil,
                 onRunScript: runScriptHandler,
                 activePreviewManagerProvider: activePreviewManagerProvider,
                 onStopActiveScript: {
@@ -324,6 +328,11 @@ struct ScriptsContainerView: View {
         }
         .sheet(isPresented: $auth.isSignInSheetPresented) {
             SignInSheet()
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $isSettingsPresented) {
+            IOSSettingsView()
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }

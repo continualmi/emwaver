@@ -24,13 +24,9 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!-- Product title and app build/version for support reports. -->
+                <!-- Product title. Build details live in Settings. -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="EMWaver" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
-                    <TextBlock x:Name="AppVersionText"
-                               Foreground="{DynamicResource AppTextSecondaryBrush}"
-                               VerticalAlignment="Center"
-                               FontSize="11" Margin="8,1,0,0" />
                 </StackPanel>
 
                 <!-- Device picker -->

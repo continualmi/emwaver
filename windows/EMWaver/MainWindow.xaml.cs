@@ -29,11 +29,9 @@ public partial class MainWindow : Window
         _device.BeginConnectionMonitoring();
         _firmwareUpdater.AttachUiDispatcher(Dispatcher);
 
-        // Set window icon and visible build/version marker.
+        // Set window icon. Build details live in Settings.
         TrySetWindowIcon();
-        AppVersionText.Text = AppBuildInfo.ShortVersion;
-        AppVersionText.ToolTip = AppBuildInfo.DiagnosticsLine;
-        Title = $"EMWaver {AppBuildInfo.ShortVersion}";
+        Title = "EMWaver";
 
         // Subscribe to device state changes.
         _device.PropertyChanged += (_, __) => Dispatcher.Invoke(UpdateDeviceStatus);

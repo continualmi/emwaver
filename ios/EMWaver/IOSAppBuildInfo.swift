@@ -7,10 +7,6 @@
 import Foundation
 
 enum IOSAppBuildInfo {
-    static var toolbarVersionText: String {
-        commitShort.isEmpty ? displayVersion : "\(displayVersion) \(commitShort)"
-    }
-
     static var displayVersion: String {
         let version = bundleValue("CFBundleShortVersionString")
         return version.isEmpty ? "unknown" : version
