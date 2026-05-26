@@ -19,7 +19,7 @@ public class UpdateDeviceDialogFragmentTest {
     public void espUpdateMessagePointsToAndroidSerialFlashing() {
         String message = UpdateDeviceDialogFragment.espUpdateUnavailableMessage();
         assertTrue(message.contains("serial bootloader"));
-        assertTrue(message.contains("firmware target"));
+        assertTrue(message.contains("detect the ESP family"));
         assertTrue(message.contains("Android"));
         assertFalse(message.contains("macOS"));
     }

@@ -104,8 +104,9 @@ Current Android board split:
 - STM32 runtime uses USB and can enter the DFU-based update flow.
 - ESP32 runtime now shares the same USB connection path. ESP32-S3 can also connect over BLE; ESP32-S2 is USB/Wi-Fi only.
 - Android can connect to a trusted LAN/VPN ESP32 Wi-Fi endpoint by manual host/IP and port using the firmware WebSocket path (`ws://<host>:3922/v1/ws`), discover `_emwaver._tcp` endpoints through Android NSD, and provision/clear/query ESP32 Wi-Fi setup over the active local USB/BLE/Wi-Fi connection.
-- Android firmware update UI keeps ESP boards out of STM32 DFU. It uses the Android-native ESP serial bootloader updater and flashes the same four-image layout as macOS/Windows: bootloader, partition table, OTA data, and app. When Android only sees a serial bootloader device, the update dialog exposes an ESP32 / ESP32-S2 / ESP32-S3 target picker; when a run-mode ESP board is connected, the connected board type selects the firmware target.
-- The Android firmware update dialog follows the same user-visible state model as macOS and Windows: STM32 uses prompt/status/error/progress cards with footer actions, while ESP uses a bootloader card with Refresh, target selection, Flash firmware, progress, error, and done states.
+- Android firmware update UI keeps ESP boards out of STM32 DFU. It uses the Android-native ESP serial bootloader updater and flashes the same four-image layout as macOS/Windows: bootloader, partition table, OTA data, and app. ESP firmware targets are auto-selected from connected board metadata or USB identity; Android no longer asks the user to pick an ESP family manually.
+- The Android firmware update dialog follows the same user-visible state model as macOS and Windows: STM32 uses prompt/status/error/progress cards with footer actions, while ESP uses a bootloader card with Refresh, detected target, Flash firmware, progress, error, and done states.
+- The Android device modal presents the active local device, transport, board family, firmware status, Wi-Fi actions, disconnect, and firmware update entry point in the same card-based style as the update dialog.
 
 ---
 

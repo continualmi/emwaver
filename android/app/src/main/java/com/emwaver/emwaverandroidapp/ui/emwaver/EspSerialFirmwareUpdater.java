@@ -117,6 +117,26 @@ final class EspSerialFirmwareUpdater {
                 || manufacturer.contains("qinheng");
     }
 
+    @Nullable
+    static String inferBoardType(@Nullable UsbDevice device) {
+        if (device == null) {
+            return null;
+        }
+        String identity = lower(device.getProductName()) + " "
+                + lower(device.getManufacturerName()) + " "
+                + lower(device.getDeviceName());
+        if (identity.contains("esp32-s3") || identity.contains("esp32s3")) {
+            return "esp32s3";
+        }
+        if (identity.contains("esp32-s2") || identity.contains("esp32s2")) {
+            return "esp32s2";
+        }
+        if (identity.contains("esp32")) {
+            return "esp32";
+        }
+        return null;
+    }
+
     static void flashBundledImage(
             Context context,
             UsbManager manager,
@@ -197,7 +217,7 @@ final class EspSerialFirmwareUpdater {
                         "firmware/emwaver-esp32s3-app.bin"
                 );
             default:
-                throw new IOException("Choose an ESP32, ESP32-S2, or ESP32-S3 firmware target.");
+                throw new IOException("Reconnect the ESP board in Run Mode first so EMWaver can detect the firmware target.");
         }
     }
 

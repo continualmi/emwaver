@@ -140,18 +140,21 @@
                             android:textSize="13sp"
                             android:textStyle="bold" />
 
-                        <Spinner
-                            android:id="@+id/esp_target_spinner"
+                        <TextView
+                            android:id="@+id/esp_target_text"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp" />
+                            android:layout_marginTop="6dp"
+                            android:text="Detecting"
+                            android:textColor="@color/textPrimary"
+                            android:textSize="13sp" />
 
                         <TextView
                             android:id="@+id/esp_target_help"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:layout_marginTop="4dp"
-                            android:text="Select the exact ESP family before flashing from serial bootloader mode."
+                            android:text="EMWaver uses the connected board metadata instead of a manual target picker."
                             android:textColor="@color/textSecondary"
                             android:textSize="12sp" />
                     </LinearLayout>

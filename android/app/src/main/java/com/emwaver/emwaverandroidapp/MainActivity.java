@@ -19,9 +19,12 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.text.InputType;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.view.View;
+import android.view.ViewGroup;
 import android.os.Handler;
 import android.os.Looper;
 import android.widget.Button;
@@ -267,44 +270,77 @@ public class MainActivity extends AppCompatActivity {
         final String bundledVer = BuildConfig.EMWAVER_BUNDLED_FW_VERSION;
         final boolean upToDate = deviceVer != null && bundledVer != null && !bundledVer.isEmpty() && deviceVer.equals(bundledVer);
 
-        // If the device is already in Update Mode, the primary action is "Update".
-        // Don't force an extra click through the actions list.
-        if (dfuConnected && !connected) {
-            com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment update =
-                new com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment();
-            update.show(getSupportFragmentManager(), "UpdateDeviceDialogFragment");
-            return;
-        }
-
-        // Keep this modal lightweight; actions are explicit buttons (like macOS).
-
-        String status;
-        if (connected) {
-            status = "Connected";
-        } else {
-            status = dfuConnected ? "Update Mode detected" : "Disconnected";
-        }
         String connectionStatus = connectionManager != null ? connectionManager.getConnectionStatus() : null;
-        if (connectionStatus != null && !"Not connected".equalsIgnoreCase(connectionStatus)) {
-            status = connectionStatus;
-        }
-
-        String versionLine = "";
+        String boardType = usbService != null ? usbService.getConnectedBoardType() : null;
+        String state = connected ? "Connected" : dfuConnected ? "Update Mode" : "Disconnected";
+        String deviceName = connected
+                ? safeValue(connectionStatus, "Connected local device")
+                : dfuConnected
+                ? "STM32 DFU bootloader"
+                : "No local device connected";
+        String transport = connected
+                ? connectionTypeLabel(connectionManager.getActiveConnectionType())
+                : dfuConnected
+                ? "STM32 DFU"
+                : "None";
+        String board = dfuConnected && !connected ? "STM32F042" : boardDisplayName(boardType, connected);
+        String firmware = "Connect a board to read firmware.";
         if (connected) {
             String dv = (deviceVer != null && !deviceVer.isEmpty()) ? deviceVer : "?";
             String bv = (bundledVer != null && !bundledVer.isEmpty()) ? bundledVer : "?";
-            versionLine = "\n\nFirmware: " + dv + " (bundled: " + bv + ")" + (upToDate ? " • Up to date" : " • Update available");
+            firmware = "Firmware: " + dv + " (bundled: " + bv + ") - " + (upToDate ? "Up to date" : "Update available");
+        } else if (dfuConnected) {
+            firmware = "Firmware: ready to flash bundled firmware.";
         }
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(this)
-            .setTitle("Connection")
-            .setMessage(status + versionLine)
-            .setNegativeButton("Close", null);
+        View root = LayoutInflater.from(this).inflate(R.layout.dialog_connection_actions, null, false);
+        setDialogText(root, R.id.device_subtitle, connected
+                ? "This is the device Android will use for scripts and local updates."
+                : dfuConnected
+                ? "The board is connected in Update Mode."
+                : "Connect a supported board over USB/BLE or a trusted local Wi-Fi endpoint.");
+        setDialogText(root, R.id.device_state_value, state);
+        setDialogText(root, R.id.device_name_value, deviceName);
+        setDialogText(root, R.id.device_transport_value, "Transport: " + transport);
+        setDialogText(root, R.id.device_board_value, "Board: " + board);
+        setDialogText(root, R.id.device_firmware_value, firmware);
+        setDialogText(root, R.id.device_help_text, connected
+                ? "Local scripts run on this device without an EMWaver account, activation, or hosted relay."
+                : dfuConnected
+                ? "Flash the bundled firmware to return this board to Run Mode."
+                : "Android will auto-detect supported USB/BLE boards. Wi-Fi is for user-owned LAN/VPN endpoints.");
 
-        // Primary action: Update firmware.
-        // IMPORTANT: do NOT switch into DFU here. The update dialog has an explicit confirmation
-        // button for entering Update Mode (with a warning that the device becomes unusable until flashed).
-        builder.setPositiveButton("Update firmware…", (d, w) -> {
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setView(root)
+                .create();
+
+        Button closeButton = root.findViewById(R.id.device_close_button);
+        closeButton.setOnClickListener(v -> dialog.dismiss());
+
+        Button disconnectButton = root.findViewById(R.id.device_disconnect_button);
+        disconnectButton.setVisibility(connected ? View.VISIBLE : View.GONE);
+        disconnectButton.setOnClickListener(v -> {
+            if (connectionManager != null) {
+                connectionManager.disconnect();
+            }
+            updateConnectionUiOnce();
+            dialog.dismiss();
+        });
+
+        Button wifiButton = root.findViewById(R.id.device_wifi_button);
+        wifiButton.setText(connected ? "Wi-Fi Setup" : "Connect Wi-Fi");
+        wifiButton.setOnClickListener(v -> {
+            dialog.dismiss();
+            if (connected) {
+                showWiFiSetupDialog();
+            } else {
+                showWiFiConnectionDialog();
+            }
+        });
+
+        Button updateButton = root.findViewById(R.id.device_update_button);
+        updateButton.setVisibility((connected || dfuConnected) ? View.VISIBLE : View.GONE);
+        updateButton.setOnClickListener(v -> {
             if (connectionManager == null) {
                 return;
             }
@@ -319,17 +355,65 @@ public class MainActivity extends AppCompatActivity {
 
             com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment update =
                 new com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment();
+            dialog.dismiss();
             update.show(getSupportFragmentManager(), "UpdateDeviceDialogFragment");
         });
 
-        // Secondary actions.
-        if (connected) {
-            builder.setNeutralButton("Wi-Fi Setup…", (d, w) -> showWiFiSetupDialog());
-        } else {
-            builder.setNeutralButton("Wi-Fi…", (d, w) -> showWiFiConnectionDialog());
-        }
+        dialog.setOnShowListener(d -> {
+            if (dialog.getWindow() != null) {
+                int width = Math.min(dp(540), getResources().getDisplayMetrics().widthPixels - dp(32));
+                dialog.getWindow().setLayout(width, ViewGroup.LayoutParams.WRAP_CONTENT);
+            }
+        });
+        dialog.show();
+    }
 
-        builder.show();
+    private void setDialogText(View root, int id, String value) {
+        TextView textView = root.findViewById(id);
+        if (textView != null) {
+            textView.setText(value != null ? value : "");
+        }
+    }
+
+    private String safeValue(String value, String fallback) {
+        return value != null && !value.trim().isEmpty() && !"Not connected".equalsIgnoreCase(value.trim())
+                ? value
+                : fallback;
+    }
+
+    private String connectionTypeLabel(DeviceConnectionService.ConnectionType type) {
+        if (type == DeviceConnectionService.ConnectionType.USB) {
+            return "USB";
+        }
+        if (type == DeviceConnectionService.ConnectionType.BLE) {
+            return "BLE";
+        }
+        if (type == DeviceConnectionService.ConnectionType.WIFI) {
+            return "Wi-Fi";
+        }
+        return "None";
+    }
+
+    private String boardDisplayName(String boardType, boolean connected) {
+        String normalized = boardType != null ? boardType.trim().toLowerCase(Locale.US) : "";
+        switch (normalized) {
+            case "esp32s3":
+            case "esp32-s3":
+                return "ESP32-S3";
+            case "esp32s2":
+            case "esp32-s2":
+                return "ESP32-S2";
+            case "esp32":
+                return "ESP32";
+            case "stm32f042":
+                return "STM32F042";
+            default:
+                return connected ? "Unknown supported board" : "-";
+        }
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
     private void showWiFiConnectionDialog() {

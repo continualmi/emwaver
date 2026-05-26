@@ -82,6 +82,7 @@ public class USBService extends Service implements DeviceConnectionService {
     private final Object commandLock = new Object();
     private volatile String deviceFirmwareVersion = null;
     private volatile String connectedBoardType = null;
+    private volatile String lastKnownBoardType = null;
 
     // Transport session state
     private HandlerThread sessionThread;
@@ -410,10 +411,10 @@ public class USBService extends Service implements DeviceConnectionService {
                 deviceFirmwareVersion = major + "." + minor;
             }
             String boardTypeHint = queryBoardTypeHint();
-            connectedBoardType = inferConnectedBoardType(boardTypeHint);
+            setConnectedBoardType(inferConnectedBoardType(boardTypeHint));
         } catch (Throwable t) {
             deviceFirmwareVersion = null;
-            connectedBoardType = inferConnectedBoardType(null);
+            setConnectedBoardType(inferConnectedBoardType(null));
         }
     }
 
@@ -561,6 +562,9 @@ public class USBService extends Service implements DeviceConnectionService {
 
     void setConnectedBoardType(String boardType) {
         connectedBoardType = boardType;
+        if (boardType != null && !boardType.trim().isEmpty()) {
+            lastKnownBoardType = boardType;
+        }
     }
 
     @Override
@@ -716,6 +720,8 @@ public class USBService extends Service implements DeviceConnectionService {
     public String getDeviceFirmwareVersion() { return deviceFirmwareVersion; }
 
     public String getConnectedBoardType() { return connectedBoardType; }
+
+    public String getLastKnownBoardType() { return lastKnownBoardType; }
 
 // DFU helpers
 
