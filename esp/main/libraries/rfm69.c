@@ -25,6 +25,7 @@
 #include "command_registry.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
+#include "emw_target.h"
 #include "esp_log.h"
 
 static const char *TAG = "RFM69";
@@ -35,10 +36,10 @@ static const char *TAG = "RFM69";
 #define RFM69_FXOSC_HZ 32000000.0
 
 // Configurable pins (defaults)
-static int rfm69_miso = 13;
-static int rfm69_mosi = 11;
-static int rfm69_sck  = 12;
-static int rfm69_cs   = 36;
+static int rfm69_miso = EMW_TARGET_SPI_DEFAULT_MISO;
+static int rfm69_mosi = EMW_TARGET_SPI_DEFAULT_MOSI;
+static int rfm69_sck  = EMW_TARGET_SPI_DEFAULT_SCK;
+static int rfm69_cs   = EMW_TARGET_SPI_DEFAULT_CS;
 
 static spi_device_handle_t rfm69_handle = NULL;
 static bool rfm69_initialized = false;

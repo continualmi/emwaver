@@ -104,6 +104,7 @@ static void init_ir_tx_pins(void);
 
 void emwaver_init(void)
 {
+    ESP_LOGI(TAG, "Starting firmware init for %s (%s)", EMW_TARGET_BOARD_TYPE, EMW_TARGET_CAPABILITIES);
     init_ir_tx_pins();
 
     esp_err_t ret = nvs_flash_init();
@@ -129,9 +130,11 @@ void emwaver_init(void)
     }
 
     command_registry_init();
+    ESP_LOGI(TAG, "Command registry ready");
     spi_init();
     sampler_module_init();
     spi_boot_init_defaults();
+    ESP_LOGI(TAG, "Local runtime modules ready");
 
     spi_register_commands();
     rfm69_register_commands();
@@ -145,10 +148,13 @@ void emwaver_init(void)
     configASSERT(cmd_queue != NULL);
 
     usb_init(cmd_queue);
+    ESP_LOGI(TAG, "USB transport init complete");
     if (EMW_TARGET_HAS_BLE) {
         ble_server_init(cmd_queue);
+        ESP_LOGI(TAG, "BLE transport init complete");
     }
     wifi_transport_init(cmd_queue);
+    ESP_LOGI(TAG, "Wi-Fi transport init complete");
 
     BaseType_t created = xTaskCreatePinnedToCore(command_task,
                                                 "cmd_task",

@@ -465,13 +465,18 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         if name.contains("esp32-s2") || name.contains("esp32s2") {
             return "esp32s2"
         }
-        if name.contains("esp32-s3") || name.contains("esp32s3") || name.contains("s3") || name.contains("ble") {
+        if name.contains("esp32-s3") || name.contains("esp32s3") || name.contains("s3") {
             return "esp32s3"
         }
         if name.contains("esp32") || name.contains("emwaver esp") {
             return "esp32"
         }
         return "stm32f042"
+    }
+
+    private func inferBleBoardType(name: String?) -> String {
+        let inferred = inferBoardType(portName: name)
+        return inferred == "stm32f042" ? "esp32" : inferred
     }
 
     private func isWiFiProvisionableBoardType(_ boardType: String) -> Bool {
@@ -1204,7 +1209,11 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             return wifiDevices.first(where: { $0.id == targetID })?.boardType ?? "esp32"
         }
         if targetID.hasPrefix("ble:") {
-            return "esp32s3"
+            let uuidText = String(targetID.dropFirst("ble:".count))
+            if let uuid = UUID(uuidString: uuidText) {
+                return inferBleBoardType(name: bleDiscoveredNamesByID[uuid])
+            }
+            return "esp32"
         }
         if targetID.hasPrefix("midi:") {
             return displayNameFromDeviceID(targetID).map { inferBoardType(portName: $0) }
@@ -1448,7 +1457,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 id: id,
                 displayName: name,
                 transport: .ble,
-                boardType: boardTypeByDeviceID[id] ?? "esp32s3",
+                boardType: boardTypeByDeviceID[id] ?? inferBleBoardType(name: name),
                 moduleLabel: nil,
                 identifierText: hardwareUID.map { "UID \($0)" },
                 connectionState: isConnected ? .connected : (isConnecting ? .connecting : .discovered),
@@ -2184,7 +2193,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
     private func connectBleInternal(_ peripheral: CBPeripheral, name: String?, makeActive: Bool = true) {
         let deviceID = "ble:\(peripheral.identifier.uuidString)"
-        boardTypeByDeviceID[deviceID] = "esp32s3"
+        let initialBoardType = inferBleBoardType(name: name ?? peripheral.name)
+        boardTypeByDeviceID[deviceID] = initialBoardType
         if makeActive {
             guard canActivateTransportInternal(deviceID) else {
                 return
@@ -2215,11 +2225,11 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         DispatchQueue.main.async {
             if makeActive {
                 self.connectedPortName = name ?? peripheral.name ?? "EMWaver BLE"
-                self.connectedBoardType = "esp32s3"
+                self.connectedBoardType = initialBoardType
                 self.connectedTransportKind = "BLE"
                 self.lastErrorText = nil
             }
-            self.lastDetectedBoardType = "esp32s3"
+            self.lastDetectedBoardType = initialBoardType
         }
         publishDiscoveredDevices()
     }
@@ -2410,7 +2420,8 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         bleConnectedPeripheralsByID[peripheral.identifier] = peripheral
         let deviceID = "ble:\(peripheral.identifier.uuidString)"
-        boardTypeByDeviceID[deviceID] = "esp32s3"
+        let initialBoardType = inferBleBoardType(name: bleDiscoveredNamesByID[peripheral.identifier] ?? peripheral.name)
+        boardTypeByDeviceID[deviceID] = initialBoardType
         ensureDeviceSessionInternal(deviceID: deviceID)
         let shouldBecomeActive = !bleIdentityProbePeripheralIDs.contains(peripheral.identifier) &&
             (blePeripheral == nil || blePeripheral == peripheral)
@@ -2423,11 +2434,11 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         DispatchQueue.main.async {
             if shouldBecomeActive {
                 self.connectedPortName = self.bleDiscoveredNamesByID[peripheral.identifier] ?? peripheral.name ?? "EMWaver BLE"
-                self.connectedBoardType = "esp32s3"
+                self.connectedBoardType = initialBoardType
                 self.connectedTransportKind = "BLE"
                 self.lastErrorText = nil
             }
-            self.lastDetectedBoardType = "esp32s3"
+            self.lastDetectedBoardType = initialBoardType
         }
         publishDiscoveredDevices()
     }
@@ -2518,18 +2529,23 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
             DispatchQueue.global(qos: .userInitiated).async {
                 let version = self.queryDeviceVersion(timeoutMs: 2000, deviceID: deviceID)
                 let uid = self.queryHardwareUID(timeoutMs: 2000, deviceID: deviceID)
+                let reportedBoardType = self.queryBoardType(timeoutMs: 2000, deviceID: deviceID)
+                let boardType = reportedBoardType ?? self.inferBleBoardType(
+                    name: self.bleDiscoveredNamesByID[peripheral.identifier] ?? peripheral.name
+                )
                 DispatchQueue.main.async {
                     if self.activeDeviceID == deviceID {
                         self.isConnected = true
                         self.deviceEmwaverVersion = version
                         self.connectedHardwareUID = uid
-                        self.connectedBoardType = "esp32s3"
+                        self.connectedBoardType = boardType
                         self.connectedTransportKind = "BLE"
                     }
-                    self.lastDetectedBoardType = "esp32s3"
+                    self.lastDetectedBoardType = boardType
                 }
                 self.midiQueue.async {
                     if let uid { self.hardwareUIDByDeviceID[deviceID] = uid }
+                    self.boardTypeByDeviceID[deviceID] = boardType
                     self.publishDiscoveredDevices()
                 }
             }

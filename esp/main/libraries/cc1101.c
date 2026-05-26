@@ -18,6 +18,7 @@
 #include "cc1101.h"
 
 #include "command_registry.h"
+#include "emw_target.h"
 #include "spi.h"
 #include "esp_err.h"
 #include "esp_log.h"
@@ -33,10 +34,10 @@ static const char *TAG = "CC1101";
 #define CC1101_CLOCK 8000000
 
 // Configurable pins (defaults match wavelet_gpio.js + older ISM wiring)
-static int cc1101_miso = 13;
-static int cc1101_mosi = 11;
-static int cc1101_sck = 12;
-static int cc1101_cs = 10;
+static int cc1101_miso = EMW_TARGET_SPI_DEFAULT_MISO;
+static int cc1101_mosi = EMW_TARGET_SPI_DEFAULT_MOSI;
+static int cc1101_sck = EMW_TARGET_SPI_DEFAULT_SCK;
+static int cc1101_cs = EMW_TARGET_SPI_DEFAULT_CS;
 
 static bool cc1101_did_reset = false;
 

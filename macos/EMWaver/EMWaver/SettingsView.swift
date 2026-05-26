@@ -31,7 +31,7 @@ struct SettingsView: View {
                 Section("Device diagnostics") {
                     Toggle("Log transport packets on ESP serial", isOn: $transportDebugLoggingEnabled)
 
-                    Text("When enabled, ESP32-S3 firmware logs BLE, USB, and Wi-Fi command packets on the serial monitor. If disabled, the app turns firmware transport logging off after it finishes connection metadata checks.")
+                    Text("When enabled, ESP32 firmware logs BLE, USB, and Wi-Fi command packets on the serial monitor. If disabled, the app turns firmware transport logging off after it finishes connection metadata checks.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

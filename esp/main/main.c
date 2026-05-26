@@ -22,6 +22,7 @@
 #include "driver/spi_master.h"
 #include "esp_err.h"
 #include "esp_log.h"
+#include "emw_target.h"
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -53,10 +54,10 @@ static void rfm69_quick_command(const char *ignored_action)
 
     // Defaults match our RFM69 module defaults.
     const spi_host_device_t host = SPI2_HOST;
-    const int miso = 13;
-    const int mosi = 11;
-    const int sck = 12;
-    const int cs = 36;
+    const int miso = EMW_TARGET_SPI_DEFAULT_MISO;
+    const int mosi = EMW_TARGET_SPI_DEFAULT_MOSI;
+    const int sck = EMW_TARGET_SPI_DEFAULT_SCK;
+    const int cs = EMW_TARGET_SPI_DEFAULT_CS;
     const int clock_hz = 8000000;
 
     static bool initialized = false;

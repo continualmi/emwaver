@@ -41,15 +41,23 @@ if [[ -z "${IDF_TOOLS_PATH:-}" && -d "${tools_default}" ]]; then
 fi
 
 # If ESP-IDF was installed with a different system Python than the one
-# currently first on PATH (for example Homebrew vs pyenv), point export.sh
-# at the existing virtualenv so sourcing remains stable across shells.
+# currently first on PATH (for example Homebrew vs conda), point export.sh
+# at an existing virtualenv so sourcing remains stable across shells. Also
+# recover from a stale IDF_PYTHON_ENV_PATH left by another shell/Python.
+if [[ -n "${IDF_PYTHON_ENV_PATH:-}" && ! -x "${IDF_PYTHON_ENV_PATH}/bin/python" ]]; then
+    unset IDF_PYTHON_ENV_PATH
+fi
+
 if [[ -z "${IDF_PYTHON_ENV_PATH:-}" && -d "${IDF_TOOLS_PATH}/python_env" ]]; then
-    python_env_matches=()
+    first_python_env=""
     for python_env_match in "${IDF_TOOLS_PATH}"/python_env/idf*_py*_env; do
-        [[ -d "${python_env_match}" ]] && python_env_matches+=("${python_env_match}")
+        if [[ -d "${python_env_match}" ]]; then
+            first_python_env="${python_env_match}"
+            break
+        fi
     done
-    if (( ${#python_env_matches[@]} > 0 )); then
-        export IDF_PYTHON_ENV_PATH="${python_env_matches[0]}"
+    if [[ -n "${first_python_env}" ]]; then
+        export IDF_PYTHON_ENV_PATH="${first_python_env}"
     fi
 fi
 

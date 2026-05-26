@@ -2,8 +2,14 @@
 dependencies:
   ## Required IDF version
   idf: "^5.0"
-  espressif/esp_tinyusb: "^1.1"
-  espressif/tinyusb: "0.18.0~2"
+  espressif/esp_tinyusb:
+    version: "^1.1"
+    rules:
+      - if: "target in [esp32s2, esp32s3]"
+  espressif/tinyusb:
+    version: "0.18.0~2"
+    rules:
+      - if: "target in [esp32s2, esp32s3]"
   espressif/mdns: "^1.8"
   # # Put list of dependencies here
   # # For components maintained by Espressif:

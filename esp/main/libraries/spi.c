@@ -22,6 +22,7 @@
 #include "command_registry.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
+#include "emw_target.h"
 #include "esp_err.h"
 #include "esp_log.h"
 
@@ -34,13 +35,13 @@
 #endif
 #define SPI_DEFAULT_CLOCK_HZ 1000000
 
-// ESP32-S3 default SPI pins (flagship/shield/diy default bus).
+// Target default SPI pins (flagship/shield/diy default bus).
 // This is the one-and-only bus we support for the "no init/open/close" workflow.
 #define SPI_DEFAULT_HOST_ID 2
-#define SPI_DEFAULT_MISO 13
-#define SPI_DEFAULT_MOSI 11
-#define SPI_DEFAULT_SCK  12
-#define SPI_DEFAULT_CS   10
+#define SPI_DEFAULT_MISO EMW_TARGET_SPI_DEFAULT_MISO
+#define SPI_DEFAULT_MOSI EMW_TARGET_SPI_DEFAULT_MOSI
+#define SPI_DEFAULT_SCK  EMW_TARGET_SPI_DEFAULT_SCK
+#define SPI_DEFAULT_CS   EMW_TARGET_SPI_DEFAULT_CS
 
 typedef struct {
     bool initialized;

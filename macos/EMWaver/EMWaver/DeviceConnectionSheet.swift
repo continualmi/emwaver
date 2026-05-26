@@ -108,8 +108,8 @@ struct DeviceConnectionSheet: View {
     }
 
     private var isEspBoard: Bool {
-        switch currentBoardType.lowercased() {
-        case "esp32", "esp32s2", "esp32s3":
+        switch currentBoardType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "esp32", "esp32s2", "esp32-s2", "esp32s3", "esp32-s3":
             return true
         default:
             return false
@@ -128,18 +128,7 @@ struct DeviceConnectionSheet: View {
     }
 
     private var currentBoardDisplayName: String {
-        switch currentBoardType.lowercased() {
-        case "esp32":
-            return "ESP32"
-        case "esp32s2":
-            return "ESP32-S2"
-        case "esp32s3":
-            return "ESP32-S3"
-        case "stm32f042":
-            return "STM32F042"
-        default:
-            return currentBoardType.uppercased()
-        }
+        LocalDeviceLabelFormatter.boardDisplayName(currentBoardType)
     }
 
     var body: some View {

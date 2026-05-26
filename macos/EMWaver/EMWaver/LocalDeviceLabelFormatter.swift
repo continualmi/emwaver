@@ -13,12 +13,13 @@ enum LocalDeviceLabelFormatter {
     }
 
     static func boardDisplayName(_ boardType: String?) -> String {
-        switch (boardType ?? "").lowercased() {
+        let normalized = (boardType ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch normalized {
         case "esp32":
             return "ESP32"
-        case "esp32s2":
+        case "esp32s2", "esp32-s2":
             return "ESP32-S2"
-        case "esp32s3":
+        case "esp32s3", "esp32-s3":
             return "ESP32-S3"
         case "stm32f042":
             return "STM32F042"

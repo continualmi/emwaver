@@ -6,7 +6,7 @@ This folder contains the EMWaver ESP firmware workspace (ESP-IDF).
 
 # EMWaver ESP Firmware
 
-Primary targets: ESP32-S3 and ESP32-S2 running on ESP-IDF v5.5.1.
+Primary targets: ESP32-S3, ESP32-S2, and classic ESP32 running on ESP-IDF v5.5.1.
 
 This workspace was restored from git history as the starting point for bringing ESP32 support back to EMWaver.
 
@@ -174,6 +174,16 @@ Planned EMWaver direction for ESP32:
 - Wi-Fi is the path for remote autonomous control without a host.
 - USB remains available where the ESP32 hardware/runtime benefits from it.
 - Managed EMWaver provisioning, runtime, and update flows take precedence over raw transport-specific tooling.
+
+## Classic ESP32 support
+
+Classic ESP32 support is Wi-Fi + BLE only. It does not have native USB OTG, so
+the firmware builds the USB runtime stubs and excludes TinyUSB dependencies for
+this target. The target defaults enable NimBLE and move throughput-oriented
+Wi-Fi/PHY paths out of IRAM so the combined Wi-Fi + BLE firmware fits.
+
+Expected target capabilities:
+- ESP32: `board=esp32`, `cap=wifi,ble`
 
 ## ESP32-S2 support
 

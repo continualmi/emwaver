@@ -3,7 +3,6 @@ set(EMWAVER_ESP_SRCS
     "libraries/init.c"
     "libraries/transport_session.c"
     "libraries/transport_debug.c"
-    "libraries/usb.c"
     "libraries/wifi_transport.c"
     "libraries/ota_core.c"
     "libraries/ota_status.c"
@@ -19,8 +18,6 @@ set(EMWAVER_ESP_SRCS
 set(EMWAVER_ESP_PRIV_REQUIRES
     spi_flash
     driver
-    usb
-    tinyusb
     app_update
     mbedtls
     esp_wifi
@@ -30,12 +27,28 @@ set(EMWAVER_ESP_PRIV_REQUIRES
     esp_adc
     mdns)
 
-if(IDF_TARGET STREQUAL "esp32s3")
+set(EMWAVER_ESP_REQUIRES
+    esp_timer
+    nvs_flash)
+
+# USB OTG (TinyUSB): only on targets with native USB hardware
+if(IDF_TARGET STREQUAL "esp32s2" OR IDF_TARGET STREQUAL "esp32s3")
+    list(APPEND EMWAVER_ESP_SRCS "libraries/usb.c")
+    list(APPEND EMWAVER_ESP_PRIV_REQUIRES usb tinyusb)
+else()
+    list(APPEND EMWAVER_ESP_SRCS "libraries/usb_stub.c")
+endif()
+
+if(IDF_TARGET STREQUAL "esp32" OR IDF_TARGET STREQUAL "esp32s3")
+    list(APPEND EMWAVER_ESP_REQUIRES bt)
+endif()
+
+# BLE (NimBLE): available on ESP32 and ESP32-S3 when enabled in sdkconfig
+if((IDF_TARGET STREQUAL "esp32" OR IDF_TARGET STREQUAL "esp32s3") AND CONFIG_BT_NIMBLE_ENABLED)
     list(APPEND EMWAVER_ESP_SRCS
         "libraries/ble_server.c"
         "libraries/ota_ble.c"
         "libraries/ota_ble_gatt.c")
-    list(APPEND EMWAVER_ESP_PRIV_REQUIRES bt)
 else()
     list(APPEND EMWAVER_ESP_SRCS "libraries/ble_server_stub.c")
 endif()
@@ -43,4 +56,4 @@ endif()
 idf_component_register(SRCS ${EMWAVER_ESP_SRCS}
                     PRIV_REQUIRES ${EMWAVER_ESP_PRIV_REQUIRES}
                     INCLUDE_DIRS "." "libraries"
-                    REQUIRES esp_timer nvs_flash)
+                    REQUIRES ${EMWAVER_ESP_REQUIRES})

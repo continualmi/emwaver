@@ -182,6 +182,13 @@ struct EMWaverTests {
         #expect(LocalDeviceLabelFormatter.label(for: unprobedDevice) == "ESP32-S3 / EMWaver")
     }
 
+    @Test func localDeviceBoardDisplayNameNormalizesEspFamilies() {
+        #expect(LocalDeviceLabelFormatter.boardDisplayName("esp32") == "ESP32")
+        #expect(LocalDeviceLabelFormatter.boardDisplayName(" ESP32-S2 ") == "ESP32-S2")
+        #expect(LocalDeviceLabelFormatter.boardDisplayName("esp32s3") == "ESP32-S3")
+        #expect(LocalDeviceLabelFormatter.boardDisplayName(nil) == "Device")
+    }
+
     @MainActor
     @Test func espWiFiTransportSessionClaimIntegration() async throws {
         let env = ProcessInfo.processInfo.environment
