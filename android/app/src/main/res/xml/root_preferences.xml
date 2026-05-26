@@ -23,6 +23,12 @@
         app:iconSpaceReserved="false">
 
         <Preference
+            android:key="app_version"
+            android:title="App Version"
+            android:selectable="false"
+            app:iconSpaceReserved="false" />
+
+        <Preference
             android:key="help_documentation"
             android:title="Help &amp; Documentation"
             android:summary="Visit docs.emwaver.com for setup guides and tutorials"

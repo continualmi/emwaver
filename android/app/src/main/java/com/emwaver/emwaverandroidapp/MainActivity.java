@@ -203,7 +203,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         if (getSupportActionBar() != null) {
-            getSupportActionBar().setTitle(appTitleText());
+            getSupportActionBar().setTitle("EMWaver");
             getSupportActionBar().setSubtitle(null);
         }
 
@@ -214,19 +214,6 @@ public class MainActivity extends AppCompatActivity {
                 connectionMenuItem.getIcon().mutate().setTint(tint);
             }
         }
-    }
-
-    private String appTitleText() {
-        String version = BuildConfig.VERSION_NAME != null && !BuildConfig.VERSION_NAME.trim().isEmpty()
-                ? BuildConfig.VERSION_NAME.trim()
-                : "unknown";
-        String commit = BuildConfig.EMWAVER_COMMIT != null ? BuildConfig.EMWAVER_COMMIT.trim() : "";
-        if (commit.length() > 7) {
-            commit = commit.substring(0, 7);
-        }
-        return commit.isEmpty()
-                ? String.format(Locale.US, "EMWaver %s", version)
-                : String.format(Locale.US, "EMWaver %s %s", version, commit);
     }
 
     private int connectionIconRes(

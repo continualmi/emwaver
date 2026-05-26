@@ -13,6 +13,7 @@ import android.view.MenuItem;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.preference.EditTextPreference;
+import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
 import com.emwaver.emwaverandroidapp.agent.AgentApiKeyStore;
@@ -76,6 +77,22 @@ public class SettingsActivity extends AppCompatActivity {
                     keyPref.setText(existing);
                 }
             }
+
+            Preference appVersionPref = findPreference("app_version");
+            if (appVersionPref != null) {
+                appVersionPref.setSummary(appVersionSummary());
+            }
+        }
+
+        private String appVersionSummary() {
+            String version = BuildConfig.VERSION_NAME != null && !BuildConfig.VERSION_NAME.trim().isEmpty()
+                    ? BuildConfig.VERSION_NAME.trim()
+                    : "unknown";
+            String commit = BuildConfig.EMWAVER_COMMIT != null ? BuildConfig.EMWAVER_COMMIT.trim() : "";
+            if (commit.length() > 7) {
+                commit = commit.substring(0, 7);
+            }
+            return commit.isEmpty() ? version : version + " (" + commit + ")";
         }
     }
 } 
