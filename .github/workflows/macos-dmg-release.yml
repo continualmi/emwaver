@@ -124,3 +124,36 @@ jobs:
           files: |
             dist/EMWaver-macos.dmg
             dist/appcast.xml
+
+  publish-update-metadata:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download macOS update metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: EMWaver-macos-dmg
+          path: dist/macos
+
+      - name: Publish macOS appcast to emwaver.ai
+        uses: azure/cli@v2
+        env:
+          AZURE_EMWAVER_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_EMWAVER_STORAGE_CONNECTION_STRING }}
+          AZURE_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+        with:
+          inlineScript: |
+            set -euo pipefail
+            CONNECTION_STRING="${AZURE_EMWAVER_STORAGE_CONNECTION_STRING:-${AZURE_STORAGE_CONNECTION_STRING:-}}"
+            if [ -z "${CONNECTION_STRING}" ]; then
+              echo "Set AZURE_EMWAVER_STORAGE_CONNECTION_STRING, or keep legacy AZURE_STORAGE_CONNECTION_STRING, to publish Sparkle update metadata."
+              exit 1
+            fi
+            az storage blob upload \
+              --connection-string "${CONNECTION_STRING}" \
+              --container-name '$web' \
+              --name updates/macos/appcast.xml \
+              --file dist/macos/appcast.xml \
+              --content-type application/xml \
+              --content-cache-control "public, max-age=300" \
+              --overwrite true \
+              --only-show-errors

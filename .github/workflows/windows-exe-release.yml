@@ -187,3 +187,36 @@ jobs:
             dist/EMWaverSetup-windows-x64.exe
             dist/EMWaver-windows-x64.zip
             dist/emwaver-windows-update.json
+
+  publish-update-metadata:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Download Windows update metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: EMWaver-windows-x64
+          path: dist/windows
+
+      - name: Publish Windows update manifest to emwaver.ai
+        uses: azure/cli@v2
+        env:
+          AZURE_EMWAVER_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_EMWAVER_STORAGE_CONNECTION_STRING }}
+          AZURE_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+        with:
+          inlineScript: |
+            set -euo pipefail
+            CONNECTION_STRING="${AZURE_EMWAVER_STORAGE_CONNECTION_STRING:-${AZURE_STORAGE_CONNECTION_STRING:-}}"
+            if [ -z "${CONNECTION_STRING}" ]; then
+              echo "Set AZURE_EMWAVER_STORAGE_CONNECTION_STRING, or keep legacy AZURE_STORAGE_CONNECTION_STRING, to publish Windows update metadata."
+              exit 1
+            fi
+            az storage blob upload \
+              --connection-string "${CONNECTION_STRING}" \
+              --container-name '$web' \
+              --name updates/windows/latest.json \
+              --file dist/windows/emwaver-windows-update.json \
+              --content-type application/json \
+              --content-cache-control "public, max-age=300" \
+              --overwrite true \
+              --only-show-errors

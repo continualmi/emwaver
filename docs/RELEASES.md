@@ -102,7 +102,7 @@ Use `.github/workflows/ios-release-upload.yml` (`iOS Release Upload`) to build a
 
 `.github/workflows/macos-dmg-release.yml` builds and publishes `EMWaver-macos.dmg`. Treat this as the preview desktop artifact unless/until Developer ID signing and notarization are added.
 
-The macOS app includes Sparkle for app-level update checks. Production-quality Sparkle updates require Developer ID signing/notarization plus Sparkle EdDSA signing. The macOS release workflow expects `SPARKLE_PUBLIC_ED_KEY` and `SPARKLE_PRIVATE_ED_KEY`, generates signed `appcast.xml`, and publishes it as a release asset. The public appcast URL is `https://emwaver.ai/updates/macos/appcast.xml`; keep it EMWaver-owned even when the DMG payload is hosted by GitHub Releases, and mirror the generated `appcast.xml` there for the active release.
+The macOS app includes Sparkle for app-level update checks. Production-quality Sparkle updates require Developer ID signing/notarization plus Sparkle EdDSA signing. The macOS release workflow expects `SPARKLE_PUBLIC_ED_KEY` and `SPARKLE_PRIVATE_ED_KEY`, generates signed `appcast.xml`, publishes it as a release asset, and uploads it to `https://emwaver.ai/updates/macos/appcast.xml` through the static-site Azure storage account.
 
 ## Linux
 
@@ -123,4 +123,9 @@ Linux release packages are preview artifacts for now; keep Linux off public inst
 - `WINDOWS_CODE_SIGNING_CERT_PASSWORD`
 - `WINDOWS_SIGNING_TIMESTAMP_URL` (optional; defaults to DigiCert timestamping)
 
-The Windows app checks `https://emwaver.ai/updates/windows/latest.json` for app updates and falls back to the same metadata published as `emwaver-windows-update.json` on the GitHub Release. The manifest should use a version-pinned installer URL and include the installer SHA-256.
+The Windows app checks `https://emwaver.ai/updates/windows/latest.json` for app updates and falls back to the same metadata published as `emwaver-windows-update.json` on the GitHub Release. The Windows release workflow generates that manifest with a version-pinned installer URL and SHA-256, publishes it as a release asset, and uploads it to the static-site Azure storage account.
+
+The metadata upload jobs use `AZURE_EMWAVER_STORAGE_CONNECTION_STRING`, or the legacy `AZURE_STORAGE_CONNECTION_STRING` fallback, to overwrite:
+
+- `$web/updates/macos/appcast.xml`
+- `$web/updates/windows/latest.json`
