@@ -8,6 +8,10 @@ Current contract:
 - `read-identity --port ... [--baud ...]`
 - `flash --chip esp32|esp32s3 --port ... --bootloader-offset ... --flash-freq ... --bootloader ... --partition-table ... --ota-data ... --app ... [--baud ...] [--before ...] [--after ...] [--no-stub]`
 
+The flash command defaults to the same fast path ESP-IDF uses for normal
+`idf.py flash`: 460800 baud, `default_reset`, hard reset after flashing, and
+the esptool RAM stub enabled. Use `--no-stub` only as a recovery fallback.
+
 Build a standalone helper with:
 
 ```bash
