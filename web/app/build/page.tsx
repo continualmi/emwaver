@@ -29,9 +29,9 @@ const LANDING_IMAGES = [
 
 const SUPPORTED_MCUS = [
   {
-    name: "ESP32-S3",
+    name: "ESP32 family",
     description:
-      "Dual-core MCU family used for EMWaver wireless-capable targets and DIY builds. Best fit when you want USB, BLE, and Wi-Fi on the same device.",
+      "ESP32, ESP32-S2, and ESP32-S3 MCU families used for EMWaver wireless-capable targets and DIY builds. ESP32-S3 is the best fit when you want USB, BLE, and Wi-Fi on the same device. ESP32-S2 supports USB and Wi-Fi. Classic ESP32 supports Wi-Fi and BLE.",
     tags: ["MCU", "Wi-Fi", "BLE", "USB"],
   },
   {
@@ -152,8 +152,9 @@ export default function BuildPage() {
           </h1>
           <p className="max-w-2xl pt-4 text-[16px] leading-8 text-[color:var(--ink-dim)]">
             EMWaver turns supported dev boards into a full electronics lab — no
-            firmware toolchains, no build-flash loops. Start with an ESP32-S3 and
-            the EMWaver app, then explore hardware directly. If you want to go
+            firmware toolchains, no build-flash loops. Start with an ESP32-family
+            board (ESP32, ESP32-S2, or ESP32-S3) and the EMWaver app, then explore
+            hardware directly. If you want to go
             further, the hardware catalog below includes fabrication files for
             custom EMWaver boards.
           </p>

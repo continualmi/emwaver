@@ -223,12 +223,13 @@ export default function InstallDocPage() {
       </p>
       <ul>
         <li>
-          <strong>ESP32-S3 dev board</strong> — supported directly by EMWaver, so you can get
-          started without building anything from the lineup.
+          <strong>ESP32-family dev board</strong> (ESP32, ESP32-S2, or ESP32-S3) — supported
+          directly by EMWaver, so you can get started without building anything from the lineup.
         </li>
         <li>
           <strong>EMWaver Shield</strong> (ESP32-S3) — a shield-style carrier for an ESP32-S3
-          dev module, with IR TX/RX, radio-module support, and expanded headers.{" "}
+          dev module, with IR TX/RX, radio-module support, and expanded headers. Also
+          compatible with other ESP32-family boards that share the same pinout.{" "}
           <a href="https://github.com/continualmi/emwaver-shield" target="_blank" rel="noreferrer">
             Build files on GitHub
           </a>
@@ -244,8 +245,8 @@ export default function InstallDocPage() {
       <h2>3. Flash the EMWaver firmware</h2>
       <p>
         A supported board must be running the fixed EMWaver firmware for its target before the apps can
-        control hardware. Use the bundled firmware image for your board class — ESP32-S3 or STM32F042.
-        Do not build custom firmware as part of the normal setup flow.
+        control hardware. Use the bundled firmware image for your board class — ESP32, ESP32-S2,
+        ESP32-S3, or STM32F042. Do not build custom firmware as part of the normal setup flow.
       </p>
       <ul>
         <li><strong>Pre-flashed board</strong>: skip this step and connect directly.</li>

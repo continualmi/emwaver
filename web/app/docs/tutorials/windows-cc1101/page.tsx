@@ -5,7 +5,7 @@ export default function WindowsCc1101Tutorial() {
     <>
       <h1>Set up CC1101 on Windows (433 MHz)</h1>
       <p>
-        This tutorial shows how to wire a CC1101 module to an ESP32-S3 EMWaver device,
+        This tutorial shows how to wire a CC1101 module to an ESP32-family EMWaver device,
         run the built-in <code>cc1101.js</code> script, initialize the radio for
         433.92 MHz ASK/OOK transmit mode, and turn on a continuous carrier.
       </p>
@@ -18,7 +18,7 @@ export default function WindowsCc1101Tutorial() {
       <h2>What you&rsquo;ll need</h2>
       <ul>
         <li>A Windows 11 PC with the EMWaver app installed.</li>
-        <li>An ESP32-S3 board running EMWaver firmware.</li>
+        <li>An ESP32-family board running EMWaver firmware (ESP32, ESP32-S2, or ESP32-S3).</li>
         <li>A CC1101 433 MHz module.</li>
         <li>Jumper wires and a suitable 433 MHz antenna or controlled test setup.</li>
       </ul>
@@ -29,14 +29,17 @@ export default function WindowsCc1101Tutorial() {
 
       <h2>1. Wire the CC1101 to ESP32 SPI</h2>
       <p>
-        Wire the CC1101 module to the ESP32-S3 SPI pins used by the built-in script defaults:
+        Wire the CC1101 module to the ESP32 SPI pins used by the built-in script defaults.
+        The table below shows the defaults for ESP32-S2 and ESP32-S3. For classic ESP32, the
+        default pins differ: CS=GPIO21, MOSI=GPIO23, MISO=GPIO19, SCK=GPIO18, GDO0=GPIO4.
+        You can change any pin in the script pickers.
       </p>
       <div className="my-4 overflow-x-auto rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)]">
         <table className="min-w-full text-sm">
           <thead>
             <tr>
               <th>CC1101 pin</th>
-              <th>ESP32-S3 pin</th>
+              <th>ESP32 pin</th>
               <th>Purpose</th>
             </tr>
           </thead>
@@ -110,7 +113,7 @@ export default function WindowsCc1101Tutorial() {
       </ol>
       <p>
         In the first <strong>Device</strong> card, confirm the board type and pin selections.
-        For this tutorial, use <strong>ESP32-S3</strong>, <strong>CS = GPIO10</strong>, and
+        For this tutorial, use <strong>ESP32</strong>, <strong>CS = GPIO10</strong>, and
         <strong>GDO0 = GPIO2</strong> unless your wiring is different.
       </p>
 

@@ -6,8 +6,14 @@ function getMcuLabel(device: HardwareDevice): string {
   const requires = device.requires.map((item) => item.toLowerCase());
   const description = device.description.toLowerCase();
 
+  if (device.group === "esp32") {
+    if (tags.includes("esp32-s3") || description.includes("esp32-s3")) return "ESP32-S3";
+    if (tags.includes("esp32-s2") || description.includes("esp32-s2")) return "ESP32-S2";
+    if (tags.includes("esp8266")) return "ESP8266";
+    return "ESP32";
+  }
+
   if (
-    device.group === "esp32" ||
     tags.includes("esp32-s3") ||
     requires.some((item) => item.includes("esp32-s3")) ||
     description.includes("esp32-s3")

@@ -5,10 +5,10 @@ const RELEASE_DOWNLOAD_BASE = "https://github.com/continualmi/emwaver/releases/l
 export default function WindowsFlashingTutorial() {
   return (
     <>
-      <h1>Flash ESP32-S3 firmware on Windows</h1>
+      <h1>Flash ESP32 firmware on Windows</h1>
       <p>
         This tutorial walks through installing the EMWaver Windows app and flashing the managed
-        ESP32-S3 firmware onto a supported dev board — no ESP-IDF or manual build loop required.
+        ESP32 firmware onto a supported dev board (ESP32, ESP32-S2, or ESP32-S3) — no ESP-IDF or manual build loop required.
       </p>
 
       <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 my-6">
@@ -17,7 +17,7 @@ export default function WindowsFlashingTutorial() {
         </div>
         <ul className="mt-2 space-y-2 text-sm leading-6 text-[color:var(--ink-dim)]">
           <li>A Windows 11 PC</li>
-          <li>An ESP32-S3 dev board</li>
+          <li>An ESP32-family dev board (ESP32, ESP32-S2, or ESP32-S3)</li>
           <li>A USB-C cable that supports data</li>
           <li>The EMWaver Windows app</li>
         </ul>
@@ -70,9 +70,9 @@ export default function WindowsFlashingTutorial() {
         </figcaption>
       </figure>
 
-      <h2>3. Put the ESP32-S3 into bootloader mode</h2>
+      <h2>3. Put the ESP32 into bootloader mode</h2>
       <p>
-        Before flashing, the ESP32-S3 must be in bootloader mode. On a typical ESP32-S3 dev board:
+        Before flashing, the ESP32 must be in bootloader mode. On a typical ESP32-family dev board:
       </p>
       <ol>
         <li>Hold <strong>BOOT</strong>.</li>
@@ -88,7 +88,7 @@ export default function WindowsFlashingTutorial() {
       <figure className="my-6 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-3">
         <img
           src="/tutorials/windows-flashing-bootloader-modal.png"
-          alt="EMWaver Windows firmware flashing window showing ESP32-S3 bootloader detected"
+          alt="EMWaver Windows firmware flashing window showing ESP32 bootloader detected"
           className="w-full rounded-xl border border-[color:var(--line)]"
         />
         <figcaption className="mt-3 text-sm leading-6 text-[color:var(--ink-dim)]">
@@ -100,7 +100,7 @@ export default function WindowsFlashingTutorial() {
       <h2>4. Flash firmware</h2>
       <p>
         Click <strong>Flash firmware</strong>. The app uses the bundled ESP32 flashing helper and
-        the prebuilt EMWaver ESP32-S3 firmware images that ship inside the app.
+        the prebuilt EMWaver ESP32 firmware images that ship inside the app.
       </p>
       <p>
         The flashing process can take around <strong>2 minutes</strong>. Keep the board plugged in
@@ -119,14 +119,14 @@ export default function WindowsFlashingTutorial() {
       </figure>
 
       <blockquote>
-        The Windows app bundles the ESP32-S3 firmware partitions: <code>bootloader.bin</code>,{" "}
+        The Windows app bundles the ESP32 firmware partitions: <code>bootloader.bin</code>,{" "}
         <code>partition-table.bin</code>, <code>ota-data.bin</code>, and <code>app.bin</code>.
         You do not need to download or build anything else.
       </blockquote>
 
       <h2>5. Reset and verify</h2>
       <p>
-        When flashing completes, reset the ESP32-S3 board. Do this by pressing <strong>RST</strong>{" "}
+        When flashing completes, reset the ESP32 board. Do this by pressing <strong>RST</strong>{" "}
         / <strong>RESET</strong>, or by unplugging and plugging the board back in without holding
         BOOT.
       </p>
@@ -158,7 +158,7 @@ export default function WindowsFlashingTutorial() {
           <h3 className="mt-0 text-base">Wrong COM port selected</h3>
           <p className="text-sm">
             Use the port selector in the firmware flashing window. Pick the port that appears when
-            the ESP32-S3 is plugged in or enters bootloader mode.
+            the ESP32 is plugged in or enters bootloader mode.
           </p>
         </div>
         <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">

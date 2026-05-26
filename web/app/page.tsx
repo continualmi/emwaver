@@ -39,7 +39,7 @@ const gettingStarted = [
   {
     step: "1",
     title: "Pick a supported board",
-    body: "Start with an ESP32-S3 class target or an EMWaver STM32 build from the catalog.",
+    body: "Start with an ESP32-family board (ESP32, ESP32-S2, or ESP32-S3), or an EMWaver STM32 build from the catalog.",
     href: "/build",
     cta: "Open Build",
   },

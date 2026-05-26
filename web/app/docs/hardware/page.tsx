@@ -8,8 +8,14 @@ function getMcuLabel(device: HardwareDevice): string {
   const requires = device.requires.map((item) => item.toLowerCase());
   const description = device.description.toLowerCase();
 
+  if (device.group === "esp32") {
+    if (tags.includes("esp32-s3") || description.includes("esp32-s3")) return "ESP32-S3";
+    if (tags.includes("esp32-s2") || description.includes("esp32-s2")) return "ESP32-S2";
+    if (tags.includes("esp8266")) return "ESP8266";
+    return "ESP32";
+  }
+
   if (
-    device.group === "esp32" ||
     tags.includes("esp32-s3") ||
     requires.some((item) => item.includes("esp32-s3")) ||
     description.includes("esp32-s3")
@@ -55,8 +61,8 @@ export default function HardwareDocPage() {
       </p>
       <p>
         You also do not need to build a custom EMWaver device to get started:
-        an off-the-shelf ESP32-S3 dev board is supported directly by the
-        platform. The EMWaver lineup is there when you want purpose-built
+        an off-the-shelf ESP32-family dev board (ESP32, ESP32-S2, or ESP32-S3)
+        is supported directly by the platform. The EMWaver lineup is there when you want purpose-built
         hardware, add-on modules, or downloadable build files.
       </p>
 
@@ -67,7 +73,7 @@ export default function HardwareDocPage() {
             <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)]">
               <Image
                 src="/landing3.png"
-                alt="ESP32-S3 board support"
+                alt="ESP32-family board support"
                 fill
                 unoptimized
                 className="object-cover"
@@ -75,17 +81,20 @@ export default function HardwareDocPage() {
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-lg font-semibold text-[color:var(--ink)]">
-                Any ESP32-S3 board
+                Any ESP32-family board
               </div>
               <div className="mt-1 text-xs text-[color:var(--ink-dim)]">
-                MCU: ESP32-S3
+                MCU: ESP32, ESP32-S2, ESP32-S3
               </div>
             </div>
           </div>
           <p className="mt-3 text-sm leading-6 text-[color:var(--ink-dim)]">
-            Any supported board built around an ESP32-S3 can work directly with
-            EMWaver. This is the fastest way to get started because you do not
-            need to build anything from the EMWaver lineup first.
+            Any supported board built around an ESP32, ESP32-S2, or ESP32-S3 can
+            work directly with EMWaver. ESP32-S3 is the best fit when you want
+            USB, BLE, and Wi-Fi on the same device. ESP32-S2 supports USB and
+            Wi-Fi. Classic ESP32 supports Wi-Fi and BLE. This is the fastest way
+            to get started because you do not need to build anything from the
+            EMWaver lineup first.
           </p>
         </div>
         <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">

@@ -23,7 +23,7 @@ export default function DocsIndex() {
             </div>
             <div className="mt-2 text-base font-semibold text-[color:var(--ink)]">Get a supported board</div>
             <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-              Start with an ESP32-S3 dev board or open the EMWaver hardware lineup and build files.
+              Start with an ESP32-family dev board (ESP32, ESP32-S2, or ESP32-S3) or open the EMWaver hardware lineup and build files.
             </p>
           </div>
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-4">
@@ -41,7 +41,7 @@ export default function DocsIndex() {
             </div>
             <div className="mt-2 text-base font-semibold text-[color:var(--ink)]">Flash fixed firmware</div>
             <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-              Use the bundled ESP32-S3 or STM32F042 EMWaver firmware image. No user build loop.
+              Use the bundled EMWaver firmware image for your board class (ESP32, ESP32-S2, ESP32-S3, or STM32F042). No user build loop.
             </p>
           </div>
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-4">
@@ -102,7 +102,7 @@ export default function DocsIndex() {
       <ol>
         <li>
           <strong>Choose hardware</strong> from the <Link href="/build">build catalog</Link> or start with a supported
-          ESP32-S3 dev board. Purpose-built hardware is also available in the{" "}
+          ESP32-family dev board (ESP32, ESP32-S2, or ESP32-S3). Purpose-built hardware is also available in the{" "}
           <a href="https://github.com/continualmi/emwaver-shield" target="_blank" rel="noreferrer">
             EMWaver Shield repository
           </a>
@@ -113,7 +113,7 @@ export default function DocsIndex() {
           <Link href="/docs/install">App Store, Google Play internal test, Android APK, macOS DMG, or Windows download</Link>.
         </li>
         <li>
-          <strong>Flash the fixed EMWaver firmware</strong> if your board is not already pre-flashed. Use the bundled ESP32-S3 or STM32F042 target image rather than building firmware manually.
+          <strong>Flash the fixed EMWaver firmware</strong> if your board is not already pre-flashed. Use the bundled target image for your board class (ESP32, ESP32-S2, ESP32-S3, or STM32F042) rather than building firmware manually.
         </li>
         <li>
           <strong>Plug in locally</strong>. EMWaver runs supported scripts directly through the native app and connected board.
@@ -173,7 +173,7 @@ export default function DocsIndex() {
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--sky)]">Tutorials</div>
             <div className="mt-1 text-lg font-semibold text-[color:var(--ink)]">Follow step-by-step hardware walkthroughs</div>
             <div className="mt-1 text-sm text-[color:var(--ink-dim)]">
-              Windows ESP32-S3 firmware flashing, CC1101 433 MHz setup, and practical script-driven hardware tests.
+              Windows ESP32-family firmware flashing, CC1101 433 MHz setup, and practical script-driven hardware tests.
             </div>
           </div>
           <div className="mt-1 text-sm font-semibold text-[color:var(--ink-dim)] transition group-hover:text-[color:var(--ink)]">

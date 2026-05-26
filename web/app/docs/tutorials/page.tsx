@@ -6,7 +6,7 @@ export default function TutorialsIndex() {
       <h1>Tutorials</h1>
       <p>
         Step-by-step walkthroughs for setting up EMWaver on specific platforms, connecting
-        hardware modules, and running your first scripts — all without digging through toolchains
+        hardware modules, and running your first scripts - all without digging through toolchains
         or IDE setup.
       </p>
 
@@ -20,10 +20,10 @@ export default function TutorialsIndex() {
             Windows
           </div>
           <div className="text-lg font-semibold text-[color:var(--ink)]">
-            Flash ESP32-S3 firmware on Windows
+            Flash ESP32 firmware on Windows
           </div>
           <p className="text-sm leading-6 text-[color:var(--ink-dim)]">
-            Walk through installing the Windows app, putting an ESP32-S3 dev board into
+            Walk through installing the Windows app, putting an ESP32-family dev board into
             bootloader mode, and flashing the managed EMWaver firmware — no manual toolchain required.
           </p>
           <div className="mt-1 text-sm font-semibold text-[color:var(--ink-dim)] transition group-hover:text-[color:var(--ink)]">
@@ -41,8 +41,8 @@ export default function TutorialsIndex() {
             Set up a CC1101 on Windows (433 MHz)
           </div>
           <p className="text-sm leading-6 text-[color:var(--ink-dim)]">
-            Wire a CC1101 radio module to your ESP32-S3, open the built-in <code>cc1101.js</code>{" "}
-            script, and transmit a basic 433 MHz ASK/OOK wave — all from the Windows app.
+            Wire a CC1101 radio module to your ESP32-family board, open the built-in <code>cc1101.js</code>{" "}
+            script, and transmit a basic 433 MHz ASK/OOK wave — all from the Windows app.
           </p>
           <div className="mt-1 text-sm font-semibold text-[color:var(--ink-dim)] transition group-hover:text-[color:var(--ink)]">
             Read tutorial →
@@ -53,7 +53,7 @@ export default function TutorialsIndex() {
       <h2>More coming</h2>
       <p>
         Additional tutorials for macOS firmware flashing, iOS/Android mobile setup, RFID module
-        walkthroughs, and I²C/SPI peripheral scripts are on the way. Check back or{" "}
+        walkthroughs, and I2C/SPI peripheral scripts are on the way. Check back or{" "}
         <Link href="/docs/community">join the community</Link> for early previews.
       </p>
     </>

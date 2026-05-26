@@ -70,7 +70,7 @@ export const DOCS_NAV: DocsNavGroup[] = [
       },
       {
         href: "/docs/tutorials/windows-flashing",
-        label: "Windows ESP32-S3 flashing",
+        label: "Windows ESP32 flashing",
         iconPath: "M13 10V3L4 14h7v7l9-11h-7z",
       },
       {

@@ -79,8 +79,8 @@ export default function SupportPage() {
                 q: "What boards are supported?",
                 a: (
                   <>
-                    Currently supported targets include ESP32-S3 class dev boards and the
-                    EMWaver Shield carrier. The EMWaver lineup of custom boards is listed
+                    Currently supported targets include ESP32-family dev boards
+                    (ESP32, ESP32-S2, and ESP32-S3) and the EMWaver Shield carrier. The EMWaver lineup of custom boards is listed
                     in the{" "}
                     <Link href="/docs/hardware" className="text-[color:var(--sky)] underline decoration-[color:var(--link-underline)] hover:decoration-[color:var(--link-underline-hover)]">
                       hardware docs
