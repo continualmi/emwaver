@@ -286,9 +286,12 @@ public class MainActivity extends AppCompatActivity {
         String board = dfuConnected && !connected ? "STM32F042" : boardDisplayName(boardType, connected);
         String firmware = "Connect a board to read firmware.";
         if (connected) {
-            String dv = (deviceVer != null && !deviceVer.isEmpty()) ? deviceVer : "?";
-            String bv = (bundledVer != null && !bundledVer.isEmpty()) ? bundledVer : "?";
-            firmware = "Firmware: " + dv + " (bundled: " + bv + ") - " + (upToDate ? "Up to date" : "Update available");
+            String bv = (bundledVer != null && !bundledVer.isEmpty()) ? bundledVer : "unknown";
+            if (deviceVer != null && !deviceVer.isEmpty()) {
+                firmware = "Firmware: " + deviceVer + " (bundled: " + bv + ") - " + (upToDate ? "Up to date" : "Update available");
+            } else {
+                firmware = "Firmware: Unknown (bundled: " + bv + ")";
+            }
         } else if (dfuConnected) {
             firmware = "Firmware: ready to flash bundled firmware.";
         }
