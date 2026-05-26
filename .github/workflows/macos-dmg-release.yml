@@ -172,11 +172,22 @@ jobs:
       - name: Notarize and staple DMG
         run: |
           set -euo pipefail
-          xcrun notarytool submit dist/EMWaver-macos.dmg \
+          submit_output="$(xcrun notarytool submit dist/EMWaver-macos.dmg \
             --key "${EMWAVER_APP_STORE_CONNECT_API_KEY_PATH}" \
             --key-id "${APP_STORE_CONNECT_API_KEY_ID}" \
             --issuer "${APP_STORE_CONNECT_API_ISSUER_ID}" \
-            --wait
+            --wait 2>&1)"
+          printf '%s\n' "${submit_output}"
+          submission_id="$(printf '%s\n' "${submit_output}" | awk '/^[[:space:]]*id: / { print $2; exit }')"
+          if printf '%s\n' "${submit_output}" | grep -q "status: Invalid"; then
+            if [ -n "${submission_id}" ]; then
+              xcrun notarytool log "${submission_id}" \
+                --key "${EMWAVER_APP_STORE_CONNECT_API_KEY_PATH}" \
+                --key-id "${APP_STORE_CONNECT_API_KEY_ID}" \
+                --issuer "${APP_STORE_CONNECT_API_ISSUER_ID}" || true
+            fi
+            exit 1
+          fi
           xcrun stapler staple dist/EMWaver-macos.dmg
           xcrun stapler validate dist/EMWaver-macos.dmg
 
