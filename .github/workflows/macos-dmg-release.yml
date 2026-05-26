@@ -139,6 +139,17 @@ jobs:
               --force \
               --timestamp \
               --options runtime \
+              --sign "${identity}" \
+              "${code_path}"
+          }
+
+          sign_code_preserving_metadata() {
+            local code_path="$1"
+            test -e "${code_path}" || return 0
+            codesign \
+              --force \
+              --timestamp \
+              --options runtime \
               --preserve-metadata=identifier,entitlements \
               --sign "${identity}" \
               "${code_path}"
@@ -161,11 +172,11 @@ jobs:
           fi
 
           sparkle_version="${app}/Contents/Frameworks/Sparkle.framework/Versions/B"
-          sign_code "${sparkle_version}/XPCServices/Downloader.xpc"
-          sign_code "${sparkle_version}/XPCServices/Installer.xpc"
-          sign_code "${sparkle_version}/Updater.app"
-          sign_code "${sparkle_version}/Autoupdate"
-          sign_code "${app}/Contents/Frameworks/Sparkle.framework"
+          sign_code_preserving_metadata "${sparkle_version}/XPCServices/Downloader.xpc"
+          sign_code_preserving_metadata "${sparkle_version}/XPCServices/Installer.xpc"
+          sign_code_preserving_metadata "${sparkle_version}/Updater.app"
+          sign_code_preserving_metadata "${sparkle_version}/Autoupdate"
+          sign_code_preserving_metadata "${app}/Contents/Frameworks/Sparkle.framework"
 
           sign_code "${app}"
           codesign --verify --deep --strict --verbose=2 "${app}"
