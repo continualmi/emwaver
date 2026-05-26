@@ -221,6 +221,7 @@ struct ScriptsContainerView: View {
                 onRequestAgentUpgrade: {
                     auth.isSignInSheetPresented = true
                 },
+                navigationTitleAccessoryText: IOSAppBuildInfo.toolbarVersionText,
                 onRunScript: runScriptHandler,
                 activePreviewManagerProvider: activePreviewManagerProvider,
                 onStopActiveScript: {

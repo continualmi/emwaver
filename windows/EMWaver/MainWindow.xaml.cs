@@ -33,6 +33,7 @@ public partial class MainWindow : Window
         TrySetWindowIcon();
         AppVersionText.Text = $"App {AppBuildInfo.ShortVersion}";
         AppVersionText.ToolTip = AppBuildInfo.DiagnosticsLine;
+        Title = $"EMWaver {AppVersionText.Text}";
 
         // Subscribe to device state changes.
         _device.PropertyChanged += (_, __) => Dispatcher.Invoke(UpdateDeviceStatus);

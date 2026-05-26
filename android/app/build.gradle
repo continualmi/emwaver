@@ -48,6 +48,26 @@ def envOr = { String key, String fallback ->
     return fallback
 }
 
+def emwaverCommit = envOr("GITHUB_SHA", "")
+if (emwaverCommit == "") {
+    try {
+        def out = new ByteArrayOutputStream()
+        exec {
+            commandLine "git", "rev-parse", "--short=7", "HEAD"
+            workingDir emwaverRepoRootDir
+            standardOutput = out
+            errorOutput = new ByteArrayOutputStream()
+            ignoreExitValue = true
+        }
+        emwaverCommit = out.toString("UTF-8").trim()
+    } catch (ignored) {
+        emwaverCommit = ""
+    }
+}
+if (emwaverCommit.length() > 7) {
+    emwaverCommit = emwaverCommit.substring(0, 7)
+}
+
 // Keep Android UI in sync with the bundled firmware version (from STM source-of-truth).
 def emwaverStmMainC = new File(emwaverRepoRootDir, "stm/emwaver-firmware/Core/Src/main.c")
 def emwaverBundledFwVersion = "unknown"
@@ -72,6 +92,7 @@ android {
         versionName envOr("EMWAVER_ANDROID_VERSION_NAME", emwaverAppVersion)
 
         buildConfigField "String", "EMWAVER_BUNDLED_FW_VERSION", '"' + emwaverBundledFwVersion + '"'
+        buildConfigField "String", "EMWAVER_COMMIT", '"' + emwaverCommit + '"'
 
         def agentEndpoint = envOr("EMWAVER_AGENT_ENDPOINT", "")
         def continualAgentEndpoint = envOr("CONTINUAL_AGENT_ENDPOINT", "")

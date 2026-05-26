@@ -508,9 +508,11 @@
 				DEVELOPMENT_TEAM = 9VA9KTUXXN;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				EMWAVER_COMMIT = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = EMWaver/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = EMWaver;
+				INFOPLIST_KEY_EMWaverCommit = "$(EMWAVER_COMMIT)";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -546,9 +548,11 @@
 				DEVELOPMENT_TEAM = 9VA9KTUXXN;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
+				EMWAVER_COMMIT = "";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = EMWaver/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = EMWaver;
+				INFOPLIST_KEY_EMWaverCommit = "$(EMWAVER_COMMIT)";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.education";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

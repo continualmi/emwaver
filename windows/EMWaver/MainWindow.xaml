@@ -19,12 +19,22 @@
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <!-- Device picker -->
+                <!-- Product title and app build/version for support reports. -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="EMWaver" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                    <TextBlock x:Name="AppVersionText"
+                               Foreground="{DynamicResource AppTextSecondaryBrush}"
+                               VerticalAlignment="Center"
+                               FontSize="11" Margin="8,1,0,0" />
+                </StackPanel>
+
+                <!-- Device picker -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="18,0,0,0">
                     <Button x:Name="DeviceMenuButton" Click="OnDeviceMenuClick"
                             Padding="8,4" Background="Transparent" BorderThickness="0">
                         <StackPanel Orientation="Horizontal">
@@ -36,14 +46,8 @@
                     </Button>
                 </StackPanel>
 
-                <!-- App build/version for support reports. -->
-                <TextBlock Grid.Column="1" x:Name="AppVersionText"
-                           Foreground="{DynamicResource AppTextSecondaryBrush}"
-                           VerticalAlignment="Center" HorizontalAlignment="Left"
-                           FontSize="11" Margin="12,0,0,0" />
-
                 <!-- Action toolbar -->
-                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
                     <!-- Script mode toggles -->
                     <ToggleButton x:Name="CodeModeToggle" Content="Code" Width="60" Height="28"
                                   IsChecked="True" Click="OnCodeModeClick" Margin="0,0,2,0" />

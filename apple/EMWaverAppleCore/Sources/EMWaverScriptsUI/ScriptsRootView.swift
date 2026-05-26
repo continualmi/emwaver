@@ -86,6 +86,7 @@ public struct ScriptsRootView: View {
     private let onRequestOpenSettings: (() -> Void)?
     private let leadingHeaderItem: AnyView?
     private let agentLeadingToolbarItem: AnyView?
+    private let navigationTitleAccessoryText: String?
 
     @State private var showingEditor = false
     @State private var showingPreview = false
@@ -129,6 +130,7 @@ public struct ScriptsRootView: View {
         onRequestOpenSettings: (() -> Void)? = nil,
         leadingHeaderItem: AnyView? = nil,
         agentLeadingToolbarItem: AnyView? = nil,
+        navigationTitleAccessoryText: String? = nil,
         onRunScript: ((ScriptRunRequest) async -> ScriptRunResult?)? = nil,
         activePreviewManagerProvider: (() -> ScriptPreviewManager?)? = nil,
         onStopActiveScript: (() -> Void)? = nil,
@@ -143,6 +145,7 @@ public struct ScriptsRootView: View {
         self.onRequestOpenSettings = onRequestOpenSettings
         self.leadingHeaderItem = leadingHeaderItem
         self.agentLeadingToolbarItem = agentLeadingToolbarItem
+        self.navigationTitleAccessoryText = navigationTitleAccessoryText
         self.agentEndpointProvider = agentEndpointProvider
         self.onRunScript = onRunScript
         self.activePreviewManagerProvider = activePreviewManagerProvider
@@ -166,6 +169,7 @@ public struct ScriptsRootView: View {
         onRequestOpenSettings: (() -> Void)? = nil,
         leadingHeaderItem: AnyView? = nil,
         agentLeadingToolbarItem: AnyView? = nil,
+        navigationTitleAccessoryText: String? = nil,
         onRunScript: ((ScriptRunRequest) async -> ScriptRunResult?)? = nil,
         activePreviewManagerProvider: (() -> ScriptPreviewManager?)? = nil,
         onStopActiveScript: (() -> Void)? = nil,
@@ -183,6 +187,7 @@ public struct ScriptsRootView: View {
             onRequestOpenSettings: onRequestOpenSettings,
             leadingHeaderItem: leadingHeaderItem,
             agentLeadingToolbarItem: agentLeadingToolbarItem,
+            navigationTitleAccessoryText: navigationTitleAccessoryText,
             onRunScript: onRunScript,
             activePreviewManagerProvider: activePreviewManagerProvider,
             onStopActiveScript: onStopActiveScript,
@@ -560,6 +565,10 @@ public struct ScriptsRootView: View {
         }
         if showingPreview {
             return (currentScriptName ?? "Script") + " Preview"
+        }
+        if let navigationTitleAccessoryText,
+           !navigationTitleAccessoryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return "EMWaver \(navigationTitleAccessoryText)"
         }
         return "EMWaver"
     }

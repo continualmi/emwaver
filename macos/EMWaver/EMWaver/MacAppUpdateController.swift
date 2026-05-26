@@ -3,18 +3,23 @@ import Combine
 import Sparkle
 
 @MainActor
-final class MacAppUpdateController: ObservableObject {
-    private let updaterController: SPUStandardUpdaterController
+final class MacAppUpdateController: NSObject, ObservableObject, SPUUpdaterDelegate {
+    private lazy var updaterController = SPUStandardUpdaterController(
+        startingUpdater: true,
+        updaterDelegate: self,
+        userDriverDelegate: nil
+    )
 
-    init() {
-        updaterController = SPUStandardUpdaterController(
-            startingUpdater: true,
-            updaterDelegate: nil,
-            userDriverDelegate: nil
-        )
+    override init() {
+        super.init()
+        _ = updaterController
     }
 
     func checkForUpdates() {
         updaterController.checkForUpdates(nil)
+    }
+
+    nonisolated func feedURLString(for updater: SPUUpdater) -> String? {
+        "https://emwaver.ai/updates/macos/appcast.xml"
     }
 }

@@ -41,6 +41,7 @@ jobs:
       EMWAVER_IOS_EXPORT_OPTIONS: ci-exportOptions.plist
       EMWAVER_IOS_XCARGS: >-
         DEVELOPMENT_TEAM=9VA9KTUXXN
+        EMWAVER_COMMIT=${{ github.sha }}
 
     steps:
       - name: Check out repository

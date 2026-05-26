@@ -134,6 +134,7 @@ struct ContentView: View {
             },
             leadingHeaderItem: nil,
             agentLeadingToolbarItem: AnyView(agentKeyToolbarItem),
+            navigationTitleAccessoryText: MacAppBuildInfo.toolbarVersionText,
             onRunScript: { request in
                 scriptSessions.run(request)
             },
@@ -167,14 +168,6 @@ struct ContentView: View {
             ToolbarItemGroup(placement: .automatic) {
                 localDevicePicker
             }
-
-            ToolbarItem(placement: .automatic) {
-                Text(MacAppBuildInfo.toolbarVersionText)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .help("EMWaver app version")
-            }
-
         }
         .sheet(isPresented: $auth.isSignInSheetPresented) {
             SignInSheet()

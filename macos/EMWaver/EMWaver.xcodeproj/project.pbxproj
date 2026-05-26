@@ -36,9 +36,22 @@
 		4635BDF42F2B896D00A7489D /* EMWaverUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = EMWaverUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A1E0A1B22F6B4D7C8E9F4000 /* Exceptions for "EMWaver" folder in "EMWaver" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 4635BDDC2F2B896400A7489D /* EMWaver */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		4635BDDF2F2B896400A7489D /* EMWaver */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A1E0A1B22F6B4D7C8E9F4000 /* Exceptions for "EMWaver" folder in "EMWaver" target */,
+			);
 			path = EMWaver;
 			sourceTree = "<group>";
 		};
@@ -483,6 +496,7 @@
 				EMWAVER_COMMIT = "";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "EMWaver uses Bluetooth to connect to nearby ESP32 boards for local scripts and hardware control.";
 				INFOPLIST_KEY_EMWaverCommit = "$(EMWAVER_COMMIT)";
+				INFOPLIST_FILE = EMWaver/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_SUFeedURL = "https://emwaver.ai/updates/macos/appcast.xml";
 				INFOPLIST_KEY_SUPublicEDKey = "$(SPARKLE_PUBLIC_ED_KEY)";
@@ -523,6 +537,7 @@
 				EMWAVER_COMMIT = "";
 				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "EMWaver uses Bluetooth to connect to nearby ESP32 boards for local scripts and hardware control.";
 				INFOPLIST_KEY_EMWaverCommit = "$(EMWAVER_COMMIT)";
+				INFOPLIST_FILE = EMWaver/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				INFOPLIST_KEY_SUFeedURL = "https://emwaver.ai/updates/macos/appcast.xml";
 				INFOPLIST_KEY_SUPublicEDKey = "$(SPARKLE_PUBLIC_ED_KEY)";
