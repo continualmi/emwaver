@@ -104,7 +104,7 @@ The current packaged Windows firmware payload is copied from the repo root firmw
 
 Windows now follows the same board-class split as macOS:
 - STM32 boards use the managed DFU setup/update flow.
-- ESP32 and ESP32-S3 boards use the bundled serial flashing helper plus bundled target-specific ESP images.
+- ESP32, ESP32-S2, and ESP32-S3 boards use the bundled serial flashing helper plus bundled target-specific ESP images.
 - Windows setup/update UI is board-aware. It should not require device registration before flashing.
 
 ## 3.5 App settings and appearance
@@ -141,7 +141,7 @@ What Windows already has:
 Windows now includes:
 - board-aware device state (`board_type`, last detected board info),
 - board-specific update UX split between STM32 DFU and ESP serial flashing,
-- bundled ESP flashing helper + bundled ESP32 / ESP32-S3 images when present in the workspace/build output,
+- bundled ESP flashing helper + bundled ESP32 / ESP32-S2 / ESP32-S3 images when present in the workspace/build output,
 - ESP bootloader detection and BOOT / RESET guidance,
 - activity-log surfaces around setup and update.
 
@@ -157,7 +157,7 @@ The parity work in this folder specifically addressed the older Windows gaps rel
 2. Update architecture
 - `Services/FirmwareUpdateManager.cs` now splits STM32 managed DFU from ESP serial flashing.
 - STM32 setup/update does not depend on account registration, `board_type + hardware_uid` minting, or ownership state.
-- ESP32 and ESP32-S3 setup/update use the bundled helper + target-specific image set when present.
+- ESP32, ESP32-S2, and ESP32-S3 setup/update use the bundled helper + target-specific image set when present.
 
 3. Device UI / wording
 - `Views/DeviceConnectionWindow*` and `Views/FirmwareUpdateWindow*` are board-aware and local-first.
@@ -218,7 +218,7 @@ Windows should have a board-aware device surface that shows:
 - offline availability messaging,
 - board-aware primary actions:
   - STM32: `Update firmware`
-  - ESP32 / ESP32-S3: `Flash firmware`
+  - ESP32 / ESP32-S2 / ESP32-S3: `Flash firmware`
 
 ### 5.6 Diagnostics
 
@@ -244,7 +244,7 @@ The main remaining work after the parity code changes is validation on a real Wi
 3. ESP hardware validation
 - build the Windows `emwaver-esp-helper.exe`,
 - confirm the helper is copied into app output,
-- confirm serial-port detection, bootloader detection, local flash, and reconnect-to-Run-Mode behavior on actual ESP32 and ESP32-S3 boards.
+- confirm serial-port detection, bootloader detection, local flash, and reconnect-to-Run-Mode behavior on actual ESP32, ESP32-S2, and ESP32-S3 boards.
 
 4. UX cleanup after workstation testing
 - tighten copy, progress wording, and any Windows-specific driver or COM-port edge cases found during manual tests.

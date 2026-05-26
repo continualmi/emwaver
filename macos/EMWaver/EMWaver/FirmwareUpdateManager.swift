@@ -380,6 +380,16 @@ final class FirmwareUpdateManager: ObservableObject {
                 otaData: try require("emwaver-esp32-ota-data"),
                 app: try require("emwaver-esp32-app")
             )
+        case "esp32s2":
+            return EspFirmwareAssets(
+                chip: "esp32s2",
+                bootloaderOffset: "0x1000",
+                flashFrequency: "80m",
+                bootloader: try require("emwaver-esp32s2-bootloader"),
+                partitionTable: try require("emwaver-esp32s2-partition-table"),
+                otaData: try require("emwaver-esp32s2-ota-data"),
+                app: try require("emwaver-esp32s2-app")
+            )
         case "esp32s3":
             return EspFirmwareAssets(
                 chip: "esp32s3",
@@ -389,12 +399,6 @@ final class FirmwareUpdateManager: ObservableObject {
                 partitionTable: try require("emwaver-esp32s3-partition-table"),
                 otaData: try require("emwaver-esp32s3-ota-data"),
                 app: try require("emwaver-esp32s3-app")
-            )
-        case "esp32s2":
-            throw NSError(
-                domain: "FirmwareUpdateManager",
-                code: 19,
-                userInfo: [NSLocalizedDescriptionKey: "Bundled ESP32-S2 firmware is not available yet."]
             )
         default:
             throw NSError(

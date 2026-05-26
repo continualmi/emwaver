@@ -135,7 +135,7 @@ Tooling helper path:
 
 The helper is bundled for update flows and should be version-synced with firmware/update expectations.
 
-The macOS app bundles the canonical committed firmware images from `firmware/`. Keep those files updated from the current STM32 ELF with `stm/update_firmware_bins.sh` whenever STM firmware changes. For ESP changes, build each supported ESP-IDF target and copy its four output binaries into `firmware/` using the target prefix (`emwaver-esp32-*` for classic ESP32, `emwaver-esp32s3-*` for ESP32-S3). The app build phase requires both ESP32 and ESP32-S3 image sets.
+The macOS app bundles the canonical committed firmware images from `firmware/`. Keep those files updated from the current STM32 ELF with `stm/update_firmware_bins.sh` whenever STM firmware changes. For ESP changes, build each supported ESP-IDF target and copy its four output binaries into `firmware/` using the target prefix (`emwaver-esp32-*` for classic ESP32, `emwaver-esp32s2-*` for ESP32-S2, `emwaver-esp32s3-*` for ESP32-S3). The app build phase requires all supported ESP image sets.
 
 Current macOS responsibility in this area:
 - local script execution for connected supported boards without account/backend activation gates,

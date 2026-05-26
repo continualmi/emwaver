@@ -94,6 +94,30 @@
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 
+    <Content Include="..\..\firmware\emwaver-esp32s2-bootloader.bin">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
+
+    <Content Include="..\..\firmware\emwaver-esp32s2-partition-table.bin">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
+
+    <Content Include="..\..\firmware\emwaver-esp32s2-ota-data.bin">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
+
+    <Content Include="..\..\firmware\emwaver-esp32s2-app.bin">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
+
     <Content Include="..\..\firmware\emwaver-esp32s3-bootloader.bin">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>

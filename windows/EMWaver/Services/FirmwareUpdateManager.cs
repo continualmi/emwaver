@@ -455,15 +455,6 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
     {
         var candidates = await EspFlashPortCandidatesAsync();
 
-        // On Windows the ESP32-S3 native USB bootloader is exposed by pyserial as
-        // VID:PID=303A:1001. Prefer that stable descriptor over repeatedly running
-        // chip-id, which opens the COM port and can transiently fail while polling.
-        var espUsbPorts = candidates.Where(c => c.IsEspressifUsb).ToList();
-        if (espUsbPorts.Count == 1)
-        {
-            return new EspBootloaderDetection(espUsbPorts[0].Port, "esp32s3");
-        }
-
         foreach (var candidate in candidates)
         {
             var port = candidate.Port;
@@ -798,10 +789,6 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
     private EspFirmwareAssets EspFirmwarePaths(string boardType)
     {
         var normalized = NormalizedEspBoardType(boardType);
-        if (normalized == "esp32s2")
-        {
-            throw new FileNotFoundException("Bundled ESP32-S2 firmware is not available yet.");
-        }
         if (normalized == null)
         {
             throw new FileNotFoundException("Unknown ESP board type for firmware flashing.");
@@ -824,6 +811,10 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
                     "emwaver-esp32-bootloader" => "emwaver-esp32-bootloader.bin",
                     "emwaver-esp32-partition-table" => "emwaver-esp32-partition-table.bin",
                     "emwaver-esp32-ota-data" => "emwaver-esp32-ota-data.bin",
+                    "emwaver-esp32s2-app" => "emwaver-esp32s2-app.bin",
+                    "emwaver-esp32s2-bootloader" => "emwaver-esp32s2-bootloader.bin",
+                    "emwaver-esp32s2-partition-table" => "emwaver-esp32s2-partition-table.bin",
+                    "emwaver-esp32s2-ota-data" => "emwaver-esp32s2-ota-data.bin",
                     "emwaver-esp32s3-app" => "emwaver-esp32s3-app.bin",
                     "emwaver-esp32s3-bootloader" => "emwaver-esp32s3-bootloader.bin",
                     "emwaver-esp32s3-partition-table" => "emwaver-esp32s3-partition-table.bin",
@@ -849,6 +840,18 @@ public sealed class FirmwareUpdateManager : INotifyPropertyChanged
                 Require("emwaver-esp32-partition-table"),
                 Require("emwaver-esp32-ota-data"),
                 Require("emwaver-esp32-app"));
+        }
+
+        if (normalized == "esp32s2")
+        {
+            return new EspFirmwareAssets(
+                "esp32s2",
+                "0x1000",
+                "80m",
+                Require("emwaver-esp32s2-bootloader"),
+                Require("emwaver-esp32s2-partition-table"),
+                Require("emwaver-esp32s2-ota-data"),
+                Require("emwaver-esp32s2-app"));
         }
 
         return new EspFirmwareAssets(

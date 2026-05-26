@@ -4,9 +4,9 @@ Freeze-friendly Python source for the ESP32 serial flashing helper used by deskt
 
 Current contract:
 - `list-ports`
-- `chip-id --port ... [--chip auto|esp32|esp32s3] [--baud ...] [--no-stub]`
+- `chip-id --port ... [--chip auto|esp32|esp32s2|esp32s3] [--baud ...] [--no-stub]`
 - `read-identity --port ... [--baud ...]`
-- `flash --chip esp32|esp32s3 --port ... --bootloader-offset ... --flash-freq ... --bootloader ... --partition-table ... --ota-data ... --app ... [--baud ...] [--before ...] [--after ...] [--no-stub]`
+- `flash --chip esp32|esp32s2|esp32s3 --port ... --bootloader-offset ... --flash-freq ... --bootloader ... --partition-table ... --ota-data ... --app ... [--baud ...] [--before ...] [--after ...] [--no-stub]`
 
 The flash command defaults to the same fast path ESP-IDF uses for normal
 `idf.py flash`: 460800 baud, `default_reset`, hard reset after flashing, and
