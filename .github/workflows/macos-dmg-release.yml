@@ -16,6 +16,7 @@ jobs:
     runs-on: macos-15
     env:
       SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
+      SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
 
     steps:
       - name: Check out repository
@@ -79,6 +80,26 @@ jobs:
             -format UDZO \
             dist/EMWaver-macos.dmg
 
+      - name: Generate Sparkle appcast
+        run: |
+          set -euo pipefail
+          if [ -z "${SPARKLE_PRIVATE_ED_KEY}" ]; then
+            echo "Set SPARKLE_PRIVATE_ED_KEY to generate the signed Sparkle appcast."
+            exit 1
+          fi
+          sparkle_bin="macos/EMWaver/build/SourcePackages/artifacts/sparkle/Sparkle/bin"
+          test -x "${sparkle_bin}/generate_appcast" || (echo "Missing Sparkle generate_appcast tool at ${sparkle_bin}" >&2; exit 1)
+
+          mkdir -p dist/sparkle
+          cp dist/EMWaver-macos.dmg dist/sparkle/
+          printf '%s' "${SPARKLE_PRIVATE_ED_KEY}" | \
+            "${sparkle_bin}/generate_appcast" \
+              --ed-key-file - \
+              --download-url-prefix "https://github.com/continualmi/emwaver/releases/download/${EMWAVER_RELEASE_TAG}/" \
+              -o appcast.xml \
+              dist/sparkle
+          cp dist/sparkle/appcast.xml dist/appcast.xml
+
       - name: Verify target GitHub Release exists
         env:
           GH_TOKEN: ${{ github.token }}
@@ -88,7 +109,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: EMWaver-macos-dmg
-          path: dist/EMWaver-macos.dmg
+          path: |
+            dist/EMWaver-macos.dmg
+            dist/appcast.xml
 
       - name: Publish release asset
         uses: softprops/action-gh-release@v2
@@ -98,4 +121,6 @@ jobs:
           make_latest: true
           overwrite_files: true
           fail_on_unmatched_files: true
-          files: dist/EMWaver-macos.dmg
+          files: |
+            dist/EMWaver-macos.dmg
+            dist/appcast.xml
