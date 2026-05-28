@@ -11,5 +11,5 @@ export default async function HardwareDevicePage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  redirect(`/emwaver/build/${slug}`);
+  redirect(`/build/${slug}`);
 }

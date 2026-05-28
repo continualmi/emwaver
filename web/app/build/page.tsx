@@ -46,7 +46,7 @@ function DeviceCard({ device }: { device: HardwareDevice }) {
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] transition hover:bg-[color:var(--surface-2)]">
       <Link
-        href={`/emwaver/build/${device.slug}`}
+        href={`/build/${device.slug}`}
         aria-label={`Open ${device.title}`}
         className="absolute inset-0 z-10"
       />

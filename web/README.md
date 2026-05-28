@@ -13,7 +13,7 @@ npm run start
 
 Local dev URL: `http://localhost:3300/`
 
-The static export is deployed at the domain root for `emwaver.ai`. Older `/emwaver/...` compatibility paths are intentionally not generated; the Azure deploy workflow deletes stale `emwaver/*` blobs before upload so old prefixed pages cannot linger in storage.
+The static export is deployed at the domain root for `emwaver.ai`. Internal links should use root-relative paths such as `/build/...`, not older `/emwaver/...` compatibility prefixes.
 
 ## Deployment
 

@@ -14,7 +14,7 @@ export default async function NewsPage() {
           NEWS_POSTS.map((p) => (
             <Link
               key={p.slug}
-              href={`/emwaver/news/${p.slug}`}
+              href={`/news/${p.slug}`}
               className="group block rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 !border-b-0 hover:bg-[color:var(--surface-2)]"
             >
               <div className="flex flex-col gap-2 md:flex-row md:items-baseline md:justify-between">

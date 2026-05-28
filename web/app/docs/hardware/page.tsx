@@ -172,7 +172,7 @@ export default function HardwareDocPage() {
                   </div>
                 )}
                 <Link
-                  href={`/emwaver/build/${device.slug}`}
+                  href={`/build/${device.slug}`}
                   className="inline-flex items-center rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-3)] px-4 py-2 text-sm font-medium text-[color:var(--ink)] no-underline hover:bg-[color:var(--surface-2)]"
                 >
                   Open Build page
