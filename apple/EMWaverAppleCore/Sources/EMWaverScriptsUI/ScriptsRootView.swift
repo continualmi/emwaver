@@ -118,6 +118,7 @@ public struct ScriptsRootView: View {
     #if os(macOS)
     @State private var agentPanelWidth: CGFloat = 380
     @State private var showingScriptConsole = false
+    @State private var scriptConsoleHeight: CGFloat = 180
     #endif
 
     @MainActor
@@ -387,6 +388,7 @@ public struct ScriptsRootView: View {
         let manager = activePreviewManager
         let lines = manager.consoleLines
         return VStack(alignment: .leading, spacing: 0) {
+            ScriptConsoleResizeHandle(consoleHeight: $scriptConsoleHeight)
             HStack {
                 Text("Console")
                     .font(.caption.weight(.semibold))
@@ -442,10 +444,8 @@ public struct ScriptsRootView: View {
             }
             .background(Self.secondaryBackground)
         }
-        .frame(height: 150)
-        .overlay(alignment: .top) {
-            Divider()
-        }
+        .frame(height: scriptConsoleHeight)
+        .background(Self.secondaryBackground)
     }
     #endif
 
@@ -1694,6 +1694,39 @@ private struct AgentPanelResizeHandle: View {
         .onHover { hovering in
             isHovering = hovering
             if hovering { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+        }
+    }
+}
+
+private struct ScriptConsoleResizeHandle: View {
+    @Binding var consoleHeight: CGFloat
+    private let minHeight: CGFloat = 96
+    private let maxHeight: CGFloat = 420
+    @State private var isHovering = false
+    @State private var dragStartHeight: CGFloat? = nil
+
+    var body: some View {
+        ZStack {
+            Color.clear
+                .frame(height: 8)
+                .contentShape(Rectangle())
+            Rectangle()
+                .fill(Color.primary.opacity(isHovering ? 0.20 : 0.10))
+                .frame(height: 1)
+        }
+        .frame(height: 8)
+        .gesture(
+            DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { value in
+                    if dragStartHeight == nil { dragStartHeight = consoleHeight }
+                    let proposed = (dragStartHeight ?? consoleHeight) - value.translation.height
+                    consoleHeight = max(minHeight, min(maxHeight, proposed))
+                }
+                .onEnded { _ in dragStartHeight = nil }
+        )
+        .onHover { hovering in
+            isHovering = hovering
+            if hovering { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
         }
     }
 }
