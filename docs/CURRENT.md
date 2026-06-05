@@ -4,7 +4,7 @@ This is the contributor orientation doc for the repository as it exists today.
 
 ## What EMWaver Is
 
-EMWaver is a local-first, open-source electronics platform by Continual MI. It turns supported MCU boards into a scriptable hardware lab through native apps, managed firmware, JavaScript scripts, script-defined UI panels, and optional Agent hardware tools.
+EMWaver is a local-first, open-source electronics platform by Continual MI. It turns supported MCU boards into a scriptable hardware lab through native apps, managed firmware, JavaScript scripts, script-defined UI panels, and optional Agent assistance.
 
 Core idea:
 
@@ -14,7 +14,7 @@ native app -> local script runtime -> USB/BLE/Wi-Fi transport -> supported board
 
 Scripts are JavaScript files (`.js`). They can use JSX-style syntax inside JavaScript to define native UI panels for connected modules.
 
-When enabled, the Agent can use named hardware primitives such as SPI transfers, GPIO reads/writes, analog reads, and module probes. It is not limited to writing scripts or reading UI snapshots.
+On macOS, the Agent works through normal script runs: it can read, patch, run existing scripts, or run unsaved ephemeral JavaScript/JSX scripts, then inspect console output and script status.
 
 ## Supported Platforms
 
@@ -83,7 +83,7 @@ Key contributor docs:
 | `docs/SCHEDULE.md` | Short-term execution tracker |
 | `docs/TESTS.md` | Hardware and app validation suite *(being rebuilt)* |
 | `docs/RELEASES.md` | Release workflows and public preview assets |
-| `docs/AGENT_EVAL_RUNTIME.md` | Agent hardware primitive model |
+| `docs/AGENT_EVAL_RUNTIME.md` | macOS Agent script-run and console model |
 | `docs/AGENT_RUNTIME_AND_TOOLS.html` | Visual Agent hardware-tool workflow |
 | `docs/LINUX_GTK4_PORT_PLAN.html` | Native Linux app port plan |
 | `docs/LINUX_MACOS_PARITY_AUDIT.md` | Current macOS-vs-Linux native parity checklist |

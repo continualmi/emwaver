@@ -38,23 +38,22 @@ Use this to reason about CLI behavior when UI is not visible.
 - `emw-gpio.js`, `emw-spi.js`, `emw-i2c.js`, `emw-uart.js`, `emw-adc.js`, `emw-pwm.js`
 - `emw-fs.js`, `emw-sampler.js`
 
-## UI snapshot contract
+## JSX and console contract
 
-Default scripts are UI programs. Visible state for CLI, browser, native app, and
-Agent workflows must be rendered through `render(<App />)` from `emw-jsx` and read through
-`ui.snapshot`.
+Default scripts are JavaScript/JSX programs. User-facing state should be
+rendered through `render(<App />)` from `emw-jsx`.
 
 Contract:
 
-- startup context is visible in the rendered UI:
+- startup context should be visible in the rendered UI:
   - script name, board/module config, selected pins, and defaults,
-- action state is visible in the rendered UI:
+- action state should be visible in the rendered UI:
   - start/transition/complete states for user actions such as start/stop,
     open/read/write, probe/init/reset, save/load, and scan,
-- warnings/errors are visible in the rendered UI:
+- user-facing warnings/errors should be visible in the rendered UI:
   - human-readable status text,
-  - enough detail for an Agent to diagnose the next step from a snapshot.
+  - enough detail for a person to understand the next step.
 
-Do not add terminal logging as a parallel script contract. The migration in
-`../../docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md` removes script-visible
-`console.*` APIs and relies on snapshots/events for terminal automation.
+Use `console.log`, `console.warn`, and `console.error` for diagnostic output,
+Agent probe loops, and short-lived script-run observations. Console output is
+not a replacement for JSX UI; it is the script terminal channel.

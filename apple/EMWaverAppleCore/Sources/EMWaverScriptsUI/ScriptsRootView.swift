@@ -201,8 +201,12 @@ public struct ScriptsRootView: View {
         ZStack {
             #if os(macOS)
             HStack(spacing: 0) {
-                primaryContent
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                VStack(spacing: 0) {
+                    primaryContent
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    scriptConsolePane
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 if showingAgentPanel {
                     AgentPanelResizeHandle(panelWidth: $agentPanelWidth)
@@ -374,6 +378,64 @@ public struct ScriptsRootView: View {
             }
         }
     }
+
+    #if os(macOS)
+    private var scriptConsolePane: some View {
+        let manager = activePreviewManager
+        let lines = manager.consoleLines
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Console")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+                Spacer()
+                if let name = manager.activeScriptName, !name.isEmpty {
+                    Text(name)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Self.primaryBackground)
+
+            Divider()
+
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if lines.isEmpty {
+                            Text("No console output.")
+                                .foregroundColor(.secondary)
+                        } else {
+                            ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
+                                Text(line)
+                                    .id(index)
+                                    .textSelection(.enabled)
+                            }
+                        }
+                    }
+                    .font(.system(.caption, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 8)
+                }
+                .onChange(of: lines.count) { count in
+                    guard count > 0 else { return }
+                    withAnimation(.easeOut(duration: 0.12)) {
+                        proxy.scrollTo(count - 1, anchor: .bottom)
+                    }
+                }
+            }
+            .background(Self.secondaryBackground)
+        }
+        .frame(height: 150)
+        .overlay(alignment: .top) {
+            Divider()
+        }
+    }
+    #endif
 
     private var mainView: some View {
         Group {
@@ -667,25 +729,38 @@ public struct ScriptsRootView: View {
     }
 
     private func startScriptRuntime(scriptId: String, script: String, name: String, moduleSources: [String: String]) {
+        Task {
+            _ = await runScriptRuntime(scriptId: scriptId, script: script, name: name, moduleSources: moduleSources)
+        }
+    }
+
+    @discardableResult
+    private func runScriptRuntime(scriptId: String, script: String, name: String, moduleSources: [String: String]) async -> ScriptRunResult {
         guard let onRunScript else {
             previewManager.render(script: script, name: name, moduleSources: moduleSources)
-            return
+            hostStatusSink?(true, name)
+            return ScriptRunResult(
+                scriptInstanceId: previewManager.activeScriptInstanceId ?? "",
+                name: name,
+                running: previewManager.activeScriptInstanceId != nil,
+                errorMessage: previewManager.scriptError
+            )
         }
 
-        Task {
-            let request = ScriptRunRequest(scriptId: scriptId, name: name, source: script, moduleSources: moduleSources)
-            if let result = await onRunScript(request) {
-                if result.running {
-                    hostStatusSink?(true, result.name)
-                } else {
-                    previewManager.scriptError = result.errorMessage ?? "Script did not start."
-                    hostStatusSink?(false, result.name)
-                }
+        let request = ScriptRunRequest(scriptId: scriptId, name: name, source: script, moduleSources: moduleSources)
+        if let result = await onRunScript(request) {
+            if result.running {
+                hostStatusSink?(true, result.name)
             } else {
-                previewManager.scriptError = "Script did not start."
-                hostStatusSink?(false, name)
+                previewManager.recordScriptError(result.errorMessage ?? "Script did not start.")
+                hostStatusSink?(false, result.name)
             }
+            return result
         }
+
+        previewManager.recordScriptError("Script did not start.")
+        hostStatusSink?(false, name)
+        return ScriptRunResult(scriptInstanceId: "", name: name, running: false, errorMessage: "Script did not start.")
     }
 
     private func openEditor(for id: String) {
@@ -778,7 +853,7 @@ public struct ScriptsRootView: View {
 
     private func exitPreview() {
         // On macOS we want scripts to keep running in the background even if the user goes back
-        // to the main script list. That also allows the Agent to keep observing ui.snapshot.
+        // to the main script list. That also lets the Agent keep observing console/status output.
         showingPreview = false
         // If launched from editor, go back to editor; otherwise go to main screen
         if previewLaunchedFromEditor {
@@ -974,6 +1049,8 @@ public struct ScriptsRootView: View {
     private var macAgentTools: [AgentToolDefinition] {
         let empty = schema([])
         let scriptId = optionalStringProperty("scriptId", "Script id. Defaults to the current script.")
+        let source = ("source", AgentToolJSON.object(["type": .string("string"), "description": .string("Unsaved JavaScript/JSX source to run.")]))
+        let name = optionalStringProperty("name", "Display name for an unsaved ephemeral script.")
         return [
             AgentToolDefinition(name: "list_scripts", description: "Return bundled and custom EMWaver JavaScript scripts.", parameters: empty),
             AgentToolDefinition(name: "read_script", description: "Return script source. Defaults to the current script.", parameters: schema([scriptId])),
@@ -982,28 +1059,14 @@ public struct ScriptsRootView: View {
                 optionalStringProperty("patch", "Unified diff patch to apply."),
                 optionalStringProperty("content", "Full replacement script content."),
             ])),
-            AgentToolDefinition(name: "run_script", description: "Start the script runtime for the given script.", parameters: schema([scriptId])),
+            AgentToolDefinition(name: "run_script", description: "Start the script runtime for an existing bundled or custom script.", parameters: schema([scriptId])),
+            AgentToolDefinition(name: "run_ephemeral_script", description: "Run unsaved JavaScript/JSX source against the selected local device, like python -c. The source is not saved to the script library.", parameters: schema([
+                source,
+                name,
+            ], required: ["source"])),
             AgentToolDefinition(name: "stop_script", description: "Stop the current script runtime.", parameters: empty),
             AgentToolDefinition(name: "get_device_status", description: "Return connected/local device and runtime status known to the macOS app.", parameters: empty),
-            AgentToolDefinition(name: "spi_transfer", description: "Send bytes over SPI and receive the response. `bytes` is the TX array (0–255 each). `cs` is the chip-select pin number. `rx_length`, if provided, overrides the number of response bytes to read.", parameters: schema([
-                ("bytes", .object(["type": .string("array"), "items": .object(["type": .string("number")]), "description": .string("Bytes to transmit (0–255 each).")])),
-                ("cs", .object(["type": .string("number"), "description": .string("Chip-select pin number.")])),
-                ("rx_length", .object(["type": .string("number"), "description": .string("Number of response bytes. Defaults to len(bytes).")])),
-            ], required: ["bytes", "cs"])),
-            AgentToolDefinition(name: "gpio_mode", description: "Set a GPIO pin mode.", parameters: schema([
-                ("pin", .object(["type": .string("number"), "description": .string("Pin number.")])),
-                ("mode", .object(["type": .string("string"), "enum": .array([.string("INPUT"), .string("OUTPUT"), .string("INPUT_PULLUP")]), "description": .string("Pin mode.")])),
-            ], required: ["pin", "mode"])),
-            AgentToolDefinition(name: "gpio_write", description: "Write HIGH or LOW to a digital output pin.", parameters: schema([
-                ("pin", .object(["type": .string("number"), "description": .string("Pin number.")])),
-                ("value", .object(["type": .string("string"), "enum": .array([.string("HIGH"), .string("LOW")]), "description": .string("Output level.")])),
-            ], required: ["pin", "value"])),
-            AgentToolDefinition(name: "gpio_read", description: "Read the current level of a digital pin. Returns 0 or 1.", parameters: schema([
-                ("pin", .object(["type": .string("number"), "description": .string("Pin number.")])),
-            ], required: ["pin"])),
-            AgentToolDefinition(name: "analog_read", description: "Read an ADC pin. Returns a floating-point voltage or raw value depending on the board.", parameters: schema([
-                ("pin", .object(["type": .string("number"), "description": .string("Pin number.")])),
-            ], required: ["pin"])),
+            AgentToolDefinition(name: "get_script_status", description: "Return the active script status, latest error, render state, and recent console output.", parameters: empty),
             AgentToolDefinition(name: "sleep", description: "Wait for a given number of milliseconds before continuing. Use after triggering async hardware operations to allow them time to complete.", parameters: schema([
                 ("ms", .object(["type": .string("number"), "description": .string("Milliseconds to wait (max 30000).")])),
             ], required: ["ms"])),
@@ -1047,26 +1110,24 @@ public struct ScriptsRootView: View {
                 return try await agentToolApplyPatch(scriptId: arguments["scriptId"]?.stringValue, patch: arguments["patch"]?.stringValue, content: arguments["content"]?.stringValue)
             case "run_script":
                 return try await agentToolPreviewScript(scriptId: arguments["scriptId"]?.stringValue, toolName: name)
+            case "run_ephemeral_script":
+                return try await agentToolRunEphemeralScript(source: arguments["source"]?.stringValue, name: arguments["name"]?.stringValue)
             case "stop_script":
+                let status = agentScriptStatusObject(manager: activePreviewManager, extra: [
+                    "running": .bool(false),
+                    "stopped": .bool(true)
+                ])
                 if let onStopActiveScript {
                     onStopActiveScript()
                 } else {
                     previewManager.exitPreview()
                 }
                 hostStatusSink?(false, nil)
-                return AgentToolResult(id: nil, name: name, ok: true, result: .object(["stopped": .bool(true)]))
+                return AgentToolResult(id: nil, name: name, ok: true, result: .object(status))
             case "get_device_status":
                 return agentToolDeviceStatus()
-            case "spi_transfer":
-                return await agentToolSpiTransfer(arguments: arguments)
-            case "gpio_mode":
-                return await agentToolGpioMode(arguments: arguments)
-            case "gpio_write":
-                return await agentToolGpioWrite(arguments: arguments)
-            case "gpio_read":
-                return await agentToolGpioRead(arguments: arguments)
-            case "analog_read":
-                return await agentToolAnalogRead(arguments: arguments)
+            case "get_script_status":
+                return agentToolScriptStatus()
             case "sleep":
                 let ms: Double
                 if case .number(let v) = arguments["ms"] { ms = v } else { ms = 0 }
@@ -1183,15 +1244,42 @@ public struct ScriptsRootView: View {
         guard !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw MacAgentToolError.scriptNotFound(id)
         }
-        startScriptRuntime(scriptId: id, script: script, name: viewModel.scriptName(for: id), moduleSources: viewModel.moduleSources())
         showingPreview = true
         showingEditor = false
-        hostStatusSink?(true, viewModel.scriptName(for: id))
-        return AgentToolResult(id: nil, name: toolName, ok: true, result: .object([
+        let result = await runScriptRuntime(scriptId: id, script: script, name: viewModel.scriptName(for: id), moduleSources: viewModel.moduleSources())
+        let statusManager = result.running ? activePreviewManager : previewManager
+        let status = agentScriptStatusObject(manager: statusManager, extra: [
             "scriptId": .string(id),
-            "name": .string(viewModel.scriptName(for: id)),
-            "running": .bool(true)
-        ]))
+            "name": .string(result.name),
+            "running": .bool(result.running),
+            "errorMessage": result.errorMessage.map { .string($0) } ?? .null
+        ])
+        return AgentToolResult(id: nil, name: toolName, ok: result.running, result: .object(status), error: result.running ? nil : result.errorMessage)
+    }
+
+    private func agentToolRunEphemeralScript(source: String?, name: String?) async throws -> AgentToolResult {
+        let trimmed = source?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !trimmed.isEmpty else {
+            throw MacAgentToolError.missingArgument("source")
+        }
+
+        let displayName = name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+            ? name!.trimmingCharacters(in: .whitespacesAndNewlines)
+            : "Ephemeral Script"
+        let ephemeralId = "ephemeral:\(UUID().uuidString)"
+        let result = await runScriptRuntime(scriptId: ephemeralId, script: trimmed, name: displayName, moduleSources: viewModel.moduleSources())
+        showingPreview = true
+        showingEditor = false
+        let statusManager = result.running ? activePreviewManager : previewManager
+        let status = agentScriptStatusObject(manager: statusManager, extra: [
+            "scriptId": .string(ephemeralId),
+            "name": .string(result.name),
+            "ephemeral": .bool(true),
+            "saved": .bool(false),
+            "running": .bool(result.running),
+            "errorMessage": result.errorMessage.map { .string($0) } ?? .null
+        ])
+        return AgentToolResult(id: nil, name: "run_ephemeral_script", ok: result.running, result: .object(status), error: result.running ? nil : result.errorMessage)
     }
 
     private func agentToolDeviceStatus() -> AgentToolResult {
@@ -1206,30 +1294,39 @@ public struct ScriptsRootView: View {
             "activeScriptName": .string(manager.activeScriptName ?? ""),
             "activeScriptInstanceId": .string(manager.activeScriptInstanceId ?? ""),
             "isRendering": .bool(manager.isRendering),
-            "lastScriptError": .string(manager.scriptError ?? "")
+            "lastScriptError": .string(manager.scriptError ?? ""),
+            "consoleTail": .array(consoleTailJSON(manager))
         ]))
+    }
+
+    private func agentToolScriptStatus() -> AgentToolResult {
+        AgentToolResult(id: nil, name: "get_script_status", ok: true, result: .object(agentScriptStatusObject(manager: activePreviewManager)))
+    }
+
+    private func agentScriptStatusObject(manager: ScriptPreviewManager, extra: [String: AgentToolJSON] = [:]) -> [String: AgentToolJSON] {
+        var object: [String: AgentToolJSON] = [
+            "running": .bool(manager.activeScriptName != nil),
+            "activeScriptName": .string(manager.activeScriptName ?? ""),
+            "activeScriptInstanceId": .string(manager.activeScriptInstanceId ?? ""),
+            "isRendering": .bool(manager.isRendering),
+            "hasRenderedUI": .bool(manager.scriptTree != nil),
+            "lastScriptError": .string(manager.scriptError ?? ""),
+            "consoleTail": .array(consoleTailJSON(manager)),
+            "consoleText": .string(manager.consoleLines.suffix(80).joined(separator: "\n"))
+        ]
+        object.merge(extra) { _, new in new }
+        return object
+    }
+
+    private func consoleTailJSON(_ manager: ScriptPreviewManager) -> [AgentToolJSON] {
+        manager.consoleLines.suffix(80).map { .string($0) }
     }
 
     private enum AgentHardwareProtocol {
         static let responseOK: UInt8 = 0x80
-        static let responseErr: UInt8 = 0x81
-        static let responseBusy: UInt8 = 0x82
 
         static let nameGet: UInt8 = 0x04
         static let boardGet: UInt8 = 0x09
-
-        static let gpio: UInt8 = 0x10
-        static let gpioInput: UInt8 = 0x00
-        static let gpioOutput: UInt8 = 0x01
-        static let gpioRead: UInt8 = 0x02
-        static let gpioHigh: UInt8 = 0x03
-        static let gpioLow: UInt8 = 0x04
-        static let gpioPull: UInt8 = 0x05
-
-        static let adcRead: UInt8 = 0x20
-        static let adcPin: UInt8 = 0x00
-
-        static let spiTransfer: UInt8 = 0x50
     }
 
     private func agentReadDeviceTextCommand(_ opcode: UInt8) -> String? {
@@ -1239,222 +1336,6 @@ public struct ScriptsRootView: View {
         guard bytes.first == AgentHardwareProtocol.responseOK else { return nil }
         return String(data: Data(bytes.dropFirst()), encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private enum AgentHardwareSendResult {
-        case success([UInt8])
-        case failure(String)
-    }
-
-    private enum AgentArgumentResult<Value> {
-        case success(Value)
-        case failure(AgentToolResult)
-    }
-
-    private final class AgentHardwareDeviceBox: @unchecked Sendable {
-        let device: any ScriptDevice
-
-        init(_ device: any ScriptDevice) {
-            self.device = device
-        }
-    }
-
-    private func agentHardwareSend(_ command: [UInt8], timeout: Int = 1500) async -> AgentHardwareSendResult {
-        guard let device else {
-            return .failure("No device connected")
-        }
-        guard command.count <= device.bufferPacketSizeBytes() else {
-            return .failure("Command is too large (\(command.count) bytes, max \(device.bufferPacketSizeBytes()))")
-        }
-
-        let deviceBox = AgentHardwareDeviceBox(device)
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let device = deviceBox.device
-                guard device.beginAgentHardwarePrimitiveSession() else {
-                    continuation.resume(returning: .failure(device.deviceErrorDescription() ?? "Device is busy or unavailable"))
-                    return
-                }
-                defer {
-                    device.endAgentHardwarePrimitiveSession()
-                }
-
-                guard let response = device.sendCommand(Data(command), timeout: timeout) else {
-                    continuation.resume(returning: .failure(device.deviceErrorDescription() ?? "Device did not respond"))
-                    return
-                }
-                guard let status = response.first else {
-                    continuation.resume(returning: .failure("Device returned an empty response"))
-                    return
-                }
-
-                switch status {
-                case AgentHardwareProtocol.responseOK:
-                    continuation.resume(returning: .success(Array(response.dropFirst())))
-                case AgentHardwareProtocol.responseBusy:
-                    continuation.resume(returning: .failure("Device busy (0x82): another transport session owns runtime control"))
-                case AgentHardwareProtocol.responseErr:
-                    continuation.resume(returning: .failure("Device returned ERR (0x81)"))
-                default:
-                    continuation.resume(returning: .failure("Device error: \(status)"))
-                }
-            }
-        }
-    }
-
-    private func agentNumber(_ value: AgentToolJSON?, name: String, toolName: String) -> AgentArgumentResult<Double> {
-        guard case .number(let number) = value else {
-            return .failure(AgentToolResult(id: nil, name: toolName, ok: false, error: "\(name) is required"))
-        }
-        return .success(number)
-    }
-
-    private func agentPin(_ value: AgentToolJSON?, name: String, toolName: String) -> AgentArgumentResult<UInt8> {
-        switch agentNumber(value, name: name, toolName: toolName) {
-        case .success(let number):
-            let pin = Int(number)
-            guard pin >= 0 && pin <= 255 else {
-                return .failure(AgentToolResult(id: nil, name: toolName, ok: false, error: "\(name) must be 0-255"))
-            }
-            return .success(UInt8(pin))
-        case .failure(let result):
-            return .failure(result)
-        }
-    }
-
-    private func agentToolSpiTransfer(arguments: [String: AgentToolJSON]) async -> AgentToolResult {
-        guard case .array(let byteValues) = arguments["bytes"] else {
-            return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: "bytes must be an array")
-        }
-        guard let device else {
-            return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: "No device connected")
-        }
-        let maxTx = max(0, device.bufferPacketSizeBytes() - 4)
-        guard byteValues.count <= maxTx else {
-            return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: "bytes is too long (\(byteValues.count), max \(maxTx))")
-        }
-
-        var tx: [UInt8] = []
-        tx.reserveCapacity(byteValues.count)
-        for value in byteValues {
-            guard case .number(let number) = value else {
-                return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: "bytes must contain only numbers")
-            }
-            let byte = Int(number)
-            guard byte >= 0 && byte <= 255 else {
-                return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: "SPI bytes must be 0-255")
-            }
-            tx.append(UInt8(byte))
-        }
-
-        let cs: UInt8
-        switch agentPin(arguments["cs"], name: "cs (chip-select pin)", toolName: "spi_transfer") {
-        case .success(let value): cs = value
-        case .failure(let result): return result
-        }
-
-        let maxRx = max(0, device.bufferPacketSizeBytes() - 1)
-        var rxLength = tx.count
-        if case .number(let rxLen) = arguments["rx_length"] {
-            rxLength = max(0, min(maxRx, Int(rxLen)))
-        }
-        let command = [AgentHardwareProtocol.spiTransfer, cs, UInt8(rxLength), UInt8(tx.count)] + tx
-
-        switch await agentHardwareSend(command) {
-        case .success(let payload):
-            let rx = Array(payload.prefix(rxLength)).map { AgentToolJSON.number(Double($0)) }
-            return AgentToolResult(id: nil, name: "spi_transfer", ok: true, result: .object(["rx": .array(rx)]))
-        case .failure(let error):
-            return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: error)
-        }
-    }
-
-    private func agentToolGpioMode(arguments: [String: AgentToolJSON]) async -> AgentToolResult {
-        let pin: UInt8
-        switch agentPin(arguments["pin"], name: "pin", toolName: "gpio_mode") {
-        case .success(let value): pin = value
-        case .failure(let result): return result
-        }
-        guard let mode = arguments["mode"]?.stringValue else {
-            return AgentToolResult(id: nil, name: "gpio_mode", ok: false, error: "mode is required")
-        }
-
-        let command: [UInt8]
-        switch mode.uppercased() {
-        case "INPUT":
-            command = [AgentHardwareProtocol.gpio, AgentHardwareProtocol.gpioInput, pin]
-        case "OUTPUT":
-            command = [AgentHardwareProtocol.gpio, AgentHardwareProtocol.gpioOutput, pin]
-        case "INPUT_PULLUP":
-            command = [AgentHardwareProtocol.gpio, AgentHardwareProtocol.gpioPull, pin, 1]
-        default: return AgentToolResult(id: nil, name: "gpio_mode", ok: false, error: "Invalid mode: \(mode)")
-        }
-
-        switch await agentHardwareSend(command) {
-        case .success:
-            return AgentToolResult(id: nil, name: "gpio_mode", ok: true, result: .object(["pin": .number(Double(pin)), "mode": .string(mode)]))
-        case .failure(let error):
-            return AgentToolResult(id: nil, name: "gpio_mode", ok: false, error: error)
-        }
-    }
-
-    private func agentToolGpioWrite(arguments: [String: AgentToolJSON]) async -> AgentToolResult {
-        let pin: UInt8
-        switch agentPin(arguments["pin"], name: "pin", toolName: "gpio_write") {
-        case .success(let value): pin = value
-        case .failure(let result): return result
-        }
-        guard let value = arguments["value"]?.stringValue else {
-            return AgentToolResult(id: nil, name: "gpio_write", ok: false, error: "value is required")
-        }
-
-        let subcommand: UInt8
-        switch value.uppercased() {
-        case "HIGH": subcommand = AgentHardwareProtocol.gpioHigh
-        case "LOW":  subcommand = AgentHardwareProtocol.gpioLow
-        default: return AgentToolResult(id: nil, name: "gpio_write", ok: false, error: "value must be HIGH or LOW")
-        }
-
-        switch await agentHardwareSend([AgentHardwareProtocol.gpio, subcommand, pin]) {
-        case .success:
-            return AgentToolResult(id: nil, name: "gpio_write", ok: true, result: .object(["pin": .number(Double(pin)), "value": .string(value)]))
-        case .failure(let error):
-            return AgentToolResult(id: nil, name: "gpio_write", ok: false, error: error)
-        }
-    }
-
-    private func agentToolGpioRead(arguments: [String: AgentToolJSON]) async -> AgentToolResult {
-        let pin: UInt8
-        switch agentPin(arguments["pin"], name: "pin", toolName: "gpio_read") {
-        case .success(let value): pin = value
-        case .failure(let result): return result
-        }
-
-        switch await agentHardwareSend([AgentHardwareProtocol.gpio, AgentHardwareProtocol.gpioRead, pin]) {
-        case .success(let payload):
-            let level = payload.first.map { $0 == 0 ? 0 : 1 } ?? 0
-            return AgentToolResult(id: nil, name: "gpio_read", ok: true, result: .object(["pin": .number(Double(pin)), "level": .number(Double(level))]))
-        case .failure(let error):
-            return AgentToolResult(id: nil, name: "gpio_read", ok: false, error: error)
-        }
-    }
-
-    private func agentToolAnalogRead(arguments: [String: AgentToolJSON]) async -> AgentToolResult {
-        let pin: UInt8
-        switch agentPin(arguments["pin"], name: "pin", toolName: "analog_read") {
-        case .success(let value): pin = value
-        case .failure(let result): return result
-        }
-
-        switch await agentHardwareSend([AgentHardwareProtocol.adcRead, AgentHardwareProtocol.adcPin, pin, 1]) {
-        case .success(let payload):
-            let lo = UInt16(payload.indices.contains(0) ? payload[0] : 0)
-            let hi = UInt16(payload.indices.contains(1) ? payload[1] : 0)
-            let value = Double((hi << 8) | lo)
-            return AgentToolResult(id: nil, name: "analog_read", ok: true, result: .object(["pin": .number(Double(pin)), "value": .number(value)]))
-        case .failure(let error):
-            return AgentToolResult(id: nil, name: "analog_read", ok: false, error: error)
-        }
     }
 
     private func scriptObject(id: String, source: String) -> [String: AgentToolJSON] {

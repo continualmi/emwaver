@@ -20,14 +20,20 @@ public final class ScriptPreviewManager: ObservableObject {
     @Published public var isRendering = false
     @Published public var scriptTree: ScriptTree?
     @Published public var scriptError: String?
+    @Published public private(set) var consoleLines: [String] = []
     @Published public var dialog: Dialog?
     @Published public var activeScriptName: String?
     @Published public var activeScriptInstanceId: String?
 
     private weak var device: (any ScriptDevice)?
     private var scriptEngine: ScriptEngine?
+    private let bootstrapSourceOverride: String?
+    private let maxConsoleLines = 500
+    private let consoleTimestampFormatter = ISO8601DateFormatter()
 
-    public init() {}
+    public init(bootstrapSource: String? = nil) {
+        self.bootstrapSourceOverride = bootstrapSource
+    }
 
     public func attach(device: (any ScriptDevice)?) {
         self.device = device
@@ -47,6 +53,7 @@ public final class ScriptPreviewManager: ObservableObject {
         isRendering = true
         scriptTree = nil
         scriptError = nil
+        consoleLines.removeAll(keepingCapacity: true)
 
         engine.execute(script: trimmed, moduleSources: moduleSources) { [weak self] in
             guard let self else { return }
@@ -71,6 +78,7 @@ public final class ScriptPreviewManager: ObservableObject {
         isRendering = false
         scriptTree = nil
         scriptError = nil
+        consoleLines.removeAll(keepingCapacity: false)
         activeScriptName = nil
         activeScriptInstanceId = nil
     }
@@ -92,6 +100,13 @@ public final class ScriptPreviewManager: ObservableObject {
         return await engine.eval(code)
     }
 
+    public func recordScriptError(_ message: String) {
+        scriptError = message
+        appendConsoleLine("[error] \(message)")
+        isRendering = false
+        isPreviewVisible = true
+    }
+
     private func setupEngineIfNeeded() {
         if scriptEngine != nil {
             registerBindings()
@@ -99,6 +114,14 @@ public final class ScriptPreviewManager: ObservableObject {
         }
 
         let engine = ScriptEngine()
+        if let bootstrapSourceOverride {
+            engine.setBootstrapSource(bootstrapSourceOverride)
+        }
+        engine.consoleHandler = { [weak self] line in
+            Task { @MainActor in
+                self?.appendConsoleLine(line)
+            }
+        }
         engine.setup(
             renderHandler: { [weak self] tree in
                 guard let self else { return }
@@ -109,12 +132,18 @@ public final class ScriptPreviewManager: ObservableObject {
             bindings: buildBindings(),
             errorHandler: { [weak self] message in
                 guard let self else { return }
-                self.scriptError = message
-                self.isRendering = false
-                self.isPreviewVisible = true
+                self.recordScriptError(message)
             }
         )
         scriptEngine = engine
+    }
+
+    private func appendConsoleLine(_ line: String) {
+        let ts = consoleTimestampFormatter.string(from: Date())
+        consoleLines.append("\(ts)  \(line)")
+        if consoleLines.count > maxConsoleLines {
+            consoleLines.removeFirst(consoleLines.count - maxConsoleLines)
+        }
     }
 
     private func registerBindings() {

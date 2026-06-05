@@ -343,8 +343,8 @@
   <header>
     <div class="hero">
       <div class="eyebrow">EMWaver Agent</div>
-      <h1>Agent runtime and hardware tool model</h1>
-      <p>The Agent is optional assistance for building complete local JavaScript scripts and for operating connected devices through typed hardware tools.</p>
+      <h1>Agent script runtime and console model</h1>
+      <p>The Agent is optional assistance for building, running, and debugging complete local JavaScript/JSX scripts.</p>
     </div>
   </header>
 
@@ -352,7 +352,7 @@
     <section>
       <h2>Current Position</h2>
       <p class="lead">
-        EMWaver stays local-first. The user can run scripts and control local hardware without an account or backend. The Agent is a paid, optional helper that can understand the current app context, write full <code>.js</code> scripts, and directly exercise hardware through named tools such as SPI, I2C, GPIO, ADC, PWM, and UART operations.
+        EMWaver stays local-first. The user can run scripts and control local hardware without an account or backend. The Agent is a paid, optional helper that can understand the current app context, write full <code>.js</code> scripts, run existing or ephemeral scripts locally, and inspect console output.
       </p>
       <div class="grid three">
         <article class="card">
@@ -362,8 +362,8 @@
         </article>
         <article class="card">
           <span class="tag device">Goal 2</span>
-          <h3>Interface with devices</h3>
-          <p>The Agent should use hardware tools to perform transfers, probe registers, read pins, and validate behavior before it writes the final user-facing script.</p>
+          <h3>Run scripts for evidence</h3>
+          <p>The Agent should run JavaScript/JSX scripts that use public EMWaver libraries, then inspect console output and script status before it writes the final user-facing script.</p>
         </article>
         <article class="card">
           <span class="tag api">Boundary</span>
@@ -380,45 +380,45 @@
         <article class="node agent">
           <span class="tag">Agent</span>
           <h3>Reasoning and authoring</h3>
-          <p>Reads user intent, visible script context, runtime errors, and tool results. Produces explanations, script patches, and hardware tool calls.</p>
+          <p>Reads user intent, visible script context, runtime errors, and console output. Produces explanations, script patches, and ephemeral probe scripts.</p>
         </article>
         <div class="arrow">&rarr;</div>
         <article class="node device">
-          <span class="tag device">Native tools</span>
-          <h3>Typed hardware operations</h3>
-          <p>The macOS app sends protocol packets through the active transport for SPI, I2C, GPIO, ADC, PWM, UART, sleep, and status checks.</p>
+          <span class="tag device">Script runtime</span>
+          <h3>Local script execution</h3>
+          <p>The macOS app runs saved or ephemeral JavaScript/JSX against the selected local transport and captures console output.</p>
         </article>
         <div class="arrow">&rarr;</div>
         <article class="node script">
           <span class="tag script">Script artifact</span>
           <h3>Full local <code>.js</code> file</h3>
-          <p>Once behavior is understood, the Agent writes a complete script with imports, JSX UI, state, callbacks, and hardware library calls.</p>
+          <p>Once behavior is understood, the Agent writes or patches a complete script with imports, JSX UI, state, callbacks, and hardware library calls.</p>
         </article>
       </div>
     </section>
 
     <section>
-      <h2>Why Tools Instead of Running JS Snippets</h2>
+      <h2>Why Scripts Instead of Primitive Tools</h2>
       <div class="grid two">
         <article class="card">
           <span class="tag danger">Rejected</span>
           <h3>Arbitrary eval</h3>
-          <p>Letting the Agent run ad hoc JavaScript made the model guess the live API surface. It would invent names, call stale APIs, or depend on script-local variables that were never in scope.</p>
+          <p>Letting the Agent evaluate fragments inside the live engine made the model guess the runtime scope. It would invent names, call stale APIs, or depend on variables that were never in scope.</p>
         </article>
         <article class="card">
           <span class="tag ok">Chosen</span>
-          <h3>Named hardware tools</h3>
-          <p>Typed tools give the model a small exact interface. The native app owns EMW protocol packets, transport claims, timeouts, and error reporting.</p>
+          <h3>Real script runs</h3>
+          <p>Saved and ephemeral scripts give the model an inspectable artifact. The native app owns local execution, session claims, console capture, and error reporting.</p>
         </article>
       </div>
       <div class="callout">
-        <p><strong>Decision:</strong> the Agent should not operate hardware by pressing UI buttons or by evaluating guessed JavaScript. It should operate hardware through explicit primitive tools, then write or patch the final script for the user.</p>
+        <p><strong>Decision:</strong> the macOS Agent should not operate hardware through UI button presses, arbitrary eval, or direct SPI/GPIO/ADC primitive tools. It should write or patch JavaScript/JSX, run it locally, then inspect console output and status.</p>
       </div>
     </section>
 
     <section>
       <h2>Tool Surface</h2>
-      <p class="lead">The tools are intentionally low-level. Higher-level behaviors such as "initialize CC1101" or "read an RFID card" should be built by the Agent from primitives and then captured as reusable local scripts or libraries.</p>
+      <p class="lead">The macOS tool surface is script-focused. Higher-level behaviors such as "initialize CC1101" or "read an RFID card" should be captured as reusable local scripts or unsaved ephemeral probes first.</p>
       <table class="tool-table">
         <thead>
           <tr>
@@ -435,33 +435,8 @@
           </tr>
           <tr>
             <td>Runtime</td>
-            <td><code>run_script</code>, <code>stop_script</code>, <code>get_device_status</code>, <code>sleep</code></td>
-            <td>Launch the full user script, stop it, inspect connection state, and wait for hardware settling.</td>
-          </tr>
-          <tr>
-            <td>GPIO</td>
-            <td><code>gpio_mode</code>, <code>gpio_write</code>, <code>gpio_read</code></td>
-            <td>Configure and inspect digital pins using explicit pin numbers or port/number mappings.</td>
-          </tr>
-          <tr>
-            <td>Analog and PWM</td>
-            <td><code>analog_read</code>, <code>pwm_write</code></td>
-            <td>Read ADC values and drive PWM outputs when supported by the active board firmware.</td>
-          </tr>
-          <tr>
-            <td>SPI</td>
-            <td><code>spi_transfer</code></td>
-            <td>Send raw SPI bytes with explicit chip-select handling and return received bytes.</td>
-          </tr>
-          <tr>
-            <td>I2C</td>
-            <td><code>i2c_write</code>, <code>i2c_read</code>, <code>i2c_write_read</code></td>
-            <td>Scan and communicate with I2C devices by address without hardcoded board aliases.</td>
-          </tr>
-          <tr>
-            <td>UART</td>
-            <td><code>uart_write</code>, <code>uart_read</code></td>
-            <td>Send and receive serial data through configured UART pins or board-supported UART channels.</td>
+            <td><code>run_script</code>, <code>run_ephemeral_script</code>, <code>stop_script</code>, <code>get_device_status</code>, <code>get_script_status</code>, <code>sleep</code></td>
+            <td>Launch saved or unsaved scripts, stop them, inspect connection/script state, read console output, and wait before checking again.</td>
           </tr>
         </tbody>
       </table>
@@ -502,11 +477,11 @@
       <h2>Agent Loop</h2>
       <ol>
         <li>The user describes the target behavior: for example, blink a pin, read a sensor, initialize a radio, or build a control UI.</li>
-        <li>The app supplies visible context: selected script, current error, connected board status, and any user-approved hardware notes.</li>
-        <li>The Agent calls hardware tools when it needs evidence from the device: read a pin, send SPI bytes, scan I2C, or verify a register.</li>
-        <li>The app executes those tool calls locally against the active transport and returns structured results.</li>
+        <li>The app supplies visible context: selected script, current error, connected board status, and recent console output.</li>
         <li>The Agent writes or patches a complete <code>.js</code> script using the public libraries.</li>
-        <li>The user runs the script locally. Script errors stay script errors; hardware tool failures stay Agent tool results.</li>
+        <li>When it needs quick evidence, the Agent runs an unsaved ephemeral script against the selected local device.</li>
+        <li>The app executes the script locally and captures <code>console.log</code>, <code>console.warn</code>, <code>console.error</code>, render state, and errors.</li>
+        <li>The Agent calls <code>get_script_status</code> after any needed <code>sleep</code> and uses the console tail to continue.</li>
       </ol>
     </section>
 
@@ -534,7 +509,7 @@
             <li>Use focused libraries such as <code>emw-gpio</code>, <code>emw-spi</code>, <code>emw-i2c</code>, <code>emw-uart</code>, and <code>emw-ui</code>.</li>
             <li>Expose bundled read-only library scripts in the script list with a library/script differentiator.</li>
             <li>Prefer explicit pins and bus configuration in user scripts.</li>
-            <li>Return structured tool results the Agent can reason over.</li>
+            <li>Return script status and console output the Agent can reason over.</li>
           </ul>
         </article>
         <article class="card">
@@ -543,7 +518,7 @@
           <ul>
             <li>No hidden <code>script_bootstrap</code> compatibility layer.</li>
             <li>No automatic aliases like <code>A0</code>, <code>IR_TX</code>, or hardcoded SPI device pins in generic libraries.</li>
-            <li>No Agent hardware work through UI snapshots, button clicking, or arbitrary JavaScript eval.</li>
+            <li>No Agent hardware work through UI snapshots, button clicking, arbitrary JavaScript eval, or direct SPI/GPIO/ADC primitive tools on macOS.</li>
             <li>No calls to MDL-only <code>/backend-api/...</code> routes from EMWaver clients.</li>
             <li>No EMWaver account or cloud control dependency for local device access.</li>
           </ul>
@@ -553,7 +528,7 @@
 
     <section>
       <h2>What This Enables</h2>
-      <p class="lead">The Agent can become useful before it knows every final script API. It can probe hardware with stable tool schemas, then turn the verified behavior into clean local JavaScript. That keeps EMWaver open-source and script-first while making the paid Agent valuable as a practical hardware assistant.</p>
+      <p class="lead">The Agent can become useful by producing real runnable scripts from the start. It can probe hardware with ephemeral JavaScript/JSX, inspect console output, and turn verified behavior into clean local files. That keeps EMWaver open-source and script-first while making the paid Agent valuable as a practical hardware assistant.</p>
     </section>
   </main>
 </body>

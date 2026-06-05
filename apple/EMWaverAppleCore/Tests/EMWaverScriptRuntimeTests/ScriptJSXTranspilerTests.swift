@@ -10,7 +10,7 @@ import XCTest
 final class ScriptJSXTranspilerTests: XCTestCase {
     func testTranspilesNestedElementsAndTextChildren() throws {
         let source = """
-        UI.render(
+        render(
           <Column padding={16} spacing={12}>
             <Text font="title2">JSX Hello</Text>
             <Row spacing={12}>

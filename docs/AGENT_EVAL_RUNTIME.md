@@ -1,106 +1,71 @@
-# Agent Hardware Runtime
+# Agent Script Runtime
 
-Status: implemented (macOS native Agent, May 2026)
+Status: macOS pivot implemented (June 2026)
 
 ## Decision
 
-The native Agent controls hardware through direct hardware primitive tools
-(`spi_transfer`, `gpio_read`, `gpio_write`, `gpio_mode`, `analog_read`) that
-send native EMW protocol packets through the active local device. The previous
-approaches — `get_ui_snapshot` /
-`send_ui_event` (snapshot navigation), and then `eval` (arbitrary JS snippets)
-— have both been removed from the native Agent tool set.
+The macOS native Agent operates hardware by writing and running normal EMWaver
+JavaScript/JSX scripts. The script is the artifact: it can be an existing
+bundled/custom script or an unsaved ephemeral script, similar to `python -c`.
 
-## Why the Snapshot Approach Failed
+The macOS Agent no longer exposes direct hardware primitive tools such as
+`spi_transfer`, `gpio_read`, `gpio_write`, `gpio_mode`, or `analog_read`.
+Hardware access should go through the same script libraries users see, such as
+`emw-gpio`, `emw-spi`, `emw-i2c`, `emw-adc`, and JSX UI modules.
 
-The snapshot/event model treated the Agent as a screen reader navigating a UI
-built for humans. The failure became visible in practice:
+## Why
 
-When a user asked the Agent to "press the Initialize & Read button" on the
-cc1101.emw script, the Agent:
+The previous primitive-tool model made the Agent useful for quick probing, but
+it created a second hardware-control path that users could not directly inspect
+or keep. The script-first model keeps EMWaver aligned with its product shape:
+local scripts, visible code, reusable examples, and no hidden cloud or native
+activation path for local hardware control.
 
-1. Called `get_ui_snapshot` to read the UI tree.
-2. Called `send_ui_event` with the correct token — the button press worked.
-3. Called `get_ui_snapshot` again to check the result.
-4. But the CC1101 initialization is an async SPI transaction. The snapshot
-   taken immediately after the press showed a loading/busy state, not a
-   completed result.
-5. The Agent saw "nothing useful changed", concluded the press had not worked,
-   and retried the button three more times.
+`eval` also remains out of the Agent tool set. The Agent should create or patch
+real script source, then run that source through the local runtime.
 
-The root problem is structural. Hardware operations are inherently async.
-The snapshot tool returns whatever the UI looks like at that instant — it has
-no way to signal that an operation is in flight.
+## Script Observation
 
-## Why eval Was Also Removed
+`console.log`, `console.warn`, and `console.error` are the Agent's diagnostic
+observation channel for script runs. The macOS app captures console output from
+normal script execution, shows it in the Scripts console pane, and returns a
+recent console tail through Agent script-status tool results.
 
-`eval` let the Agent run arbitrary JS snippets in the live engine. This worked
-mechanically but failed in practice: the model does not know the JS API surface
-(`SPI.transfer`, `CC1101.readRegister`, etc.) without reading the relevant
-bundled script first, and even then it frequently guessed wrong API names.
-Named hardware tools solve this at the source — the parameter schema is the
-API, and the tool implementation handles the native protocol internally.
+Scripts should still use JSX for user-facing UI:
 
-## Current Model: Named Hardware Primitive Tools
+```js
+import { JSX, render } from "emw-jsx";
+import { Column, Text } from "emw-ui";
 
-The Agent issues typed hardware operations directly. The tool schemas make the
-API surface discoverable; the tool implementations encode the correct EMW
-protocol packets.
+console.log("probing board");
 
-```
-spi_transfer(bytes=[0x80, 0x00], cs=4, rx_length=2)  →  { rx: [0x00, 0x14] }
-gpio_read(pin=A2)  →  { pin: 2, level: 1 }
+function App() {
+  return (
+    <Column>
+      <Text>Ready</Text>
+    </Column>
+  );
+}
+
+render(<App />);
 ```
 
-No snapshot timing, no UI state to parse, no retry loops, no guessed JS API names.
+Rendered JSX is for the user. Console output is for diagnostics, Agent
+iteration, and short-lived probe scripts.
 
-## Two Agent Modes
-
-**Explore/control mode** — the Agent calls hardware primitive tools to read
-registers, drive pins, send SPI frames, and validate device responses. It can
-call `sleep` between operations to allow hardware time to settle.
-
-**Build mode** — once the Agent has verified the hardware behaves as expected,
-it writes a full `.emw` script with `UI.render(...)` and calls `run_script`.
-The UI is the artifact the user interacts with, not the interface the Agent
-uses to operate the hardware.
-
-## Native Agent Tool Set
+## macOS Agent Tool Set
 
 | Tool | Purpose |
 |------|---------|
-| `list_scripts` | Discover available `.emw` scripts |
+| `list_scripts` | Discover bundled and custom JavaScript scripts |
 | `read_script` | Read script source |
 | `apply_patch_to_script` | Edit a script draft |
-| `run_script` | Launch a full script with UI |
-| `stop_script` | Stop the running script |
-| `get_device_status` | Check device connection and runtime state |
-| `spi_transfer` | Send/receive raw SPI bytes (CS pin, TX bytes, optional RX length) |
-| `gpio_mode` | Set a pin to INPUT / OUTPUT / INPUT_PULLUP |
-| `gpio_write` | Write HIGH or LOW to a digital output pin |
-| `gpio_read` | Read the current level (0 or 1) of a digital pin |
-| `analog_read` | Read an ADC pin value |
-| `sleep` | Wait N ms for hardware operations to settle |
+| `run_script` | Launch an existing bundled/custom script |
+| `run_ephemeral_script` | Run unsaved JavaScript/JSX source without creating a script record |
+| `stop_script` | Stop the active script runtime |
+| `get_device_status` | Check local device/runtime state |
+| `get_script_status` | Return active script state, latest error, render state, and recent console output |
+| `sleep` | Wait N ms before checking script status again |
 
-`get_ui_snapshot`, `send_ui_event`, and `eval` are all removed.
-
-## How Hardware Tools Work
-
-Each hardware tool builds the appropriate EMW opcode packet directly in the
-native client and calls `ScriptDevice.sendCommand` on the active local device.
-For ESP32 transports, macOS claims the runtime transport session around the
-primitive call so runtime/control traffic is accepted by firmware.
-
-The hardware tool layer, not the model, owns the protocol details. Tool
-failures are returned as tool results; they must not surface as `.emw` script
-errors or mutate the script preview error state.
-
-## console.log
-
-`console.log`, `console.warn`, and `console.error` remain available in the
-`.emw` script runtime on native Apple platforms (installed in
-`ScriptEngine.installHostPrimitives`). Hardware primitive tools no longer run
-through that script runtime, so script console output is separate from Agent
-hardware tool results. Bundled `.emw` scripts should still express user-facing
-state through `UI.render(...)`; `console.log` is an internal diagnostic channel,
-not the primary agent output path.
+`get_ui_snapshot`, `send_ui_event`, `eval`, and direct SPI/GPIO/ADC primitive
+tools are not part of the macOS Agent tool set.

@@ -2,19 +2,19 @@
 
 This contributor document defines the optional Agent API boundary for EMWaver native apps.
 
-The open-source runtime, firmware payloads, scripts, and local hardware control work without an Agent key. When enabled, the Agent can help write scripts and can also inspect hardware through native primitive tools.
+The open-source runtime, firmware payloads, scripts, and local hardware control work without an Agent key. When enabled, the Agent can help write, run, and debug local scripts.
 
 ## Product Contract
 
 The Agent helps with:
 
-- probing connected modules through hardware primitives such as SPI transfers, GPIO reads/writes, and analog reads,
+- probing connected modules by writing/running JavaScript/JSX scripts that use the public EMWaver script libraries,
 - debugging wiring, protocol, and runtime errors,
 - writing JavaScript scripts from user intent,
 - turning module/datasheet behavior into script code,
 - generating native UI controls for scripts,
 - adapting scripts between supported boards,
-- explaining hardware responses and script behavior.
+- explaining console output, hardware responses, and script behavior.
 
 The Agent must not be required for local hardware access.
 
