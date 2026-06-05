@@ -389,33 +389,6 @@ public struct ScriptsRootView: View {
         let lines = manager.consoleLines
         return VStack(alignment: .leading, spacing: 0) {
             ScriptConsoleResizeHandle(consoleHeight: $scriptConsoleHeight)
-            HStack {
-                Text("Console")
-                    .font(.caption.weight(.semibold))
-                    .foregroundColor(.secondary)
-                Spacer()
-                if let name = manager.activeScriptName, !name.isEmpty {
-                    Text(name)
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
-                }
-                Button {
-                    withAnimation(.smooth(duration: 0.18)) {
-                        showingScriptConsole = false
-                    }
-                } label: {
-                    Image(systemName: "chevron.down")
-                }
-                .buttonStyle(.borderless)
-                .help("Collapse console")
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Self.primaryBackground)
-
-            Divider()
-
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 2) {
