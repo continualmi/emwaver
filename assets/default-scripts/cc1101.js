@@ -7,6 +7,18 @@ import { spi } from "emw-spi";
 
 var SCRIPT_NAME = "cc1101";
 
+function ccLog(message) {
+  console.log("[cc1101] " + String(message));
+}
+
+function ccWarn(message) {
+  console.warn("[cc1101] " + String(message));
+}
+
+function ccError(message) {
+  console.error("[cc1101] " + String(message));
+}
+
 function normalizeBoardType(value) {
   var board = String(value || "").trim().toLowerCase().replace("-", "");
   if (board === "esp32") return "esp32";
@@ -379,17 +391,21 @@ function cc1101WriteBurstReg(addr, data) {
 }
 
 function ensureCc1101Init() {
+  ccLog("probe start: CS=" + String(cc1101CsPin) + " board=" + boardType);
   // Probe VERSION register via SNOP+read.
   var response = cc1101SpiXfer([0xf1, 0x00], { rxLength: 2 });
   if (!response || response.length < 2) {
     statusMessage = "CC1101 probe failed: no response.";
+    ccError(statusMessage);
     return false;
   }
   var version = response[1] & 0xff;
   if (version !== 0x14) {
     // Some modules report a different VERSION code; continue if SPI reads are working.
     statusMessage = "CC1101 probe warning: VERSION=0x" + toHexByte(version) + " (expected 0x14).";
+    ccWarn(statusMessage);
   } else {
+    ccLog("probe ok: VERSION=0x" + toHexByte(version));
   }
   return true;
 }
@@ -627,6 +643,7 @@ function cc1101SetGdo(gdo2, gdo1, gdo0) {
 }
 
 function applyCommonAsk43392_100k() {
+  ccLog("applying ASK/OOK 433.92MHz 100kbps preset");
   cc1101Reset();
   cc1101ApplyDefaults();
   writeReg(CC1101_REG_PKTCTRL0, 0x32);
@@ -634,9 +651,11 @@ function applyCommonAsk43392_100k() {
   cc1101SetFrequencyMHz(433.92);
   cc1101SetDataRate(100000);
   cc1101SetModulationAndPower(CC1101_MOD_ASK, 10);
+  ccLog("preset applied: freq=433.92MHz dataRate=100000 modulation=ASK/OOK power=10dBm");
 }
 
 function initRxAsk433() {
+  ccLog("Init RX requested: CS=" + String(cc1101CsPin) + " GDO0=" + String(gdo0Pin));
   presetStatusText = "Init RX: 433.92MHz ASK/OOK 100kbps...";
   render();
   applyCommonAsk43392_100k();
@@ -644,10 +663,12 @@ function initRxAsk433() {
   cc1101Strobe(CC1101_SRX);
   txCarrierOn = false;
   presetStatusText = "RX ready (GDO0 pin " + String(gdo0Pin) + " = modem out)";
+  ccLog(presetStatusText);
   render();
 }
 
 function initTxAsk433() {
+  ccLog("Init TX requested: CS=" + String(cc1101CsPin) + " GDO0=" + String(gdo0Pin));
   presetStatusText = "Init TX: 433.92MHz ASK/OOK 100kbps...";
   render();
   applyCommonAsk43392_100k();
@@ -656,6 +677,7 @@ function initTxAsk433() {
   txCarrierOn = false;
   cc1101Strobe(CC1101_STX);
   presetStatusText = "TX ready (GDO0 pin " + String(gdo0Pin) + " = modem in, carrier gated by GDO0)";
+  ccLog(presetStatusText);
   render();
 }
 
@@ -667,17 +689,21 @@ function toggleCarrier() {
     txCarrierOn
       ? "Carrier: ON (GDO0 pin " + String(gdo0Pin) + "=HIGH)"
       : "Carrier: OFF (GDO0 pin " + String(gdo0Pin) + "=LOW)";
+  ccLog(presetStatusText);
   render();
 }
 
 function probePartVersion() {
+  ccLog("PART/VERSION probe requested");
   var part = readReg(CC1101_REG_PARTNUM);
   var ver = readReg(CC1101_REG_VERSION);
   presetStatusText = "Probe: PARTNUM=0x" + toHexByte(part) + " VERSION=0x" + toHexByte(ver);
+  ccLog(presetStatusText);
   render();
 }
 
 function packetPushLog(line) {
+  ccLog("[packet] " + String(line));
   packetLogLines.push(String(line));
   if (packetLogLines.length > 400) packetLogLines = packetLogLines.slice(packetLogLines.length - 400);
 }
@@ -737,6 +763,7 @@ function packetSetDataRate(bps) {
 }
 
 function packetInitFixed() {
+  ccLog("packet init requested: CS=" + String(packetCsPin) + " freq=" + String(packetFreqMHz) + "MHz dataRate=" + String(packetDataRateBps));
   packetStatus = "Initializing...";
   render();
 
@@ -768,12 +795,14 @@ function packetInitFixed() {
 }
 
 function packetSend() {
+  ccLog("packet send requested");
   packetStatus = "Sending...";
   render();
 
   var bytes = parseHexBytes(packetPayloadHex, 61);
   if (!bytes.length) {
     packetStatus = "No payload";
+    ccWarn("packet send aborted: no payload");
     render();
     return;
   }
@@ -826,6 +855,7 @@ function applyBoardType(nextBoardType) {
   cc1101CsPin = DEFAULT_CC1101_CS;
   gdo0Pin = DEFAULT_GDO0_PIN;
   packetCsPin = cc1101CsPin;
+  ccLog("board type changed: " + previous + " -> " + boardType + " (CS=" + String(cc1101CsPin) + ", GDO0=" + String(gdo0Pin) + ")");
 }
 
 function stopLoading(msg) {
@@ -839,6 +869,7 @@ function stopLoading(msg) {
 
 function startRefresh() {
   if (isLoading) return;
+  ccLog("Initialize & Read requested: board=" + boardType + " CS=" + String(cc1101CsPin) + " GDO0=" + String(gdo0Pin));
   statusMessage = "";
   abortRequested = false;
   isLoading = true;
@@ -908,8 +939,22 @@ function runLoadAll() {
     rfParams = nextRf;
     isLoading = false;
     currentCommand = "";
+    ccLog(
+      "Initialize & Read complete: " +
+        String(Object.keys(nextRegs).length) +
+        " register values, freq=" +
+        formatFrequency(nextRf.frequencyMHz) +
+        "MHz, dataRate=" +
+        String(nextRf.dataRate) +
+        "bps, modulation=" +
+        String(nextRf.modulation) +
+        ", txPower=" +
+        String(nextRf.txPower) +
+        "dBm",
+    );
     render();
   } catch (e) {
+    ccError("Initialize & Read failed: " + String(e && e.message ? e.message : e));
     stopLoading("Load failed: " + String(e && e.message ? e.message : e));
   }
 }
@@ -964,6 +1009,7 @@ function applyEdit() {
 
     try {
       var key = editDialog.key;
+      ccLog("write requested: " + key + "=0x" + toHexByte(parsed));
       if (key.indexOf("PA_TABLE") === 0) {
         var index = parseInt(key.replace("PA_TABLE", ""), 10);
         if (!isFiniteNumber(index) || index < 0 || index >= CC1101_PA_TABLE_SIZE) {
@@ -992,9 +1038,11 @@ function applyEdit() {
       }
       statusMessage = "";
       editDialog = null;
+      ccLog("write ok: " + key + "=0x" + String(registers[key] || toHexByte(parsed)));
       render();
     } catch (e) {
       statusMessage = "Write failed: " + String(e && e.message ? e.message : e);
+      ccError(statusMessage);
       render();
     }
     return;
@@ -1018,6 +1066,7 @@ function applyEdit() {
       var key2 = editDialog.key;
       var ok2 = true;
       var appliedValue = n;
+      ccLog("RF update requested: " + key2 + "=" + String(n));
       if (key2 === "frequencyMHz") {
         ok2 = cc1101SetFrequencyMHz(n);
       } else if (key2 === "dataRate") {
@@ -1031,6 +1080,7 @@ function applyEdit() {
       }
       if (!ok2) {
         statusMessage = "Failed to set " + String(editDialog.title).toLowerCase() + ".";
+        ccWarn(statusMessage);
         render();
         return;
       }
@@ -1039,9 +1089,11 @@ function applyEdit() {
       }
       statusMessage = "";
       editDialog = null;
+      ccLog("RF update ok: " + key2 + "=" + String(appliedValue));
       render();
     } catch (e2) {
       statusMessage = "Update failed: " + String(e2 && e2.message ? e2.message : e2);
+      ccError(statusMessage);
       render();
     }
     return;
@@ -1168,6 +1220,7 @@ function App() {
                   var n = parseInt(String(value), 10);
                   cc1101CsPin = isFiniteNumber(n) ? n : DEFAULT_CC1101_CS;
                   packetCsPin = cc1101CsPin;
+                  ccLog("CS pin changed: " + String(cc1101CsPin));
                   render();
                 }}
               />
@@ -1179,6 +1232,7 @@ function App() {
                 onChange={(value) => {
                   var n = parseInt(String(value), 10);
                   gdo0Pin = isFiniteNumber(n) ? n : DEFAULT_GDO0_PIN;
+                  ccLog("GDO0 pin changed: " + String(gdo0Pin));
                   render();
                 }}
               />
@@ -1203,14 +1257,17 @@ function App() {
               onChange={(value) => {
                 if (!rfParams) return;
                 var m = parseInt(String(value), 10);
+                ccLog("modulation picker changed: " + String(rfParams.modulation) + " -> " + String(m));
                 var ok = cc1101SetModulationAndPower(m, rfParams.txPower);
                 if (!ok) {
                   statusMessage = "Failed to update CC1101 modulation/power.";
+                  ccWarn(statusMessage);
                   render();
                   return;
                 }
                 rfParams.modulation = m;
                 statusMessage = "";
+                ccLog("modulation update ok: modulation=" + String(m) + " txPower=" + String(rfParams.txPower));
                 render();
               }}
             />
@@ -1222,14 +1279,17 @@ function App() {
               onChange={(value) => {
                 if (!rfParams) return;
                 var p = parseInt(String(value), 10);
+                ccLog("TX power picker changed: " + String(rfParams.txPower) + " -> " + String(p) + "dBm");
                 var ok = cc1101SetModulationAndPower(rfParams.modulation, p);
                 if (!ok) {
                   statusMessage = "Failed to update CC1101 modulation/power.";
+                  ccWarn(statusMessage);
                   render();
                   return;
                 }
                 rfParams.txPower = p;
                 statusMessage = "";
+                ccLog("TX power update ok: modulation=" + String(rfParams.modulation) + " txPower=" + String(p) + "dBm");
                 render();
               }}
             />
@@ -1268,7 +1328,7 @@ function App() {
             <Text fontWeight="medium">Payload (hex, up to 61 bytes)</Text>
             <TextEditor id="packet_payload_hex" value={packetPayloadHex} placeholder="01 02 03 ..." onChange={(v) => { packetPayloadHex = String(v); render(); }} minHeight={56} fillsWidth={true} />
             {packetStatus ? Text({ text: packetStatus, font: "caption" }) : null}
-            <Button id="packet_clear_log" onTap={() => { packetLogLines = []; render(); }}>Clear Log</Button>
+            <Button id="packet_clear_log" onTap={() => { packetLogLines = []; ccLog("[packet] UI packet log cleared"); render(); }}>Clear Log</Button>
             <LogViewer text={packetLogLines.join("\n")} minHeight={120} />
           </Card>
         </Column>

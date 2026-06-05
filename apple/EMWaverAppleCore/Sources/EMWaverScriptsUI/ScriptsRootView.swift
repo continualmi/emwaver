@@ -117,6 +117,7 @@ public struct ScriptsRootView: View {
     @State private var showingAgentPanel = false
     #if os(macOS)
     @State private var agentPanelWidth: CGFloat = 380
+    @State private var showingScriptConsole = false
     #endif
 
     @MainActor
@@ -204,7 +205,9 @@ public struct ScriptsRootView: View {
                 VStack(spacing: 0) {
                     primaryContent
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    scriptConsolePane
+                    if showingScriptConsole {
+                        scriptConsolePane
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
@@ -395,6 +398,15 @@ public struct ScriptsRootView: View {
                         .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
+                Button {
+                    withAnimation(.smooth(duration: 0.18)) {
+                        showingScriptConsole = false
+                    }
+                } label: {
+                    Image(systemName: "chevron.down")
+                }
+                .buttonStyle(.borderless)
+                .help("Collapse console")
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
@@ -1374,6 +1386,15 @@ public struct ScriptsRootView: View {
                 if let agentLeadingToolbarItem {
                     agentLeadingToolbarItem
                 }
+
+                Button {
+                    withAnimation(.smooth(duration: 0.18)) {
+                        showingScriptConsole.toggle()
+                    }
+                } label: {
+                    Image(systemName: "terminal")
+                }
+                .help(showingScriptConsole ? "Collapse console" : "Expand console")
             }
         }
         #else
@@ -1409,6 +1430,17 @@ public struct ScriptsRootView: View {
                     }
                     .disabled(editorContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
+
+                #if os(macOS)
+                Button {
+                    withAnimation(.smooth(duration: 0.18)) {
+                        showingScriptConsole.toggle()
+                    }
+                } label: {
+                    Image(systemName: "terminal")
+                }
+                .help(showingScriptConsole ? "Collapse console" : "Expand console")
+                #endif
 
                 Menu {
                     Button("Copy") { copyToPasteboard(editorContent) }
