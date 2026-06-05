@@ -107,6 +107,10 @@ public final class ScriptPreviewManager: ObservableObject {
         isPreviewVisible = true
     }
 
+    public func clearConsole() {
+        consoleLines.removeAll(keepingCapacity: true)
+    }
+
     private func setupEngineIfNeeded() {
         if scriptEngine != nil {
             registerBindings()

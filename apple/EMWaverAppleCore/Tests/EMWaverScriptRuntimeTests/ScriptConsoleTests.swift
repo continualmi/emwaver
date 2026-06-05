@@ -63,6 +63,9 @@ final class ScriptConsoleTests: XCTestCase {
         XCTAssertTrue(manager.consoleLines.first?.contains("line-5") == true)
         XCTAssertTrue(manager.consoleLines.last?.contains("line-504") == true)
 
+        manager.clearConsole()
+        XCTAssertTrue(manager.consoleLines.isEmpty)
+
         manager.render(script: "throw new Error(\"kaboom\");", name: "Console Error", moduleSources: [:])
         try await waitUntil(timeoutSeconds: 5) {
             manager.scriptError?.contains("kaboom") == true &&

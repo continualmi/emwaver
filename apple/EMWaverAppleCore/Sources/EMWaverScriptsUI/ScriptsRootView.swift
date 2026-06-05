@@ -389,6 +389,26 @@ public struct ScriptsRootView: View {
         let lines = manager.consoleLines
         return VStack(alignment: .leading, spacing: 0) {
             ScriptConsoleResizeHandle(consoleHeight: $scriptConsoleHeight)
+            HStack(spacing: 8) {
+                Text("Console")
+                    .font(.caption.weight(.semibold))
+                    .foregroundColor(.secondary)
+                Spacer()
+                Button {
+                    manager.clearConsole()
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .disabled(lines.isEmpty)
+                .help("Clear console")
+                .accessibilityLabel("Clear console")
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 26)
+            .background(Self.secondaryBackground)
+
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 2) {
@@ -1681,13 +1701,13 @@ private struct ScriptConsoleResizeHandle: View {
     var body: some View {
         ZStack {
             Color.clear
-                .frame(height: 8)
+                .frame(height: 5)
                 .contentShape(Rectangle())
             Rectangle()
-                .fill(Color.primary.opacity(isHovering ? 0.20 : 0.10))
+                .fill(Color.primary.opacity(isHovering ? 0.18 : 0.06))
                 .frame(height: 1)
         }
-        .frame(height: 8)
+        .frame(height: 5)
         .gesture(
             DragGesture(minimumDistance: 1, coordinateSpace: .global)
                 .onChanged { value in
