@@ -130,6 +130,13 @@ Go to Line controls.
 
 Windows is intended to track the current macOS app in the firmware setup/update, local runtime, and desktop MCP layers.
 
+Current MCP implementation:
+
+- Settings exposes a `Desktop MCP` section with an enable switch, loopback endpoint, and generated bearer token.
+- When enabled, the running app serves Streamable-HTTP-style JSON-RPC at `http://127.0.0.1:3923/mcp`.
+- The initial tool slice is read/status-only: `list_scripts`, `read_script`, and `device_state`.
+- The server is intentionally in-process; do not add a sidecar, daemon, or CLI control plane for this path.
+
 What Windows already has:
 - USB run-mode transport,
 - ESP32 BLE run-mode transport,

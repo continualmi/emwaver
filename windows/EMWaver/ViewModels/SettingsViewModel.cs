@@ -28,6 +28,41 @@ public class SettingsViewModel : INotifyPropertyChanged
         }
     }
 
+    public bool McpServerEnabled
+    {
+        get => _settings.McpServerEnabled;
+        set
+        {
+            if (_settings.McpServerEnabled != value)
+            {
+                _settings.McpServerEnabled = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(McpServerStatus));
+            }
+        }
+    }
+
+    public string McpEndpointUrl => $"http://127.0.0.1:{_settings.McpServerPort}/mcp";
+
+    public string McpServerToken => _settings.McpServerToken;
+
+    public string McpServerStatus
+    {
+        get
+        {
+            if (!_settings.McpServerEnabled) return "Disabled";
+            if (EMWaver.AppServices.McpServer.IsRunning) return "Enabled on loopback";
+            var error = EMWaver.AppServices.McpServer.LastErrorText;
+            return string.IsNullOrWhiteSpace(error) ? "Starting" : $"Start failed: {error}";
+        }
+    }
+
+    public void ResetMcpServerToken()
+    {
+        _settings.ResetMcpServerToken();
+        OnPropertyChanged(nameof(McpServerToken));
+    }
+
     public string AppVersion
     {
         get

@@ -12,6 +12,7 @@ public partial class App : Application
         EnvBootstrap.LoadForDevIfAvailable();
         ApplyTheme();
         AppServices.Settings.Changed += OnSettingsChanged;
+        AppServices.McpServer.SyncWithSettings();
 
         var mainWindow = new MainWindow();
         mainWindow.Show();
@@ -19,7 +20,11 @@ public partial class App : Application
 
     private void OnSettingsChanged()
     {
-        Dispatcher.Invoke(ApplyTheme);
+        Dispatcher.Invoke(() =>
+        {
+            ApplyTheme();
+            AppServices.McpServer.SyncWithSettings();
+        });
     }
 
     internal void ApplyTheme()
@@ -32,6 +37,7 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         AppServices.Settings.Changed -= OnSettingsChanged;
+        AppServices.McpServer.Dispose();
         base.OnExit(e);
     }
 }

@@ -26,4 +26,9 @@ public partial class SettingsWindow : Window
         };
         window.ShowDialog();
     }
+
+    private void OnResetMcpTokenClick(object sender, RoutedEventArgs e)
+    {
+        _viewModel.ResetMcpServerToken();
+    }
 }

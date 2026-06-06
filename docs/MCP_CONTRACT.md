@@ -9,6 +9,13 @@ This is the desktop Agent replacement contract. EMWaver apps do not ship a bespo
 - The endpoint is loopback-only Streamable HTTP with explicit in-app enablement and a generated local token/pairing secret.
 - MCP access must not require EMWaver accounts, cloud activation, hosted relay, subscription checks, hardware ownership, or device registration.
 
+## Implementation Status
+
+- Windows has the first in-app MCP slice: Settings exposes enablement, endpoint, and token controls; the app hosts `POST /mcp` on loopback when enabled.
+- The first Windows tools are `list_scripts`, `read_script`, and `device_state`.
+- macOS and Linux should match the same endpoint/auth/tool contract next.
+- `write_script`, `run_script`, `stop_script`, and hardware primitive tools remain contract work until the script-session and transport mutation paths are routed through MCP.
+
 ## Tools
 
 | Tool | Arguments | Result |

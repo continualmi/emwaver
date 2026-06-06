@@ -15,6 +15,9 @@ public sealed class AppSettings
         public bool ShowTransportLog { get; set; } = false;
         public bool TransportDebugLoggingEnabled { get; set; } = true;
         public string? LastOpenScript { get; set; }
+        public bool McpServerEnabled { get; set; } = false;
+        public int McpServerPort { get; set; } = 3923;
+        public string? McpServerToken { get; set; }
     }
 
     private static string GetSettingsPath()
@@ -134,5 +137,89 @@ public sealed class AppSettings
             }
             Changed?.Invoke();
         }
+    }
+
+    public bool McpServerEnabled
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return Load().McpServerEnabled;
+            }
+        }
+        set
+        {
+            lock (_lock)
+            {
+                var m = Load();
+                if (m.McpServerEnabled == value) return;
+                m.McpServerEnabled = value;
+                Save(m);
+            }
+            Changed?.Invoke();
+        }
+    }
+
+    public int McpServerPort
+    {
+        get
+        {
+            lock (_lock)
+            {
+                var port = Load().McpServerPort;
+                return IsValidMcpPort(port) ? port : 3923;
+            }
+        }
+        set
+        {
+            lock (_lock)
+            {
+                var next = IsValidMcpPort(value) ? value : 3923;
+                var m = Load();
+                if (m.McpServerPort == next) return;
+                m.McpServerPort = next;
+                Save(m);
+            }
+            Changed?.Invoke();
+        }
+    }
+
+    public string McpServerToken
+    {
+        get
+        {
+            lock (_lock)
+            {
+                var m = Load();
+                if (!string.IsNullOrWhiteSpace(m.McpServerToken))
+                {
+                    return m.McpServerToken.Trim();
+                }
+
+                m.McpServerToken = GenerateMcpToken();
+                Save(m);
+                return m.McpServerToken;
+            }
+        }
+    }
+
+    public string ResetMcpServerToken()
+    {
+        lock (_lock)
+        {
+            var m = Load();
+            m.McpServerToken = GenerateMcpToken();
+            Save(m);
+            Changed?.Invoke();
+            return m.McpServerToken;
+        }
+    }
+
+    private static bool IsValidMcpPort(int port) => port is >= 1024 and <= 65535;
+
+    private static string GenerateMcpToken()
+    {
+        return Convert.ToHexString(Guid.NewGuid().ToByteArray()) + Convert.ToHexString(Guid.NewGuid().ToByteArray());
     }
 }

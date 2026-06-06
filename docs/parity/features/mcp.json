@@ -27,12 +27,21 @@
           ]
         },
         "windows": {
-          "status": "planned",
-          "reason": "Windows should host an in-app local MCP server backed by the existing script engine and transports.",
+          "status": "required",
           "evidence": [
             {
-              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
-              "contains": "Windows</td><td><span class=\"s go\">KEEP</span></td><td><span class=\"s no\">removed</span></td><td>live folder</td><td>in-process"
+              "file": "windows/EMWaver/Services/McpServer.cs",
+              "contains": [
+                "POST",
+                "/mcp",
+                "Bearer ",
+                "tools/list",
+                "tools/call"
+              ]
+            },
+            {
+              "file": "windows/EMWaver/Views/SettingsWindow.xaml",
+              "contains": "Desktop MCP"
             }
           ]
         },
@@ -75,17 +84,12 @@
           "reason": "Mobile does not expose an external MCP server."
         },
         "windows": {
-          "status": "planned",
-          "reason": "Windows tracks the desktop runtime direction and should expose the same MCP tool contract.",
+          "status": "required",
           "evidence": [
             {
-              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
+              "file": "windows/EMWaver/Services/McpServer.cs",
               "contains": [
                 "list_scripts",
-                "run_script",
-                "spi_transfer",
-                "gpio_read",
-                "analog_read",
                 "device_state"
               ]
             }
