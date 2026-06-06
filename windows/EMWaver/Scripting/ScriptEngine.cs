@@ -29,6 +29,7 @@ public sealed class ScriptEngine : IDisposable
 
     private Action<ScriptTree>? _renderHandler;
     private Action<string>? _errorHandler;
+    private Action<string>? _consoleHandler;
     private Func<byte[], int, byte[]?>? _sendPacket;
     private Func<byte[]>? _getSamplerBytes;
     private Action? _clearSamplerBuffer;
@@ -54,6 +55,7 @@ public sealed class ScriptEngine : IDisposable
         Action<ScriptTree> renderHandler,
         Func<byte[], int, byte[]?> sendPacket,
         Action<string>? errorHandler = null,
+        Action<string>? consoleHandler = null,
         Func<byte[]>? getSamplerBytes = null,
         Action? clearSamplerBuffer = null,
         int? samplerPacketSizeBytes = null,
@@ -62,6 +64,7 @@ public sealed class ScriptEngine : IDisposable
         _renderHandler = renderHandler;
         _sendPacket = sendPacket;
         _errorHandler = errorHandler;
+        _consoleHandler = consoleHandler;
         _getSamplerBytes = getSamplerBytes;
         _clearSamplerBuffer = clearSamplerBuffer;
         _getBoardType = getBoardType;
@@ -74,54 +77,62 @@ public sealed class ScriptEngine : IDisposable
         });
     }
 
-    public void Execute(string script)
+    public void Execute(string script, Action? initialExecutionCompleted = null)
     {
         var trimmed = (script ?? string.Empty).Trim();
         if (trimmed.Length == 0)
         {
+            initialExecutionCompleted?.Invoke();
             return;
         }
 
         Enqueue(() =>
         {
-            if (ContainsAsyncTokens(trimmed))
-            {
-                EmitError("Script error: async/await is not supported. Scripts must be synchronous.");
-                return;
-            }
-
-            EnsureBootstrapLoaded();
-            EnsureEngineCreated();
-            if (_engine == null)
-            {
-                EmitError("Script error: engine unavailable");
-                return;
-            }
-
-            _haltedUntilNextExecute = false;
-            _currentScriptSource = trimmed;
-            CancelAllTimeoutsLocked();
-            _callbacks.Clear();
-
             try
             {
-                // Re-inject host primitives before every run.
-                InstallHostPrimitives(_engine);
-                _engine.Execute(_bootstrapSource);
-                SeedHostBoardType(_engine);
+                if (ContainsAsyncTokens(trimmed))
+                {
+                    EmitError("Script error: async/await is not supported. Scripts must be synchronous.");
+                    return;
+                }
 
-                InstallRequire(_engine);
-                var transformed = ScriptSourceTranspiler.Transpile(trimmed);
-                var wrapped = "(() => {\n" + transformed + "\n})();";
-                _engine.Execute(wrapped);
+                EnsureBootstrapLoaded();
+                EnsureEngineCreated();
+                if (_engine == null)
+                {
+                    EmitError("Script error: engine unavailable");
+                    return;
+                }
+
+                _haltedUntilNextExecute = false;
+                _currentScriptSource = trimmed;
+                CancelAllTimeoutsLocked();
+                _callbacks.Clear();
+
+                try
+                {
+                    // Re-inject host primitives before every run.
+                    InstallHostPrimitives(_engine);
+                    _engine.Execute(_bootstrapSource);
+                    SeedHostBoardType(_engine);
+
+                    InstallRequire(_engine);
+                    var transformed = ScriptSourceTranspiler.Transpile(trimmed);
+                    var wrapped = "(() => {\n" + transformed + "\n})();";
+                    _engine.Execute(wrapped);
+                }
+                catch (JavaScriptException ex)
+                {
+                    EmitError(FormatJavaScriptException("Script error", ex));
+                }
+                catch (Exception ex)
+                {
+                    EmitError(FormatGeneralException("Script error", ex));
+                }
             }
-            catch (JavaScriptException ex)
+            finally
             {
-                EmitError(FormatJavaScriptException("Script error", ex));
-            }
-            catch (Exception ex)
-            {
-                EmitError(FormatGeneralException("Script error", ex));
+                try { initialExecutionCompleted?.Invoke(); } catch { }
             }
         });
     }
@@ -359,6 +370,32 @@ public sealed class ScriptEngine : IDisposable
                 EmitError(FormatGeneralException("Script render error", ex));
             }
         }));
+
+        engine.SetValue("_scriptConsolePrint", new Action<string>(line =>
+        {
+            try { _consoleHandler?.Invoke(line ?? string.Empty); } catch { }
+        }));
+        engine.Execute("""
+            var console = (function() {
+              function fmt(args) {
+                var out = [];
+                for (var i = 0; i < args.length; i += 1) {
+                  var value = args[i];
+                  if (value === null) out.push('null');
+                  else if (value === undefined) out.push('undefined');
+                  else if (typeof value === 'object') {
+                    try { out.push(JSON.stringify(value)); } catch (e) { out.push(String(value)); }
+                  } else out.push(String(value));
+                }
+                return out.join(' ');
+              }
+              return {
+                log: function() { _scriptConsolePrint(fmt(arguments)); },
+                warn: function() { _scriptConsolePrint('[warn] ' + fmt(arguments)); },
+                error: function() { _scriptConsolePrint('[error] ' + fmt(arguments)); }
+              };
+            })();
+            """);
 
         engine.SetValue("_scriptRegisterCallback", new Action<JsValue, JsValue>((tokenValue, fnValue) =>
         {

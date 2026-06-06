@@ -134,7 +134,7 @@ Current MCP implementation:
 
 - Settings exposes a `Desktop MCP` section with an enable switch, loopback endpoint, and generated bearer token.
 - When enabled, the running app serves Streamable-HTTP-style JSON-RPC at `http://127.0.0.1:3923/mcp`.
-- The initial tool slice supports script list/read/write plus device status: `list_scripts`, `read_script`, `write_script`, and `device_state`.
+- The tool slice supports script list/read/write/run/stop plus device status: `list_scripts`, `read_script`, `write_script`, `run_script`, `stop_script`, and `device_state`.
 - The server is intentionally in-process; do not add a sidecar, daemon, or CLI control plane for this path.
 
 What Windows already has:

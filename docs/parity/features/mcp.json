@@ -79,6 +79,8 @@
               "contains": [
                 "list_scripts",
                 "write_script",
+                "run_script",
+                "stop_script",
                 "device_state"
               ]
             }
@@ -96,6 +98,8 @@
               "contains": [
                 "list_scripts",
                 "write_script",
+                "run_script",
+                "stop_script",
                 "device_state"
               ]
             }

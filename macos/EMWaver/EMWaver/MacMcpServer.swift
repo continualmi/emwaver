@@ -7,6 +7,7 @@
 import Combine
 import Foundation
 import Network
+import EMWaverScriptRuntime
 
 final class MacMcpServer: ObservableObject {
     private static let endpointPath = "/mcp"
@@ -15,6 +16,7 @@ final class MacMcpServer: ObservableObject {
     private let queue = DispatchQueue(label: "com.emwaver.macos.mcp")
     private weak var device: MacUSBManager?
     private var listener: NWListener?
+    private var scriptRuns: [String: ScriptPreviewManager] = [:]
 
     @Published private(set) var isRunning: Bool = false
     @Published private(set) var lastErrorText: String?
@@ -64,6 +66,12 @@ final class MacMcpServer: ObservableObject {
         queue.async {
             self.listener?.cancel()
             self.listener = nil
+            DispatchQueue.main.sync {
+                for manager in self.scriptRuns.values {
+                    manager.exitPreview()
+                }
+                self.scriptRuns.removeAll()
+            }
             self.publishState(isRunning: false, lastErrorText: nil)
         }
     }
@@ -230,6 +238,14 @@ final class MacMcpServer: ObservableObject {
                     "path": ["type": "string"],
                     "content": ["type": "string"]
                 ], required: ["content"])),
+                Self.tool(name: "run_script", description: "Run a JavaScript script through the macOS app script engine.", inputSchema: Self.objectSchema(properties: [
+                    "script_id": ["type": "string"],
+                    "source": ["type": "string"],
+                    "name": ["type": "string"]
+                ], required: [])),
+                Self.tool(name: "stop_script", description: "Stop an MCP-started macOS script run.", inputSchema: Self.objectSchema(properties: [
+                    "run_id": ["type": "string"]
+                ], required: [])),
                 Self.tool(name: "device_state", description: "Return current EMWaver device, transport, firmware, and discovery state.", inputSchema: Self.emptySchema())
             ]
         ]
@@ -247,6 +263,10 @@ final class MacMcpServer: ObservableObject {
             structured = readScript(arguments: arguments)
         case "write_script":
             structured = writeScript(arguments: arguments)
+        case "run_script":
+            structured = runScript(arguments: arguments)
+        case "stop_script":
+            structured = stopScript(arguments: arguments)
         case "device_state":
             structured = deviceState()
         default:
@@ -279,6 +299,86 @@ final class MacMcpServer: ObservableObject {
             return ["ok": true, "script": scriptJson]
         } catch {
             return Self.toolError(code: "script_read_failed", message: error.localizedDescription)
+        }
+    }
+
+    private func runScript(arguments: [String: Any]?) -> [String: Any] {
+        let resolved = resolveRunSource(arguments: arguments)
+        guard resolved.ok else {
+            return Self.toolError(code: resolved.errorCode ?? "script_unavailable", message: resolved.errorMessage ?? "Script unavailable", recovery: resolved.recovery)
+        }
+
+        let runId = UUID().uuidString
+        let source = resolved.source ?? ""
+        let name = resolved.name ?? "MCP Script"
+        let modules = moduleSources(excluding: resolved.scriptId)
+
+        return DispatchQueue.main.sync {
+            let manager = ScriptPreviewManager()
+            if let device, device.isConnected {
+                manager.attach(device: device)
+            }
+            manager.render(script: source, name: name, moduleSources: modules)
+            scriptRuns[runId] = manager
+
+            let error = manager.scriptError
+            return [
+                "ok": error == nil,
+                "run_id": runId,
+                "status": error == nil ? "running" : "failed",
+                "name": name,
+                "console": Self.consoleJson(manager.consoleLines),
+                "error": error.map { ["level": "error", "text": $0, "timestamp": Self.timestamp()] } ?? NSNull()
+            ]
+        }
+    }
+
+    private func stopScript(arguments: [String: Any]?) -> [String: Any] {
+        let runId = arguments?["run_id"] as? String
+        return DispatchQueue.main.sync {
+            if let runId, !runId.isEmpty {
+                guard let manager = scriptRuns.removeValue(forKey: runId) else {
+                    return Self.toolError(code: "run_not_found", message: "MCP script run not found: \(runId)", recovery: "Call run_script first, or omit run_id to stop all MCP-started runs.")
+                }
+                let console = Self.consoleJson(manager.consoleLines)
+                manager.exitPreview()
+                return [
+                    "ok": true,
+                    "run_id": runId,
+                    "status": "stopped",
+                    "console": console
+                ]
+            }
+
+            let stopped = scriptRuns.count
+            for manager in scriptRuns.values {
+                manager.exitPreview()
+            }
+            scriptRuns.removeAll()
+            return [
+                "ok": true,
+                "status": "stopped",
+                "stopped": stopped
+            ]
+        }
+    }
+
+    private func resolveRunSource(arguments: [String: Any]?) -> ResolvedRunSource {
+        if let source = arguments?["source"] as? String, !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let name = (arguments?["name"] as? String).flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 } ?? "MCP Script"
+            return .success(source: source, name: name, scriptId: nil)
+        }
+
+        guard let scriptId = arguments?["script_id"] as? String, !scriptId.isEmpty else {
+            return .failure(code: "missing_script", message: "run_script requires script_id or source", recovery: "Call list_scripts first, or pass source directly.")
+        }
+        guard let script = listScripts().first(where: { $0.id.caseInsensitiveCompare(scriptId) == .orderedSame }) else {
+            return .failure(code: "script_not_found", message: "Script not found: \(scriptId)", recovery: "Call list_scripts again; the script may have been renamed or deleted.")
+        }
+        do {
+            return .success(source: try String(contentsOf: script.url, encoding: .utf8), name: script.name, scriptId: script.id)
+        } catch {
+            return .failure(code: "script_read_failed", message: error.localizedDescription, recovery: nil)
         }
     }
 
@@ -357,6 +457,26 @@ final class MacMcpServer: ObservableObject {
             }
             return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
+    }
+
+    private func moduleSources(excluding excludedScriptId: String?) -> [String: String] {
+        var modules: [String: String] = [:]
+        for script in listScripts() {
+            if let excludedScriptId, script.id.caseInsensitiveCompare(excludedScriptId) == .orderedSame {
+                continue
+            }
+            guard script.sourceKind == "library" || script.sourceKind == "kernel" else {
+                continue
+            }
+            guard let source = try? String(contentsOf: script.url, encoding: .utf8), !source.isEmpty else {
+                continue
+            }
+            modules[script.name] = source
+            if script.name.lowercased().hasSuffix(".js") {
+                modules[String(script.name.dropLast(3))] = source
+            }
+        }
+        return modules
     }
 
     private func localScriptsDirectory(create: Bool) -> URL? {
@@ -570,6 +690,20 @@ final class MacMcpServer: ObservableObject {
         (try? JSONSerialization.data(withJSONObject: value, options: [])) ?? Data("{}".utf8)
     }
 
+    private static func consoleJson(_ lines: [String]) -> [[String: Any]] {
+        lines.map { line in
+            [
+                "level": line.contains("[error]") ? "error" : (line.contains("[warn]") ? "warning" : "info"),
+                "text": line,
+                "timestamp": timestamp()
+            ]
+        }
+    }
+
+    private static func timestamp() -> String {
+        ISO8601DateFormatter().string(from: Date())
+    }
+
     private struct HttpRequest {
         let method: String
         let path: String
@@ -580,6 +714,24 @@ final class MacMcpServer: ObservableObject {
     private struct McpHttpResponse {
         let statusCode: Int
         let body: Data
+    }
+
+    private struct ResolvedRunSource {
+        let ok: Bool
+        let source: String?
+        let name: String?
+        let scriptId: String?
+        let errorCode: String?
+        let errorMessage: String?
+        let recovery: String?
+
+        static func success(source: String, name: String, scriptId: String?) -> ResolvedRunSource {
+            ResolvedRunSource(ok: true, source: source, name: name, scriptId: scriptId, errorCode: nil, errorMessage: nil, recovery: nil)
+        }
+
+        static func failure(code: String, message: String, recovery: String?) -> ResolvedRunSource {
+            ResolvedRunSource(ok: false, source: nil, name: nil, scriptId: nil, errorCode: code, errorMessage: message, recovery: recovery)
+        }
     }
 
     private struct MacMcpScript {

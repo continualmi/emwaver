@@ -1,6 +1,8 @@
 using EMWaver.Models;
+using EMWaver.Scripting;
 using System;
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -23,6 +25,7 @@ public sealed class McpServer : IDisposable
     private readonly AppSettings _settings;
     private readonly ScriptRepository _scripts;
     private readonly WindowsDeviceManager _device;
+    private readonly ConcurrentDictionary<string, McpScriptRun> _runs = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _lifecycleLock = new();
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
@@ -98,6 +101,11 @@ public sealed class McpServer : IDisposable
     public void Dispose()
     {
         Stop();
+        foreach (var run in _runs.Values)
+        {
+            run.Dispose();
+        }
+        _runs.Clear();
     }
 
     private async Task ListenAsync(CancellationToken cancellationToken)
@@ -295,6 +303,16 @@ public sealed class McpServer : IDisposable
                     ["path"] = new JsonObject { ["type"] = "string" },
                     ["content"] = new JsonObject { ["type"] = "string" }
                 }, required: ["content"])),
+                Tool("run_script", "Run a JavaScript script through the Windows app script engine.", ObjectSchema(new Dictionary<string, JsonNode?>
+                {
+                    ["script_id"] = new JsonObject { ["type"] = "string" },
+                    ["source"] = new JsonObject { ["type"] = "string" },
+                    ["name"] = new JsonObject { ["type"] = "string" }
+                }, required: [])),
+                Tool("stop_script", "Stop an MCP-started Windows script run.", ObjectSchema(new Dictionary<string, JsonNode?>
+                {
+                    ["run_id"] = new JsonObject { ["type"] = "string" }
+                }, required: [])),
                 Tool("device_state", "Return current EMWaver device, transport, firmware, and discovery state.", EmptySchema())
             }
         };
@@ -309,6 +327,8 @@ public sealed class McpServer : IDisposable
             "list_scripts" => await ListScriptsToolAsync().ConfigureAwait(false),
             "read_script" => await ReadScriptToolAsync(arguments).ConfigureAwait(false),
             "write_script" => await WriteScriptToolAsync(arguments).ConfigureAwait(false),
+            "run_script" => await RunScriptToolAsync(arguments).ConfigureAwait(false),
+            "stop_script" => StopScriptTool(arguments),
             "device_state" => DeviceStateTool(),
             _ => ToolError("unsupported_tool", $"Unsupported MCP tool: {name ?? "<missing>"}")
         };
@@ -419,6 +439,111 @@ public sealed class McpServer : IDisposable
             ["created"] = true,
             ["script"] = ScriptJson(created)
         };
+    }
+
+    private async Task<JsonObject> RunScriptToolAsync(JsonObject? arguments)
+    {
+        var resolved = await ResolveRunSourceAsync(arguments).ConfigureAwait(false);
+        if (!resolved.Ok)
+        {
+            return ToolError(resolved.ErrorCode ?? "script_unavailable", resolved.ErrorMessage ?? "Script unavailable", resolved.Recovery);
+        }
+
+        var runId = Guid.NewGuid().ToString("N");
+        var run = new McpScriptRun(runId, resolved.Name ?? "MCP Script");
+        _runs[runId] = run;
+
+        var completed = new ManualResetEventSlim(false);
+        run.Engine.Setup(
+            renderHandler: _ => run.RecordRender(),
+            sendPacket: (payload, timeoutMs) => _device.SendPacket(payload, timeoutMs),
+            errorHandler: run.RecordError,
+            consoleHandler: run.RecordConsole,
+            getBoardType: () => _device.ConnectedBoardType ?? _device.LastDetectedBoardType);
+
+        run.Engine.Execute(resolved.Source ?? string.Empty, () => completed.Set());
+        completed.Wait(TimeSpan.FromMilliseconds(750));
+        if (run.HasError)
+        {
+            run.Status = "failed";
+        }
+
+        return new JsonObject
+        {
+            ["ok"] = !run.HasError,
+            ["run_id"] = runId,
+            ["status"] = run.Status,
+            ["name"] = run.Name,
+            ["render_count"] = run.RenderCount,
+            ["console"] = run.ConsoleJson(),
+            ["error"] = run.ErrorJson()
+        };
+    }
+
+    private JsonObject StopScriptTool(JsonObject? arguments)
+    {
+        var runId = arguments?["run_id"]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(runId))
+        {
+            var stopped = 0;
+            foreach (var pair in _runs.ToArray())
+            {
+                if (_runs.TryRemove(pair.Key, out var run))
+                {
+                    run.Stop();
+                    run.Dispose();
+                    stopped++;
+                }
+            }
+            return new JsonObject
+            {
+                ["ok"] = true,
+                ["status"] = "stopped",
+                ["stopped"] = stopped
+            };
+        }
+
+        if (!_runs.TryRemove(runId, out var target))
+        {
+            return ToolError("run_not_found", $"MCP script run not found: {runId}", "Call run_script first, or omit run_id to stop all MCP-started runs.");
+        }
+
+        target.Stop();
+        var result = new JsonObject
+        {
+            ["ok"] = true,
+            ["run_id"] = target.Id,
+            ["status"] = target.Status,
+            ["console"] = target.ConsoleJson(),
+            ["error"] = target.ErrorJson()
+        };
+        target.Dispose();
+        return result;
+    }
+
+    private async Task<ResolvedRunSource> ResolveRunSourceAsync(JsonObject? arguments)
+    {
+        var source = arguments?["source"]?.GetValue<string>();
+        var name = arguments?["name"]?.GetValue<string>();
+        if (!string.IsNullOrWhiteSpace(source))
+        {
+            return ResolvedRunSource.Success(source, string.IsNullOrWhiteSpace(name) ? "MCP Script" : name);
+        }
+
+        var scriptId = arguments?["script_id"]?.GetValue<string>();
+        if (string.IsNullOrWhiteSpace(scriptId))
+        {
+            return ResolvedRunSource.Failure("missing_script", "run_script requires script_id or source", "Call list_scripts first, or pass source directly.");
+        }
+
+        var scripts = await _scripts.ListScriptsAsync().ConfigureAwait(false);
+        var script = scripts.FirstOrDefault(s => string.Equals(ScriptId(s), scriptId, StringComparison.OrdinalIgnoreCase));
+        if (script == null)
+        {
+            return ResolvedRunSource.Failure("script_not_found", $"Script not found: {scriptId}", "Call list_scripts again; the script may have been renamed or deleted.");
+        }
+
+        return ResolvedRunSource.Success(await _scripts.ReadScriptTextAsync(script).ConfigureAwait(false), script.DisplayName);
     }
 
     private JsonObject DeviceStateTool()
@@ -686,4 +811,108 @@ public sealed class McpServer : IDisposable
 
     private sealed record HttpRequest(string Method, string Path, IReadOnlyDictionary<string, string> Headers, byte[] Body);
     private sealed record McpHttpResponse(int StatusCode, byte[] Body);
+    private sealed record ResolvedRunSource(bool Ok, string? Source, string? Name, string? ErrorCode, string? ErrorMessage, string? Recovery)
+    {
+        internal static ResolvedRunSource Success(string source, string name) => new(true, source, name, null, null, null);
+        internal static ResolvedRunSource Failure(string code, string message, string? recovery = null) => new(false, null, null, code, message, recovery);
+    }
+
+    private sealed class McpScriptRun : IDisposable
+    {
+        private readonly object _lock = new();
+        private readonly List<McpConsoleLine> _console = new();
+        private readonly List<McpConsoleLine> _errors = new();
+
+        internal McpScriptRun(string id, string name)
+        {
+            Id = id;
+            Name = name;
+            Engine = new ScriptEngine();
+        }
+
+        internal string Id { get; }
+        internal string Name { get; }
+        internal ScriptEngine Engine { get; }
+        internal string Status { get; set; } = "running";
+        internal int RenderCount { get; private set; }
+        internal bool HasError
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return _errors.Count > 0;
+                }
+            }
+        }
+
+        internal void RecordRender()
+        {
+            lock (_lock)
+            {
+                RenderCount++;
+            }
+        }
+
+        internal void RecordConsole(string text)
+        {
+            lock (_lock)
+            {
+                _console.Add(McpConsoleLine.From("info", text));
+            }
+        }
+
+        internal void RecordError(string text)
+        {
+            lock (_lock)
+            {
+                _errors.Add(McpConsoleLine.From("error", text));
+                _console.Add(McpConsoleLine.From("error", text));
+                Status = "failed";
+            }
+        }
+
+        internal void Stop()
+        {
+            Engine.Stop();
+            Status = "stopped";
+        }
+
+        internal JsonArray ConsoleJson()
+        {
+            lock (_lock)
+            {
+                return new JsonArray(_console.Select(line => line.ToJson()).ToArray<JsonNode?>());
+            }
+        }
+
+        internal JsonNode? ErrorJson()
+        {
+            lock (_lock)
+            {
+                if (_errors.Count == 0) return null;
+                return _errors[^1].ToJson();
+            }
+        }
+
+        public void Dispose()
+        {
+            Engine.Dispose();
+        }
+    }
+
+    private sealed record McpConsoleLine(string Level, string Text, string Timestamp)
+    {
+        internal static McpConsoleLine From(string level, string text) => new(level, text ?? string.Empty, DateTimeOffset.UtcNow.ToString("O"));
+
+        internal JsonObject ToJson()
+        {
+            return new JsonObject
+            {
+                ["level"] = Level,
+                ["text"] = Text,
+                ["timestamp"] = Timestamp
+            };
+        }
+    }
 }

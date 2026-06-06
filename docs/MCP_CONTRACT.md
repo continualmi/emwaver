@@ -12,9 +12,10 @@ This is the desktop Agent replacement contract. EMWaver apps do not ship a bespo
 ## Implementation Status
 
 - macOS, Windows, and Linux have the first in-app MCP slice in source: Settings exposes enablement, endpoint, and token controls; the app hosts `POST /mcp` on loopback when enabled.
-- The first desktop tools are `list_scripts`, `read_script`, `write_script`, and `device_state`.
+- The desktop tools implemented in source are `list_scripts`, `read_script`, `write_script`, `run_script`, `stop_script`, and `device_state`.
+- macOS and Windows keep MCP-started run sessions alive until `stop_script`; Linux currently executes `run_script` synchronously and returns `stop_script` as `not_running` until GTK session-worker MCP wiring lands.
 - Linux app compilation still requires Linux/GTK system libraries; validate that slice on a GTK4/libadwaita host.
-- `run_script`, `stop_script`, and hardware primitive tools remain contract work until the script-session and transport mutation paths are routed through MCP.
+- Hardware primitive tools remain contract work until the transport mutation paths are routed through MCP.
 
 ## Tools
 

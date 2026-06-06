@@ -1,6 +1,14 @@
-use emwaver_linux_core::{AppModel, DeviceRecord, ScriptListItem, ScriptRepository};
+use emwaver_linux_core::{AppModel, DeviceRecord, ScriptListItem, ScriptRepository, TransportKind};
+use emwaver_linux_runtime::execute_javascript_with_modules;
+use emwaver_linux_transport::{
+    ble::{BleTarget, LinuxBleTransport},
+    usb::{LinuxUsbManager, LinuxUsbMidiTransport},
+    wifi::{LinuxWifiTransport, ManualWifiTarget},
+    EmwaverTransport,
+};
 use serde_json::{json, Value};
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -369,6 +377,30 @@ fn tools_list_result() -> Value {
                 }
             },
             {
+                "name": "run_script",
+                "description": "Run a JavaScript script through the Linux app runtime and selected device.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "script_id": { "type": "string" },
+                        "source": { "type": "string" },
+                        "name": { "type": "string" }
+                    },
+                    "required": [],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "stop_script",
+                "description": "Stop an MCP-started Linux script run when persistent MCP sessions are active.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": { "run_id": { "type": "string" } },
+                    "required": [],
+                    "additionalProperties": false
+                }
+            },
+            {
                 "name": "device_state",
                 "description": "Return current EMWaver device, transport, firmware, and discovery state.",
                 "inputSchema": empty_schema()
@@ -391,6 +423,8 @@ fn tools_call_result(
         Some("list_scripts") => list_scripts_tool(repository),
         Some("read_script") => read_script_tool(repository, arguments),
         Some("write_script") => write_script_tool(repository, arguments),
+        Some("run_script") => run_script_tool(repository, arguments, snapshot),
+        Some("stop_script") => stop_script_tool(arguments),
         Some("device_state") => device_state_tool(snapshot),
         _ => tool_error(
             "unsupported_tool",
@@ -418,6 +452,237 @@ fn list_scripts_tool(repository: &ScriptRepository) -> Value {
         }),
         Err(error) => tool_error("list_scripts_failed", &error.to_string(), None),
     }
+}
+
+fn run_script_tool(
+    repository: &ScriptRepository,
+    arguments: Option<&Value>,
+    snapshot: &Arc<Mutex<McpDeviceSnapshot>>,
+) -> Value {
+    let resolved = resolve_run_source(repository, arguments);
+    let Ok((name, source)) = resolved else {
+        return resolved.err().unwrap_or_else(|| {
+            tool_error(
+                "script_unavailable",
+                "Script unavailable",
+                Some("Call list_scripts first, or pass source directly."),
+            )
+        });
+    };
+
+    let selected_device = snapshot
+        .lock()
+        .ok()
+        .and_then(|snapshot| snapshot.selected_device.clone());
+    let Some(device) = selected_device else {
+        return tool_error(
+            "no_selected_device",
+            "No selected Linux device is available for run_script",
+            Some("Select or connect a device in the Linux app before calling run_script."),
+        );
+    };
+
+    let modules = repository.module_sources().unwrap_or_default();
+    let run_id = uuid::Uuid::new_v4().to_string();
+    let lines = run_device_script(device, &source, &modules);
+    let ok = !lines.iter().any(|line| {
+        let lowered = line.to_lowercase();
+        lowered.contains("failed")
+            || lowered.contains("not implemented")
+            || lowered.contains("not available")
+    });
+
+    json!({
+        "ok": ok,
+        "run_id": run_id,
+        "status": if ok { "completed" } else { "failed" },
+        "name": name,
+        "console": console_json(lines)
+    })
+}
+
+fn stop_script_tool(_arguments: Option<&Value>) -> Value {
+    json!({
+        "ok": true,
+        "status": "not_running",
+        "stopped": 0,
+        "note": "Linux MCP run_script currently executes synchronously; persistent MCP run sessions are still pending."
+    })
+}
+
+fn resolve_run_source(
+    repository: &ScriptRepository,
+    arguments: Option<&Value>,
+) -> Result<(String, String), Value> {
+    if let Some(source) = arguments
+        .and_then(|value| value.get("source"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+    {
+        let name = arguments
+            .and_then(|value| value.get("name"))
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or("MCP Script");
+        return Ok((name.to_string(), source.to_string()));
+    }
+
+    let Some(script_id) = arguments
+        .and_then(|value| value.get("script_id"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+    else {
+        return Err(tool_error(
+            "missing_script",
+            "run_script requires script_id or source",
+            Some("Call list_scripts first, or pass source directly."),
+        ));
+    };
+
+    let scripts = repository
+        .list_scripts()
+        .map_err(|error| tool_error("list_scripts_failed", &error.to_string(), None))?;
+    let Some(script) = scripts
+        .into_iter()
+        .find(|script| script.id.eq_ignore_ascii_case(script_id))
+    else {
+        return Err(tool_error(
+            "script_not_found",
+            &format!("Script not found: {script_id}"),
+            Some("Call list_scripts again; the script may have been renamed or deleted."),
+        ));
+    };
+    let source = repository
+        .read_script(&script)
+        .map_err(|error| tool_error("script_read_failed", &error.to_string(), None))?;
+    Ok((script.name, source))
+}
+
+fn run_device_script(
+    device: DeviceRecord,
+    source: &str,
+    module_sources: &BTreeMap<String, String>,
+) -> Vec<String> {
+    let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    else {
+        return vec!["Failed to create script runtime.".to_string()];
+    };
+
+    match device.transport {
+        TransportKind::Simulator => vec![
+            "Simulator is an internal test transport and is not available in the Linux app UI."
+                .to_string(),
+        ],
+        TransportKind::UsbMidi => runtime.block_on(async {
+            let candidate = match LinuxUsbManager::default().discover() {
+                Ok(candidates) => candidates
+                    .into_iter()
+                    .find(|candidate| candidate.id == device.id),
+                Err(err) => return vec![format!("USB discovery failed: {err}")],
+            };
+            let Some(candidate) = candidate else {
+                return vec![format!("USB device {} is no longer present.", device.id)];
+            };
+            let mut transport = match LinuxUsbMidiTransport::new(candidate) {
+                Ok(transport) => transport,
+                Err(err) => return vec![format!("USB transport setup failed: {err}")],
+            };
+            run_with_transport(source, module_sources, &mut transport).await
+        }),
+        TransportKind::Wifi => runtime.block_on(async {
+            let target = match manual_wifi_target_from_device(&device) {
+                Ok(target) => target,
+                Err(err) => return vec![err],
+            };
+            let mut transport = LinuxWifiTransport::new(target);
+            run_with_transport(source, module_sources, &mut transport).await
+        }),
+        TransportKind::Ble => runtime.block_on(async {
+            let target = match ble_target_from_device(&device) {
+                Ok(target) => target,
+                Err(err) => return vec![err],
+            };
+            let mut transport = LinuxBleTransport::new(target);
+            run_with_transport(source, module_sources, &mut transport).await
+        }),
+        other => vec![format!(
+            "{other:?} script execution is not implemented yet."
+        )],
+    }
+}
+
+async fn run_with_transport(
+    source: &str,
+    module_sources: &BTreeMap<String, String>,
+    transport: &mut dyn EmwaverTransport,
+) -> Vec<String> {
+    if let Err(err) = transport.connect().await {
+        return vec![format!("Transport connect failed: {err}")];
+    }
+    let result = execute_javascript_with_modules(source, module_sources, transport).await;
+    let _ = transport.close().await;
+    match result {
+        Ok(report) => report.log,
+        Err(err) => vec![format!("Script failed: {err}")],
+    }
+}
+
+fn manual_wifi_target_from_device(device: &DeviceRecord) -> Result<ManualWifiTarget, String> {
+    let Some(rest) = device.id.strip_prefix("wifi:") else {
+        return Err(format!(
+            "Wi-Fi device {} is missing a manual target.",
+            device.id
+        ));
+    };
+    let Some((host, port)) = rest.rsplit_once(':') else {
+        return Err(format!("Wi-Fi device {} is missing a port.", device.id));
+    };
+    let port = port
+        .parse::<u16>()
+        .map_err(|_| format!("Wi-Fi device {} has an invalid port.", device.id))?;
+    ManualWifiTarget::new(host, port).map_err(|err| err.to_string())
+}
+
+fn ble_target_from_device(device: &DeviceRecord) -> Result<BleTarget, String> {
+    let Some(rest) = device.id.strip_prefix("ble:") else {
+        return Err(format!("BLE device {} is missing a target.", device.id));
+    };
+    let Some((adapter, address)) = rest.split_once(':') else {
+        return Err(format!(
+            "BLE device {} is missing a BlueZ adapter and address.",
+            device.id
+        ));
+    };
+    BleTarget::new(adapter, address, device.display_name.clone()).map_err(|err| err.to_string())
+}
+
+fn console_json(lines: Vec<String>) -> Vec<Value> {
+    lines
+        .into_iter()
+        .map(|line| {
+            let level = if line.contains("[error]") || line.to_lowercase().contains("failed") {
+                "error"
+            } else if line.contains("[warn]") {
+                "warning"
+            } else {
+                "info"
+            };
+            json!({
+                "level": level,
+                "text": line,
+                "timestamp": chrono_like_timestamp()
+            })
+        })
+        .collect()
+}
+
+fn chrono_like_timestamp() -> String {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| format!("{}.{:03}Z", duration.as_secs(), duration.subsec_millis()))
+        .unwrap_or_else(|_| "0.000Z".to_string())
 }
 
 fn write_script_tool(repository: &ScriptRepository, arguments: Option<&Value>) -> Value {
