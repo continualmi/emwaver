@@ -25,6 +25,11 @@
           "path": "windows/EMWaver",
           "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In",
           "reason": "Windows must not retain hosted account sign-in gates."
+        },
+        {
+          "path": "linux/crates/emwaver-linux-app",
+          "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In",
+          "reason": "Linux must not retain hosted account sign-in gates."
         }
       ],
       "platforms": {
@@ -61,6 +66,19 @@
             {
               "file": "android/README.md",
               "contains": "Do not require an EMWaver account"
+            }
+          ]
+        },
+        "linux": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "linux/README.md",
+              "contains": "must not require an EMWaver account"
+            },
+            {
+              "file": "linux/crates/emwaver-linux-app/src/ui/main_window.rs",
+              "contains": "without an EMWaver account"
             }
           ]
         }

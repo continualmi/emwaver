@@ -67,6 +67,23 @@
               "contains": "DFU_DNLOAD|DFU_UPLOAD|DFU_GETSTATUS"
             }
           ]
+        },
+        "linux": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "linux/crates/emwaver-linux-firmware/src/stm32_dfu.rs",
+              "contains": [
+                "plan_bundled_stm32_dfu",
+                "is_stm32_dfu_connected",
+                "flash_stm32_dfu_with_progress"
+              ]
+            },
+            {
+              "file": "linux/crates/emwaver-linux-app/src/ui/main_window.rs",
+              "contains": "Starting STM32 DFU flash with bundled firmware"
+            }
+          ]
         }
       }
     },
@@ -142,6 +159,23 @@
             {
               "file": "android/app/build.gradle",
               "contains": "usb-serial-for-android"
+            }
+          ]
+        },
+        "linux": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "linux/crates/emwaver-linux-firmware/src/esp32_flash.rs",
+              "contains": [
+                "plan_bundled_esp32s3_serial",
+                "ESP32S3_BOOTLOADER_OFFSET",
+                "flash_esp32_serial_with_progress"
+              ]
+            },
+            {
+              "file": "linux/crates/emwaver-linux-app/src/ui/main_window.rs",
+              "contains": "Starting ESP32 serial flash with bundled firmware"
             }
           ]
         }

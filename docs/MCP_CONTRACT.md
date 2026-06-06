@@ -12,10 +12,11 @@ This is the desktop Agent replacement contract. EMWaver apps do not ship a bespo
 ## Implementation Status
 
 - macOS, Windows, and Linux have the first in-app MCP slice in source: Settings exposes enablement, endpoint, and token controls; the app hosts `POST /mcp` on loopback when enabled.
-- The desktop tools implemented in source are `list_scripts`, `read_script`, `write_script`, `run_script`, `stop_script`, and `device_state`.
+- The desktop tools implemented in source are `list_scripts`, `read_script`, `write_script`, `run_script`, `stop_script`, `device_state`, `spi_transfer`, `gpio_read`, `gpio_write`, and `analog_read`.
 - macOS and Windows keep MCP-started run sessions alive until `stop_script`; Linux currently executes `run_script` synchronously and returns `stop_script` as `not_running` until GTK session-worker MCP wiring lands.
 - Linux app compilation still requires Linux/GTK system libraries; validate that slice on a GTK4/libadwaita host.
-- Hardware primitive tools remain contract work until the transport mutation paths are routed through MCP.
+- Linux hardware primitive tools use the selected USB/BLE/Wi-Fi transport. BLE and Wi-Fi primitive calls claim the firmware transport session before sending the command and release it afterward when practical.
+- Linux SPI primitive transfers are currently constrained by the Linux command lane to 14 TX bytes per call.
 
 ## Tools
 
@@ -27,10 +28,10 @@ This is the desktop Agent replacement contract. EMWaver apps do not ship a bespo
 | `run_script` | `{ script_id?, source?, name? }` | `{ run_id, ok, status, console: [{ level, text, timestamp }] }` |
 | `stop_script` | `{ run_id? }` | `{ ok, status }` |
 | `device_state` | none | `{ connected, selected_device?, devices: [...] }` |
-| `spi_transfer` | `{ tx: number[], rx_length? }` | `{ rx: number[], ok }` |
-| `gpio_read` | `{ pin }` | `{ pin, value }` |
-| `gpio_write` | `{ pin, value }` | `{ pin, value, ok }` |
-| `analog_read` | `{ pin }` | `{ pin, value }` |
+| `spi_transfer` | `{ tx: number[] \| string, rx_len?, cs?, timeout_ms? }` | `{ rx: number[], payload, ok }` |
+| `gpio_read` | `{ pin, timeout_ms? }` | `{ pin, value, payload }` |
+| `gpio_write` | `{ pin, value, timeout_ms? }` | `{ pin, value, payload, ok }` |
+| `analog_read` | `{ pin, samples?, timeout_ms? }` | `{ pin, readings: number[], payload }` |
 
 ## Result Rules
 

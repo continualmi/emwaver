@@ -2,6 +2,7 @@ use emwaver_linux_core::{AppModel, DeviceRecord, ScriptListItem, ScriptRepositor
 use emwaver_linux_runtime::execute_javascript_with_modules;
 use emwaver_linux_transport::{
     ble::{BleTarget, LinuxBleTransport},
+    command::{send_command, RESPONSE_BUSY, RESPONSE_ERR, RESPONSE_OK},
     usb::{LinuxUsbManager, LinuxUsbMidiTransport},
     wifi::{LinuxWifiTransport, ManualWifiTarget},
     EmwaverTransport,
@@ -404,6 +405,68 @@ fn tools_list_result() -> Value {
                 "name": "device_state",
                 "description": "Return current EMWaver device, transport, firmware, and discovery state.",
                 "inputSchema": empty_schema()
+            },
+            {
+                "name": "spi_transfer",
+                "description": "Send an SPI transfer through the selected Linux device.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "tx": {
+                            "description": "Transmit bytes as an array of 0-255 integers or a hex string.",
+                            "oneOf": [
+                                { "type": "array", "items": { "type": "integer", "minimum": 0, "maximum": 255 } },
+                                { "type": "string" }
+                            ]
+                        },
+                        "rx_len": { "type": "integer", "minimum": 0, "maximum": 62 },
+                        "cs": { "type": "integer", "minimum": 0, "maximum": 255 },
+                        "timeout_ms": { "type": "integer", "minimum": 1, "maximum": 30000 }
+                    },
+                    "required": ["tx"],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "gpio_read",
+                "description": "Read one GPIO pin through the selected Linux device.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "pin": { "type": "integer", "minimum": 0, "maximum": 255 },
+                        "timeout_ms": { "type": "integer", "minimum": 1, "maximum": 30000 }
+                    },
+                    "required": ["pin"],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "gpio_write",
+                "description": "Write one GPIO pin high or low through the selected Linux device.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "pin": { "type": "integer", "minimum": 0, "maximum": 255 },
+                        "value": { "type": "boolean" },
+                        "timeout_ms": { "type": "integer", "minimum": 1, "maximum": 30000 }
+                    },
+                    "required": ["pin", "value"],
+                    "additionalProperties": false
+                }
+            },
+            {
+                "name": "analog_read",
+                "description": "Read one analog pin through the selected Linux device.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "pin": { "type": "integer", "minimum": 0, "maximum": 255 },
+                        "samples": { "type": "integer", "minimum": 1, "maximum": 255 },
+                        "timeout_ms": { "type": "integer", "minimum": 1, "maximum": 30000 }
+                    },
+                    "required": ["pin"],
+                    "additionalProperties": false
+                }
             }
         ]
     })
@@ -426,6 +489,10 @@ fn tools_call_result(
         Some("run_script") => run_script_tool(repository, arguments, snapshot),
         Some("stop_script") => stop_script_tool(arguments),
         Some("device_state") => device_state_tool(snapshot),
+        Some("spi_transfer") => spi_transfer_tool(arguments, snapshot),
+        Some("gpio_read") => gpio_read_tool(arguments, snapshot),
+        Some("gpio_write") => gpio_write_tool(arguments, snapshot),
+        Some("analog_read") => analog_read_tool(arguments, snapshot),
         _ => tool_error(
             "unsupported_tool",
             &format!("Unsupported MCP tool: {}", name.unwrap_or("<missing>")),
@@ -627,6 +694,365 @@ async fn run_with_transport(
         Ok(report) => report.log,
         Err(err) => vec![format!("Script failed: {err}")],
     }
+}
+
+fn spi_transfer_tool(arguments: Option<&Value>, snapshot: &Arc<Mutex<McpDeviceSnapshot>>) -> Value {
+    let tx = match byte_array_arg(arguments, "tx") {
+        Ok(bytes) => bytes,
+        Err(error) => return error,
+    };
+    let cs = match byte_arg(arguments, "cs", Some(4)) {
+        Ok(value) => value,
+        Err(error) => return error,
+    };
+    let rx_len = match byte_arg(arguments, "rx_len", Some(0)) {
+        Ok(value) => value,
+        Err(error) => return error,
+    };
+    let timeout_ms = match timeout_arg(arguments) {
+        Ok(value) => value,
+        Err(error) => return error,
+    };
+
+    if tx.len() > 14 {
+        return tool_error(
+            "spi_tx_too_large",
+            "Linux MCP SPI transfer currently supports up to 14 TX bytes per command lane.",
+            Some("Send a shorter transfer or run a JavaScript script that owns the needed transaction sequence."),
+        );
+    }
+
+    let mut command = Vec::with_capacity(4 + tx.len());
+    command.extend_from_slice(&[0x50, cs, rx_len, tx.len() as u8]);
+    command.extend_from_slice(&tx);
+    let wanted = if rx_len > 0 {
+        rx_len as usize
+    } else {
+        tx.len()
+    };
+
+    match send_primitive(snapshot, &command, timeout_ms) {
+        Ok(response) => {
+            let payload = response.payload;
+            let rx = payload.into_iter().take(wanted).collect::<Vec<_>>();
+            json!({
+                "ok": true,
+                "status": response.status,
+                "rx": rx,
+                "payload": response_payload_json(response.raw_payload)
+            })
+        }
+        Err(error) => error,
+    }
+}
+
+fn gpio_read_tool(arguments: Option<&Value>, snapshot: &Arc<Mutex<McpDeviceSnapshot>>) -> Value {
+    let pin = match byte_arg(arguments, "pin", None) {
+        Ok(value) => value,
+        Err(error) => return error,
+    };
+    let timeout_ms = match timeout_arg(arguments) {
+        Ok(value) => value,
+        Err(error) => return error,
+    };
+
+    match send_primitive(snapshot, &[0x10, 0x02, pin], timeout_ms) {
+        Ok(response) => {
+            let value = response.payload.first().copied().unwrap_or(0) != 0;
+            json!({
+                "ok": true,
+                "status": response.status,
+                "pin": pin,
+                "value": value,
+                "payload": response_payload_json(response.raw_payload)
+            })
+        }
+        Err(error) => error,
+    }
+}
+
+fn gpio_write_tool(arguments: Option<&Value>, snapshot: &Arc<Mutex<McpDeviceSnapshot>>) -> Value {
+    let pin = match byte_arg(arguments, "pin", None) {
+        Ok(value) => value,
+        Err(error) => return error,
+    };
+    let Some(value) = arguments
+        .and_then(|value| value.get("value"))
+        .and_then(Value::as_bool)
+    else {
+        return tool_error("missing_value", "gpio_write requires boolean value", None);
+    };
+    let timeout_ms = match timeout_arg(arguments) {
+        Ok(value) => value,
+        Err(error) => return error,
+    };
+
+    match send_primitive(
+        snapshot,
+        &[0x10, if value { 0x03 } else { 0x04 }, pin],
+        timeout_ms,
+    ) {
+        Ok(response) => json!({
+            "ok": true,
+            "status": response.status,
+            "pin": pin,
+            "value": value,
+            "payload": response_payload_json(response.raw_payload)
+        }),
+        Err(error) => error,
+    }
+}
+
+fn analog_read_tool(arguments: Option<&Value>, snapshot: &Arc<Mutex<McpDeviceSnapshot>>) -> Value {
+    let pin = match byte_arg(arguments, "pin", None) {
+        Ok(value) => value,
+        Err(error) => return error,
+    };
+    let samples = match byte_arg(arguments, "samples", Some(1)) {
+        Ok(value) => value.max(1),
+        Err(error) => return error,
+    };
+    let timeout_ms = match timeout_arg(arguments) {
+        Ok(value) => value,
+        Err(error) => return error,
+    };
+
+    match send_primitive(snapshot, &[0x20, 0x00, pin, samples], timeout_ms) {
+        Ok(response) => {
+            let payload = response.payload;
+            let readings = payload
+                .chunks(2)
+                .filter_map(|chunk| {
+                    if chunk.len() == 2 {
+                        Some(u16::from_le_bytes([chunk[0], chunk[1]]))
+                    } else {
+                        None
+                    }
+                })
+                .collect::<Vec<_>>();
+            json!({
+                "ok": true,
+                "status": response.status,
+                "pin": pin,
+                "samples": samples,
+                "readings": readings,
+                "payload": response_payload_json(response.raw_payload)
+            })
+        }
+        Err(error) => error,
+    }
+}
+
+struct PrimitiveResponse {
+    status: String,
+    payload: Vec<u8>,
+    raw_payload: Vec<u8>,
+}
+
+fn send_primitive(
+    snapshot: &Arc<Mutex<McpDeviceSnapshot>>,
+    command: &[u8],
+    timeout_ms: u64,
+) -> Result<PrimitiveResponse, Value> {
+    let selected_device = snapshot
+        .lock()
+        .ok()
+        .and_then(|snapshot| snapshot.selected_device.clone());
+    let Some(device) = selected_device else {
+        return Err(tool_error(
+            "no_selected_device",
+            "No selected Linux device is available for hardware tool calls",
+            Some("Select or connect a device in the Linux app before calling hardware tools."),
+        ));
+    };
+
+    if !device.connected {
+        return Err(tool_error(
+            "device_not_connected",
+            "The selected Linux device is not connected",
+            Some("Reconnect or select a connected device in the Linux app."),
+        ));
+    }
+
+    let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    else {
+        return Err(tool_error(
+            "runtime_unavailable",
+            "Failed to create Linux MCP transport runtime",
+            None,
+        ));
+    };
+
+    runtime.block_on(async {
+        let mut transport = open_transport_for_device(&device).await.map_err(|err| {
+            tool_error(
+                "transport_unavailable",
+                &format!("Could not open selected device transport: {err}"),
+                None,
+            )
+        })?;
+        let result =
+            send_primitive_with_transport(&mut *transport, &device.transport, command, timeout_ms)
+                .await;
+        let _ = transport.close().await;
+        result
+    })
+}
+
+async fn open_transport_for_device(
+    device: &DeviceRecord,
+) -> Result<Box<dyn EmwaverTransport>, String> {
+    let mut transport: Box<dyn EmwaverTransport> = match device.transport {
+        TransportKind::Simulator => {
+            return Err(
+                "Simulator is an internal test transport and is not available in the Linux app UI."
+                    .to_string(),
+            );
+        }
+        TransportKind::UsbMidi => {
+            let candidate = LinuxUsbManager::default()
+                .discover()
+                .map_err(|err| format!("USB discovery failed: {err}"))?
+                .into_iter()
+                .find(|candidate| candidate.id == device.id)
+                .ok_or_else(|| format!("USB device {} is no longer present.", device.id))?;
+            Box::new(
+                LinuxUsbMidiTransport::new(candidate)
+                    .map_err(|err| format!("USB transport setup failed: {err}"))?,
+            )
+        }
+        TransportKind::Wifi => Box::new(LinuxWifiTransport::new(manual_wifi_target_from_device(
+            device,
+        )?)),
+        TransportKind::Ble => Box::new(LinuxBleTransport::new(ble_target_from_device(device)?)),
+        _ => {
+            return Err(format!(
+                "{:?} hardware primitive transport is not implemented yet.",
+                device.transport
+            ));
+        }
+    };
+    transport
+        .connect()
+        .await
+        .map_err(|err| format!("Transport connect failed: {err}"))?;
+    Ok(transport)
+}
+
+async fn send_primitive_with_transport(
+    transport: &mut dyn EmwaverTransport,
+    kind: &TransportKind,
+    command: &[u8],
+    timeout_ms: u64,
+) -> Result<PrimitiveResponse, Value> {
+    let session_source = match kind {
+        TransportKind::Ble => Some(0x02),
+        TransportKind::Wifi => Some(0x03),
+        _ => None,
+    };
+
+    if let Some(source) = session_source {
+        claim_transport_session(transport, source).await?;
+    }
+
+    let command_result = match tokio::time::timeout(
+        std::time::Duration::from_millis(timeout_ms.max(1)),
+        send_command(transport, command),
+    )
+    .await
+    {
+        Ok(result) => result.map_err(|err| tool_error("command_failed", &err.to_string(), None)),
+        Err(_) => Err(tool_error(
+            "command_timeout",
+            "Timed out waiting for a board response",
+            None,
+        )),
+    };
+
+    if let Some(source) = session_source {
+        let _ = release_transport_session(transport, source).await;
+    }
+
+    primitive_response(command_result?)
+}
+
+async fn claim_transport_session(
+    transport: &mut dyn EmwaverTransport,
+    source: u8,
+) -> Result<(), Value> {
+    let response = send_command(transport, &[0x0B, 0x01, source])
+        .await
+        .map_err(|err| tool_error("transport_session_failed", &err.to_string(), None))?;
+    match response.first().copied() {
+        Some(RESPONSE_OK) => Ok(()),
+        Some(RESPONSE_BUSY) => Err(tool_error(
+            "device_busy",
+            "Device is busy with another transport session",
+            None,
+        )),
+        Some(RESPONSE_ERR) => Err(tool_error(
+            "transport_session_rejected",
+            "Device rejected the transport session command",
+            None,
+        )),
+        Some(status) => Err(tool_error(
+            "transport_session_unexpected",
+            &format!("Device returned unexpected transport session status 0x{status:02X}"),
+            None,
+        )),
+        None => Err(tool_error(
+            "transport_session_empty",
+            "Device returned an empty transport session response",
+            None,
+        )),
+    }
+}
+
+async fn release_transport_session(
+    transport: &mut dyn EmwaverTransport,
+    source: u8,
+) -> Result<(), Value> {
+    send_command(transport, &[0x0B, 0x02, source])
+        .await
+        .map(|_| ())
+        .map_err(|err| tool_error("transport_session_release_failed", &err.to_string(), None))
+}
+
+fn primitive_response(response: Vec<u8>) -> Result<PrimitiveResponse, Value> {
+    let Some(status) = response.first().copied() else {
+        return Err(tool_error(
+            "empty_response",
+            "Device returned an empty response",
+            None,
+        ));
+    };
+    if status != RESPONSE_OK {
+        return Err(tool_error(
+            "device_rejected",
+            &format!("Device returned status 0x{status:02X}"),
+            None,
+        ));
+    }
+    let raw_payload = response.into_iter().skip(1).collect::<Vec<_>>();
+    let significant_len = raw_payload
+        .iter()
+        .rposition(|byte| *byte != 0)
+        .map(|index| index + 1)
+        .unwrap_or(0);
+    Ok(PrimitiveResponse {
+        status: "ok".to_string(),
+        payload: raw_payload[..significant_len].to_vec(),
+        raw_payload,
+    })
+}
+
+fn response_payload_json(payload: Vec<u8>) -> Value {
+    json!({
+        "bytes": payload,
+        "hex": payload.iter().map(|byte| format!("{byte:02X}")).collect::<Vec<_>>().join(" ")
+    })
 }
 
 fn manual_wifi_target_from_device(device: &DeviceRecord) -> Result<ManualWifiTarget, String> {
@@ -839,6 +1265,137 @@ fn local_script_file_name(path: Option<&str>) -> String {
     } else {
         format!("{raw}.js")
     }
+}
+
+fn timeout_arg(arguments: Option<&Value>) -> Result<u64, Value> {
+    int_arg(arguments, "timeout_ms", Some(1500), 1, 30_000).map(|value| value as u64)
+}
+
+fn byte_arg(arguments: Option<&Value>, key: &str, default: Option<u8>) -> Result<u8, Value> {
+    int_arg(arguments, key, default.map(i64::from), 0, 255).map(|value| value as u8)
+}
+
+fn int_arg(
+    arguments: Option<&Value>,
+    key: &str,
+    default: Option<i64>,
+    min: i64,
+    max: i64,
+) -> Result<i64, Value> {
+    let Some(value) = arguments.and_then(|value| value.get(key)) else {
+        if let Some(default) = default {
+            return Ok(default);
+        }
+        return Err(tool_error(
+            &format!("missing_{key}"),
+            &format!("{key} is required"),
+            None,
+        ));
+    };
+    let Some(number) = value
+        .as_i64()
+        .or_else(|| value.as_u64().map(|value| value as i64))
+    else {
+        return Err(tool_error(
+            &format!("invalid_{key}"),
+            &format!("{key} must be an integer"),
+            None,
+        ));
+    };
+    if number < min || number > max {
+        return Err(tool_error(
+            &format!("invalid_{key}"),
+            &format!("{key} must be between {min} and {max}"),
+            None,
+        ));
+    }
+    Ok(number)
+}
+
+fn byte_array_arg(arguments: Option<&Value>, key: &str) -> Result<Vec<u8>, Value> {
+    let Some(value) = arguments.and_then(|value| value.get(key)) else {
+        return Err(tool_error(
+            &format!("missing_{key}"),
+            &format!("{key} is required"),
+            None,
+        ));
+    };
+
+    if let Some(items) = value.as_array() {
+        let mut out = Vec::with_capacity(items.len());
+        for item in items {
+            let Some(number) = item
+                .as_i64()
+                .or_else(|| item.as_u64().map(|value| value as i64))
+            else {
+                return Err(tool_error(
+                    &format!("invalid_{key}"),
+                    &format!("{key} must contain only integers"),
+                    None,
+                ));
+            };
+            if !(0..=255).contains(&number) {
+                return Err(tool_error(
+                    &format!("invalid_{key}"),
+                    &format!("{key} bytes must be between 0 and 255"),
+                    None,
+                ));
+            }
+            out.push(number as u8);
+        }
+        return Ok(out);
+    }
+
+    if let Some(text) = value.as_str() {
+        return parse_hex_bytes(text).map_err(|message| {
+            tool_error(
+                &format!("invalid_{key}"),
+                &format!("{key}: {message}"),
+                None,
+            )
+        });
+    }
+
+    Err(tool_error(
+        &format!("invalid_{key}"),
+        &format!("{key} must be an array of bytes or a hex string"),
+        None,
+    ))
+}
+
+fn parse_hex_bytes(text: &str) -> Result<Vec<u8>, String> {
+    let parts = text
+        .split(|character: char| {
+            character.is_ascii_whitespace() || character == ',' || character == ':'
+        })
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>();
+    if parts.len() == 1 {
+        let raw = parts[0].trim_start_matches("0x").trim_start_matches("0X");
+        if raw.contains("0x") || raw.contains("0X") {
+            return Err("compact hex strings cannot contain repeated 0x prefixes".to_string());
+        }
+        if raw.len() % 2 != 0 {
+            return Err("hex string must contain an even number of digits".to_string());
+        }
+        return raw
+            .as_bytes()
+            .chunks(2)
+            .map(|chunk| {
+                let part = std::str::from_utf8(chunk)
+                    .map_err(|_| "hex string is not valid UTF-8".to_string())?;
+                u8::from_str_radix(part, 16).map_err(|_| format!("invalid hex byte '{part}'"))
+            })
+            .collect();
+    }
+
+    parts
+        .into_iter()
+        .map(|part| {
+            let raw = part.trim_start_matches("0x").trim_start_matches("0X");
+            u8::from_str_radix(raw, 16).map_err(|_| format!("invalid hex byte '{part}'"))
+        })
+        .collect()
 }
 
 fn empty_schema() -> Value {

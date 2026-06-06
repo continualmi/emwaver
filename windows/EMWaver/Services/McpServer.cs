@@ -313,6 +313,26 @@ public sealed class McpServer : IDisposable
                 {
                     ["run_id"] = new JsonObject { ["type"] = "string" }
                 }, required: [])),
+                Tool("spi_transfer", "Run one SPI transfer through the selected EMWaver device.", ObjectSchema(new Dictionary<string, JsonNode?>
+                {
+                    ["tx"] = new JsonObject { ["type"] = "array", ["items"] = new JsonObject { ["type"] = "integer" } },
+                    ["rx_length"] = new JsonObject { ["type"] = "integer" },
+                    ["cs"] = new JsonObject { ["type"] = "integer" }
+                }, required: ["tx"])),
+                Tool("gpio_read", "Read one GPIO pin.", ObjectSchema(new Dictionary<string, JsonNode?>
+                {
+                    ["pin"] = new JsonObject { ["type"] = "integer" }
+                }, required: ["pin"])),
+                Tool("gpio_write", "Write one GPIO pin high or low.", ObjectSchema(new Dictionary<string, JsonNode?>
+                {
+                    ["pin"] = new JsonObject { ["type"] = "integer" },
+                    ["value"] = new JsonObject { ["type"] = "integer" }
+                }, required: ["pin", "value"])),
+                Tool("analog_read", "Read one analog pin.", ObjectSchema(new Dictionary<string, JsonNode?>
+                {
+                    ["pin"] = new JsonObject { ["type"] = "integer" },
+                    ["samples"] = new JsonObject { ["type"] = "integer" }
+                }, required: ["pin"])),
                 Tool("device_state", "Return current EMWaver device, transport, firmware, and discovery state.", EmptySchema())
             }
         };
@@ -329,6 +349,10 @@ public sealed class McpServer : IDisposable
             "write_script" => await WriteScriptToolAsync(arguments).ConfigureAwait(false),
             "run_script" => await RunScriptToolAsync(arguments).ConfigureAwait(false),
             "stop_script" => StopScriptTool(arguments),
+            "spi_transfer" => SpiTransferTool(arguments),
+            "gpio_read" => GpioReadTool(arguments),
+            "gpio_write" => GpioWriteTool(arguments),
+            "analog_read" => AnalogReadTool(arguments),
             "device_state" => DeviceStateTool(),
             _ => ToolError("unsupported_tool", $"Unsupported MCP tool: {name ?? "<missing>"}")
         };
@@ -519,6 +543,178 @@ public sealed class McpServer : IDisposable
         };
         target.Dispose();
         return result;
+    }
+
+    private JsonObject SpiTransferTool(JsonObject? arguments)
+    {
+        if (!TryByteArray(arguments?["tx"], out var tx, out var error))
+        {
+            return ToolError("invalid_tx", error ?? "spi_transfer requires tx bytes");
+        }
+
+        var cs = ByteArg(arguments, "cs", defaultValue: 4);
+        var rxLength = Math.Clamp(IntArg(arguments, "rx_length", defaultValue: 0), 0, 62);
+        tx = tx.Take(60).ToArray();
+
+        var command = new byte[4 + tx.Length];
+        command[0] = 0x50;
+        command[1] = cs;
+        command[2] = (byte)rxLength;
+        command[3] = (byte)tx.Length;
+        Array.Copy(tx, 0, command, 4, tx.Length);
+
+        var response = SendPrimitive(command, timeoutMs: 1500);
+        if (!response.Ok)
+        {
+            return response.Error;
+        }
+
+        var wanted = rxLength > 0 ? rxLength : tx.Length;
+        var rx = response.Payload.Take(wanted).Select(b => (JsonNode)JsonValue.Create((int)b)!).ToArray();
+        return new JsonObject
+        {
+            ["ok"] = true,
+            ["rx"] = new JsonArray(rx)
+        };
+    }
+
+    private JsonObject GpioReadTool(JsonObject? arguments)
+    {
+        var pin = ByteArg(arguments, "pin", required: true);
+        if (pin == null)
+        {
+            return ToolError("missing_pin", "gpio_read requires pin");
+        }
+
+        var response = SendPrimitive([0x10, 0x02, pin.Value], timeoutMs: 1500);
+        if (!response.Ok)
+        {
+            return response.Error;
+        }
+
+        return new JsonObject
+        {
+            ["ok"] = true,
+            ["pin"] = pin.Value,
+            ["value"] = response.Payload.Length > 0 && response.Payload[0] != 0 ? 1 : 0
+        };
+    }
+
+    private JsonObject GpioWriteTool(JsonObject? arguments)
+    {
+        var pin = ByteArg(arguments, "pin", required: true);
+        if (pin == null)
+        {
+            return ToolError("missing_pin", "gpio_write requires pin");
+        }
+
+        var value = IntArg(arguments, "value", defaultValue: 0) != 0;
+        var response = SendPrimitive([0x10, value ? (byte)0x03 : (byte)0x04, pin.Value], timeoutMs: 1500);
+        if (!response.Ok)
+        {
+            return response.Error;
+        }
+
+        return new JsonObject
+        {
+            ["ok"] = true,
+            ["pin"] = pin.Value,
+            ["value"] = value ? 1 : 0
+        };
+    }
+
+    private JsonObject AnalogReadTool(JsonObject? arguments)
+    {
+        var pin = ByteArg(arguments, "pin", required: true);
+        if (pin == null)
+        {
+            return ToolError("missing_pin", "analog_read requires pin");
+        }
+
+        var samples = ByteArg(arguments, "samples", defaultValue: 1);
+        var response = SendPrimitive([0x20, 0x00, pin.Value, samples], timeoutMs: 1500);
+        if (!response.Ok)
+        {
+            return response.Error;
+        }
+
+        var value = response.Payload.Length >= 2
+            ? response.Payload[0] | (response.Payload[1] << 8)
+            : 0;
+        return new JsonObject
+        {
+            ["ok"] = true,
+            ["pin"] = pin.Value,
+            ["value"] = value
+        };
+    }
+
+    private PrimitiveResponse SendPrimitive(byte[] command, int timeoutMs)
+    {
+        if (!_device.IsConnected)
+        {
+            return PrimitiveResponse.Failure(ToolError("device_not_connected", "No EMWaver device is connected", "Connect a device in the Windows app before calling hardware primitive tools."));
+        }
+
+        var response = _device.SendPacket(command, timeoutMs);
+        if (response == null || response.Length == 0)
+        {
+            return PrimitiveResponse.Failure(ToolError("device_timeout", "Device did not respond"));
+        }
+        if (response[0] != 0x80)
+        {
+            return PrimitiveResponse.Failure(ToolError("device_error", $"Device returned status 0x{response[0]:X2}"));
+        }
+        return PrimitiveResponse.Success(response.Skip(1).ToArray());
+    }
+
+    private static int IntArg(JsonObject? arguments, string key, int defaultValue)
+    {
+        return arguments?[key] == null ? defaultValue : arguments[key]!.GetValue<int>();
+    }
+
+    private static byte ByteArg(JsonObject? arguments, string key, byte defaultValue)
+    {
+        return (byte)Math.Clamp(IntArg(arguments, key, defaultValue), 0, 255);
+    }
+
+    private static byte? ByteArg(JsonObject? arguments, string key, bool required)
+    {
+        if (arguments?[key] == null)
+        {
+            return required ? null : (byte)0;
+        }
+        return (byte)Math.Clamp(arguments[key]!.GetValue<int>(), 0, 255);
+    }
+
+    private static bool TryByteArray(JsonNode? node, out byte[] bytes, out string? error)
+    {
+        bytes = [];
+        error = null;
+        if (node is not JsonArray arr)
+        {
+            error = "Expected an array of byte values";
+            return false;
+        }
+
+        var outBytes = new List<byte>();
+        foreach (var item in arr)
+        {
+            if (item == null)
+            {
+                error = "Byte array contains null";
+                return false;
+            }
+            var value = item.GetValue<int>();
+            if (value is < 0 or > 255)
+            {
+                error = "Byte values must be 0..255";
+                return false;
+            }
+            outBytes.Add((byte)value);
+        }
+        bytes = outBytes.ToArray();
+        return true;
     }
 
     private async Task<ResolvedRunSource> ResolveRunSourceAsync(JsonObject? arguments)
@@ -811,6 +1007,11 @@ public sealed class McpServer : IDisposable
 
     private sealed record HttpRequest(string Method, string Path, IReadOnlyDictionary<string, string> Headers, byte[] Body);
     private sealed record McpHttpResponse(int StatusCode, byte[] Body);
+    private sealed record PrimitiveResponse(bool Ok, byte[] Payload, JsonObject Error)
+    {
+        internal static PrimitiveResponse Success(byte[] payload) => new(true, payload, new JsonObject());
+        internal static PrimitiveResponse Failure(JsonObject error) => new(false, [], error);
+    }
     private sealed record ResolvedRunSource(bool Ok, string? Source, string? Name, string? ErrorCode, string? ErrorMessage, string? Recovery)
     {
         internal static ResolvedRunSource Success(string source, string name) => new(true, source, name, null, null, null);

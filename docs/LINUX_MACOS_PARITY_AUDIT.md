@@ -1,6 +1,6 @@
 # Linux/macOS Native Parity Audit
 
-Last updated: 2026-05-24
+Last updated: 2026-06-06
 
 This is the working checklist for the native Linux GTK4 port against the macOS app and shared Apple script UI. It should stay honest: incomplete Linux surfaces are gaps, not parity.
 
@@ -18,8 +18,8 @@ This is the working checklist for the native Linux GTK4 port against the macOS a
 
 3. MCP tool parity
    - Desktop MCP should expose local tools for listing/reading/writing/running scripts, stopping scripts, device status, and hardware primitives.
-   - Linux now has the first in-app MCP source slice: Settings enablement/token, loopback `POST /mcp`, `list_scripts`/`read_script`/`write_script`/`run_script`/`stop_script`/`device_state`.
-   - Needed: validate the Linux app slice on a GTK4/libadwaita host, connect MCP runs to persistent GTK session-worker ownership, and add hardware primitive execution through the selected Linux transport.
+   - Linux now has the in-app MCP source slice: Settings enablement/token, loopback `POST /mcp`, `list_scripts`/`read_script`/`write_script`/`run_script`/`stop_script`/`device_state`, plus `spi_transfer`/`gpio_read`/`gpio_write`/`analog_read` through the selected USB/BLE/Wi-Fi transport.
+   - Needed: validate the Linux app slice on a GTK4/libadwaita host, connect MCP runs to persistent GTK session-worker ownership, and lift or document the Linux SPI 14-byte TX limit if the firmware/runtime command lane changes.
 
 4. Device sheet behavior
    - macOS groups transports by hardware UID, supports transport switching, manual Wi-Fi, ESP32 Wi-Fi provisioning/clear/status, and shows UID probe freshness.
@@ -52,4 +52,4 @@ This is the working checklist for the native Linux GTK4 port against the macOS a
 - Linux editor uses GtkSourceView with syntax highlighting, line numbers, find, go-to-line, and line wrap.
 - Linux has USB MIDI, Wi-Fi WebSocket/mDNS, and BlueZ BLE GATT transport paths behind the shared transport trait.
 - Linux firmware flow can plan bundled STM32 and ESP32-S3 images and call the local flashing backends.
-- Linux no longer carries in-app Agent/MGPT credentials; desktop MCP settings and the first script/status MCP tools are present in the GTK app source.
+- Linux no longer carries in-app Agent/MGPT credentials; desktop MCP settings plus script/status and hardware primitive MCP tools are present in the GTK app source.

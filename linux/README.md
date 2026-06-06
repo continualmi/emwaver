@@ -164,7 +164,9 @@ Current MCP implementation:
 
 - Settings exposes a `Desktop MCP` section with an enable switch, loopback endpoint, and generated bearer token.
 - When enabled, the running app serves Streamable-HTTP-style JSON-RPC at `http://127.0.0.1:3923/mcp`.
-- The tool slice supports script list/read/write, synchronous selected-device run, no-op stop status, and device status: `list_scripts`, `read_script`, `write_script`, `run_script`, `stop_script`, and `device_state`.
+- The tool slice supports script list/read/write, synchronous selected-device run, no-op stop status, device status, and direct hardware primitives: `list_scripts`, `read_script`, `write_script`, `run_script`, `stop_script`, `device_state`, `spi_transfer`, `gpio_read`, `gpio_write`, and `analog_read`.
 - The server uses the same `ScriptRepository` roots as the GTK script list and a refreshed app-model device snapshot.
 - `run_script` executes through the existing Linux JavaScript runtime and selected USB/BLE/Wi-Fi transport; persistent MCP-started GTK session ownership is still pending.
+- Hardware primitive tools execute through the selected USB/BLE/Wi-Fi transport. BLE and Wi-Fi primitive calls claim the firmware transport session before normal command packets and release it afterward when practical.
+- Linux SPI primitive transfers currently support up to 14 TX bytes per call because the active Linux command lane is 18 bytes.
 - Local validation on macOS is blocked by missing GTK4/libadwaita system packages; run app-level checks on a Linux host with `gtk4`, `libadwaita`, `gdk-pixbuf-2.0`, and `graphene-gobject-1.0` development packages installed.

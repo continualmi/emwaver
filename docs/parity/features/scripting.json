@@ -65,6 +65,23 @@
               ]
             }
           ]
+        },
+        "linux": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "linux/crates/emwaver-linux-core/src/script_library.rs",
+              "contains": [
+                "assets/default-scripts",
+                "emw-kernel.js",
+                "EMWAVER_DEFAULT_SCRIPTS_DIR"
+              ]
+            },
+            {
+              "file": "linux/scripts/package-linux.sh",
+              "contains": "assets/default-scripts/\\*.js"
+            }
+          ]
         }
       }
     },
@@ -148,6 +165,27 @@
               ]
             }
           ]
+        },
+        "linux": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "linux/crates/emwaver-linux-runtime/src/javascript.rs",
+              "contains": [
+                "execute_javascript_with_modules",
+                "global.require",
+                "JSX.h",
+                "emw-protocol.js"
+              ]
+            },
+            {
+              "file": "linux/crates/emwaver-linux-app/src/ui/main_window.rs",
+              "contains": [
+                "ScriptUiRuntime",
+                "execute_javascript_with_modules"
+              ]
+            }
+          ]
         }
       }
     },
@@ -203,6 +241,22 @@
                 "basic-board\\.json",
                 "SimulatorScriptDeviceBridge"
               ]
+            }
+          ]
+        },
+        "linux": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "linux/crates/emwaver-linux-transport/src/simulator.rs",
+              "contains": [
+                "basic-board.json",
+                "SimulatorTransport"
+              ]
+            },
+            {
+              "file": "linux/crates/emwaver-linux-runtime/src/javascript.rs",
+              "contains": "SimulatorTransport::default_fixture"
             }
           ]
         }

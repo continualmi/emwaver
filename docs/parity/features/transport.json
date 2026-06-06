@@ -53,6 +53,26 @@
               ]
             }
           ]
+        },
+        "linux": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "linux/crates/emwaver-linux-transport/src/ble.rs",
+              "contains": [
+                "btleplug",
+                "BLE_SERVICE_UUID",
+                "LinuxBleTransport"
+              ]
+            },
+            {
+              "file": "linux/crates/emwaver-linux-app/src/ui/main_window.rs",
+              "contains": [
+                "LinuxBleManager",
+                "LinuxBleTransport"
+              ]
+            }
+          ]
         }
       }
     },
@@ -102,6 +122,26 @@
             {
               "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/USBService.java",
               "contains": "connectUsbMidi"
+            }
+          ]
+        },
+        "linux": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "linux/crates/emwaver-linux-transport/src/usb.rs",
+              "contains": [
+                "LinuxUsbMidiTransport",
+                "USB_MIDI_INTERFACE_NUMBER",
+                "encode_superframe_to_usb_midi"
+              ]
+            },
+            {
+              "file": "linux/crates/emwaver-linux-transport/src/usb_midi_sysex.rs",
+              "contains": [
+                "SYSEX_SIZE_BYTES",
+                "USB_MIDI_PACKET_SIZE_BYTES"
+              ]
             }
           ]
         }
@@ -207,6 +247,26 @@
             {
               "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/MainActivity.java",
               "contains": "Connect Wi-Fi|Host or IP|connectWiFi"
+            }
+          ]
+        },
+        "linux": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "linux/crates/emwaver-linux-transport/src/wifi.rs",
+              "contains": [
+                "LinuxWifiTransport",
+                "WebSocketStream",
+                "/v1/ws"
+              ]
+            },
+            {
+              "file": "linux/crates/emwaver-linux-app/src/ui/main_window.rs",
+              "contains": [
+                "LinuxWifiManager",
+                "manual_wifi_target_from_device"
+              ]
             }
           ]
         }
@@ -332,6 +392,24 @@
                 "discoverServices",
                 "resolveService"
               ]
+            }
+          ]
+        },
+        "linux": {
+          "status": "planned",
+          "reason": "Linux has manual Wi-Fi targets and mDNS discovery in source, but provisioning/clear/status UI remains an explicit parity gap.",
+          "evidence": [
+            {
+              "file": "linux/crates/emwaver-linux-transport/src/wifi.rs",
+              "contains": [
+                "WIFI_SERVICE_TYPE_LOCAL",
+                "mDNS",
+                "LinuxWifiManager"
+              ]
+            },
+            {
+              "file": "linux/README.md",
+              "contains": "Wi-Fi provisioning UI/status"
             }
           ]
         }

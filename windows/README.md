@@ -119,8 +119,8 @@ Desktop app updates are local-first and account-free. Windows checks the EMWaver
 The Windows app intentionally ships a single stable light UI theme; the former dark theme option is disabled.
 
 The WPF Agent drawer, Agent API key storage, SQLite chat storage, and MGPT
-client path have been removed. Their hardware primitive model is being
-repackaged as the desktop MCP surface: external agents should use future MCP
+client path have been removed. Their hardware primitive model is now
+repackaged as the desktop MCP surface: external agents should use MCP
 tools such as `list_scripts`, `read_script`, `run_script`, `write_script`,
 `device_state`, `spi_transfer`, `gpio_write`, `gpio_read`, and `analog_read`.
 The WPF script editor uses AvalonEdit syntax highlighting plus visible Find and
@@ -134,7 +134,7 @@ Current MCP implementation:
 
 - Settings exposes a `Desktop MCP` section with an enable switch, loopback endpoint, and generated bearer token.
 - When enabled, the running app serves Streamable-HTTP-style JSON-RPC at `http://127.0.0.1:3923/mcp`.
-- The tool slice supports script list/read/write/run/stop plus device status: `list_scripts`, `read_script`, `write_script`, `run_script`, `stop_script`, and `device_state`.
+- The tool slice supports script list/read/write/run/stop, device status, and direct hardware primitives: `list_scripts`, `read_script`, `write_script`, `run_script`, `stop_script`, `device_state`, `spi_transfer`, `gpio_read`, `gpio_write`, and `analog_read`.
 - The server is intentionally in-process; do not add a sidecar, daemon, or CLI control plane for this path.
 
 What Windows already has:

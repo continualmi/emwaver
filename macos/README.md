@@ -123,8 +123,7 @@ Script sessions:
 Desktop MCP direction on macOS:
 - Settings exposes a `Desktop MCP` section with an enable switch, loopback endpoint, and generated bearer token,
 - when enabled, the running app serves Streamable-HTTP-style JSON-RPC at `http://127.0.0.1:3923/mcp`,
-- the tool slice supports script list/read/write/run/stop plus device status: `list_scripts`, `read_script`, `write_script`, `run_script`, `stop_script`, and `device_state`,
-- future tool work adds `spi_transfer`, `gpio_read`, `gpio_write`, and `analog_read`,
+- the tool slice supports script list/read/write/run/stop, device status, and direct hardware primitives: `list_scripts`, `read_script`, `write_script`, `run_script`, `stop_script`, `device_state`, `spi_transfer`, `gpio_read`, `gpio_write`, and `analog_read`,
 - the server is in-process; do not add a sidecar, daemon, or CLI control plane for this path,
 - production model prompts, provider routing, and metering do not belong in the macOS app.
 

@@ -63,6 +63,25 @@
               "contains": "Android</td><td><span class=\"s go\">KEEP</span></td><td><span class=\"s no\">removed</span></td><td>import into app</td><td>"
             }
           ]
+        },
+        "linux": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "linux/crates/emwaver-linux-app/src/ui/mcp_server.rs",
+              "contains": [
+                "POST",
+                "/mcp",
+                "Bearer ",
+                "tools/list",
+                "tools/call"
+              ]
+            },
+            {
+              "file": "linux/crates/emwaver-linux-app/src/ui/main_window.rs",
+              "contains": "Desktop MCP"
+            }
+          ]
         }
       }
     },
@@ -81,7 +100,11 @@
                 "write_script",
                 "run_script",
                 "stop_script",
-                "device_state"
+                "device_state",
+                "spi_transfer",
+                "gpio_read",
+                "gpio_write",
+                "analog_read"
               ]
             }
           ]
@@ -100,7 +123,11 @@
                 "write_script",
                 "run_script",
                 "stop_script",
-                "device_state"
+                "device_state",
+                "spi_transfer",
+                "gpio_read",
+                "gpio_write",
+                "analog_read"
               ]
             }
           ]
@@ -108,6 +135,25 @@
         "android": {
           "status": "not_applicable",
           "reason": "Mobile does not expose an external MCP server."
+        },
+        "linux": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "linux/crates/emwaver-linux-app/src/ui/mcp_server.rs",
+              "contains": [
+                "list_scripts",
+                "write_script",
+                "run_script",
+                "stop_script",
+                "device_state",
+                "spi_transfer",
+                "gpio_read",
+                "gpio_write",
+                "analog_read"
+              ]
+            }
+          ]
         }
       }
     },
@@ -149,6 +195,19 @@
             {
               "file": "docs/AGENT_TO_MCP_MIGRATION.html",
               "contains": "Rip out MGPT — all five apps"
+            }
+          ]
+        },
+        "linux": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
+              "contains": "Rip out the Agent — all five apps"
+            },
+            {
+              "file": "linux/README.md",
+              "contains": "no longer contains the legacy Agent drawer or MGPT client path"
             }
           ]
         }

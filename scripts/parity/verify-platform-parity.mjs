@@ -4,7 +4,7 @@ import path from "node:path";
 
 const root = path.resolve(new URL("../..", import.meta.url).pathname);
 const manifestDir = path.join(root, "docs", "parity", "features");
-const platforms = ["macos", "ios", "windows", "android"];
+const platforms = ["macos", "ios", "windows", "android", "linux"];
 const allowedStatuses = new Set(["required", "optional", "not_applicable", "planned"]);
 const allowedParityModes = new Set(["all_required", "documented_exceptions"]);
 

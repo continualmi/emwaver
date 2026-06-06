@@ -246,6 +246,22 @@ final class MacMcpServer: ObservableObject {
                 Self.tool(name: "stop_script", description: "Stop an MCP-started macOS script run.", inputSchema: Self.objectSchema(properties: [
                     "run_id": ["type": "string"]
                 ], required: [])),
+                Self.tool(name: "spi_transfer", description: "Run one SPI transfer through the selected EMWaver device.", inputSchema: Self.objectSchema(properties: [
+                    "tx": ["type": "array", "items": ["type": "integer"]],
+                    "rx_length": ["type": "integer"],
+                    "cs": ["type": "integer"]
+                ], required: ["tx"])),
+                Self.tool(name: "gpio_read", description: "Read one GPIO pin.", inputSchema: Self.objectSchema(properties: [
+                    "pin": ["type": "integer"]
+                ], required: ["pin"])),
+                Self.tool(name: "gpio_write", description: "Write one GPIO pin high or low.", inputSchema: Self.objectSchema(properties: [
+                    "pin": ["type": "integer"],
+                    "value": ["type": "integer"]
+                ], required: ["pin", "value"])),
+                Self.tool(name: "analog_read", description: "Read one analog pin.", inputSchema: Self.objectSchema(properties: [
+                    "pin": ["type": "integer"],
+                    "samples": ["type": "integer"]
+                ], required: ["pin"])),
                 Self.tool(name: "device_state", description: "Return current EMWaver device, transport, firmware, and discovery state.", inputSchema: Self.emptySchema())
             ]
         ]
@@ -267,6 +283,14 @@ final class MacMcpServer: ObservableObject {
             structured = runScript(arguments: arguments)
         case "stop_script":
             structured = stopScript(arguments: arguments)
+        case "spi_transfer":
+            structured = spiTransfer(arguments: arguments)
+        case "gpio_read":
+            structured = gpioRead(arguments: arguments)
+        case "gpio_write":
+            structured = gpioWrite(arguments: arguments)
+        case "analog_read":
+            structured = analogRead(arguments: arguments)
         case "device_state":
             structured = deviceState()
         default:
@@ -300,6 +324,91 @@ final class MacMcpServer: ObservableObject {
         } catch {
             return Self.toolError(code: "script_read_failed", message: error.localizedDescription)
         }
+    }
+
+    private func spiTransfer(arguments: [String: Any]?) -> [String: Any] {
+        guard let tx = Self.byteArray(arguments?["tx"]) else {
+            return Self.toolError(code: "invalid_tx", message: "spi_transfer requires tx byte array")
+        }
+        let clippedTx = Array(tx.prefix(60))
+        let rxLength = max(0, min(62, Self.intArg(arguments, "rx_length", defaultValue: 0)))
+        let cs = UInt8(max(0, min(255, Self.intArg(arguments, "cs", defaultValue: 4))))
+
+        var command: [UInt8] = [0x50, cs, UInt8(rxLength), UInt8(clippedTx.count)]
+        command.append(contentsOf: clippedTx)
+
+        let response = sendPrimitive(command, timeoutMs: 1500)
+        guard response.ok else { return response.error }
+        let wanted = rxLength > 0 ? rxLength : clippedTx.count
+        return [
+            "ok": true,
+            "rx": Array(response.payload.prefix(wanted)).map { Int($0) }
+        ]
+    }
+
+    private func gpioRead(arguments: [String: Any]?) -> [String: Any] {
+        guard let pin = Self.byteArg(arguments, "pin") else {
+            return Self.toolError(code: "missing_pin", message: "gpio_read requires pin")
+        }
+        let response = sendPrimitive([0x10, 0x02, pin], timeoutMs: 1500)
+        guard response.ok else { return response.error }
+        return [
+            "ok": true,
+            "pin": Int(pin),
+            "value": response.payload.first.map { $0 == 0 ? 0 : 1 } ?? 0
+        ]
+    }
+
+    private func gpioWrite(arguments: [String: Any]?) -> [String: Any] {
+        guard let pin = Self.byteArg(arguments, "pin") else {
+            return Self.toolError(code: "missing_pin", message: "gpio_write requires pin")
+        }
+        let value = Self.intArg(arguments, "value", defaultValue: 0) != 0
+        let response = sendPrimitive([0x10, value ? 0x03 : 0x04, pin], timeoutMs: 1500)
+        guard response.ok else { return response.error }
+        return [
+            "ok": true,
+            "pin": Int(pin),
+            "value": value ? 1 : 0
+        ]
+    }
+
+    private func analogRead(arguments: [String: Any]?) -> [String: Any] {
+        guard let pin = Self.byteArg(arguments, "pin") else {
+            return Self.toolError(code: "missing_pin", message: "analog_read requires pin")
+        }
+        let samples = Self.byteArg(arguments, "samples") ?? 1
+        let response = sendPrimitive([0x20, 0x00, pin, samples], timeoutMs: 1500)
+        guard response.ok else { return response.error }
+        let value = response.payload.count >= 2
+            ? Int(response.payload[0]) | (Int(response.payload[1]) << 8)
+            : 0
+        return [
+            "ok": true,
+            "pin": Int(pin),
+            "value": value
+        ]
+    }
+
+    private func sendPrimitive(_ command: [UInt8], timeoutMs: Int) -> PrimitiveResponse {
+        let response: Data? = DispatchQueue.main.sync {
+            guard let device, device.isConnected else {
+                return nil
+            }
+            return device.sendCommand(Data(command), timeout: timeoutMs)
+        }
+        guard let response, !response.isEmpty else {
+            let connected = DispatchQueue.main.sync { device?.isConnected == true }
+            if !connected {
+                return .failure(Self.toolError(code: "device_not_connected", message: "No EMWaver device is connected", recovery: "Connect a device in the macOS app before calling hardware primitive tools."))
+            }
+            return .failure(Self.toolError(code: "device_timeout", message: "Device did not respond"))
+        }
+        let bytes = Array(response)
+        guard bytes[0] == 0x80 else {
+            return .failure(Self.toolError(code: "device_error", message: String(format: "Device returned status 0x%02X", bytes[0])))
+        }
+        return .success(Array(bytes.dropFirst()))
     }
 
     private func runScript(arguments: [String: Any]?) -> [String: Any] {
@@ -568,6 +677,47 @@ final class MacMcpServer: ObservableObject {
         return raw
     }
 
+    private static func intArg(_ arguments: [String: Any]?, _ key: String, defaultValue: Int) -> Int {
+        if let int = arguments?[key] as? Int {
+            return int
+        }
+        if let number = arguments?[key] as? NSNumber {
+            return number.intValue
+        }
+        return defaultValue
+    }
+
+    private static func byteArg(_ arguments: [String: Any]?, _ key: String) -> UInt8? {
+        guard let value = arguments?[key] else { return nil }
+        if let int = value as? Int, int >= 0, int <= 255 {
+            return UInt8(int)
+        }
+        if let number = value as? NSNumber {
+            let int = number.intValue
+            if int >= 0, int <= 255 {
+                return UInt8(int)
+            }
+        }
+        return nil
+    }
+
+    private static func byteArray(_ value: Any?) -> [UInt8]? {
+        guard let values = value as? [Any] else { return nil }
+        var bytes: [UInt8] = []
+        for value in values {
+            if let int = value as? Int, int >= 0, int <= 255 {
+                bytes.append(UInt8(int))
+            } else if let number = value as? NSNumber {
+                let int = number.intValue
+                guard int >= 0, int <= 255 else { return nil }
+                bytes.append(UInt8(int))
+            } else {
+                return nil
+            }
+        }
+        return bytes
+    }
+
     private func send(status: Int, reason: String, body: Data, connection: NWConnection) {
         var response = Data()
         response.append(Data("HTTP/1.1 \(status) \(reason)\r\n".utf8))
@@ -714,6 +864,20 @@ final class MacMcpServer: ObservableObject {
     private struct McpHttpResponse {
         let statusCode: Int
         let body: Data
+    }
+
+    private struct PrimitiveResponse {
+        let ok: Bool
+        let payload: [UInt8]
+        let error: [String: Any]
+
+        static func success(_ payload: [UInt8]) -> PrimitiveResponse {
+            PrimitiveResponse(ok: true, payload: payload, error: [:])
+        }
+
+        static func failure(_ error: [String: Any]) -> PrimitiveResponse {
+            PrimitiveResponse(ok: false, payload: [], error: error)
+        }
     }
 
     private struct ResolvedRunSource {
