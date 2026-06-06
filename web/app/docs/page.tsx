@@ -17,14 +17,14 @@ export default function DocsIndex() {
       <ol>
         <li>
           <strong>Get a supported board</strong> — start with an ESP32-family dev board (ESP32,
-          ESP32-S2, or ESP32-S3) or open the EMWaver hardware lineup and build files.
+          ESP32-S2, or ESP32-S3), an ESP8266 board, or open the EMWaver hardware lineup and build files.
         </li>
         <li>
           <strong>Install the app</strong> — use the native app where it fits: iOS, Android, macOS, Windows, or Linux preview.
         </li>
         <li>
           <strong>Flash fixed firmware</strong> — use the bundled EMWaver firmware image for your
-          board class (ESP32, ESP32-S2, ESP32-S3, or STM32F042). No user build loop.
+          board class (ESP32, ESP32-S2, ESP32-S3, ESP8266, or STM32F042). No user build loop.
         </li>
         <li>
           <strong>Run a script</strong> — use built-in examples, write your own
@@ -66,7 +66,7 @@ export default function DocsIndex() {
       <ol>
         <li>
           <strong>Choose hardware</strong> from the <Link href="/build">build catalog</Link> or start with a supported
-          ESP32-family dev board (ESP32, ESP32-S2, or ESP32-S3). Purpose-built hardware is also available in the{" "}
+          ESP32-family dev board (ESP32, ESP32-S2, or ESP32-S3), or an ESP8266 board. Purpose-built hardware is also available in the{" "}
           <a href="https://github.com/continualmi/emwaver-shield" target="_blank" rel="noreferrer">
             EMWaver Shield repository
           </a>
@@ -77,7 +77,7 @@ export default function DocsIndex() {
           <Link href="/docs/install">App Store, Google Play internal test, Android APK, macOS DMG, Windows download, or Linux DEB</Link>.
         </li>
         <li>
-          <strong>Flash the fixed EMWaver firmware</strong> if your board is not already pre-flashed. Use the bundled target image for your board class (ESP32, ESP32-S2, ESP32-S3, or STM32F042) rather than building firmware manually.
+          <strong>Flash the fixed EMWaver firmware</strong> if your board is not already pre-flashed. Use the bundled target image for your board class (ESP32, ESP32-S2, ESP32-S3, ESP8266, or STM32F042) rather than building firmware manually.
         </li>
         <li>
           <strong>Plug in locally</strong>. EMWaver runs supported scripts directly through the native app and connected board.

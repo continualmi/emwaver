@@ -61,7 +61,7 @@ export default function HardwareDocPage() {
       <p>
         You also do not need to build a custom EMWaver device to get started:
         an off-the-shelf ESP32-family dev board (ESP32, ESP32-S2, or ESP32-S3)
-        is supported directly by the platform. The EMWaver lineup is there when you want purpose-built
+        or ESP8266 board is supported directly by the platform. The EMWaver lineup is there when you want purpose-built
         hardware, add-on modules, or downloadable build files.
       </p>
 
@@ -74,6 +74,12 @@ export default function HardwareDocPage() {
         Wi-Fi. Classic ESP32 supports Wi-Fi and BLE. This is the fastest way
         to get started because you do not need to build anything from the
         EMWaver lineup first.
+      </p>
+      <h3>Any ESP8266 board <span className="font-normal text-[color:var(--ink-dim)]">— Wi-Fi plus USB-serial setup</span></h3>
+      <p>
+        Supported ESP8266 boards work with EMWaver over Wi-Fi after local setup.
+        The USB-serial bridge on common ESP8266 dev boards is used for provisioning
+        and recovery, while the board&apos;s Wi-Fi transport handles runtime control.
       </p>
       <h3>Any STM32F042 board</h3>
       <p>

@@ -227,6 +227,10 @@ export default function InstallDocPage() {
           directly by EMWaver, so you can get started without building anything from the lineup.
         </li>
         <li>
+          <strong>ESP8266 dev board</strong> — supported for Wi-Fi control with USB-serial setup
+          and recovery on common ESP8266 boards.
+        </li>
+        <li>
           <strong>EMWaver Shield</strong> (ESP32-S3) — a shield-style carrier for an ESP32-S3
           dev module, with IR TX/RX, radio-module support, and expanded headers. Also
           compatible with other ESP32-family boards that share the same pinout.{" "}
@@ -246,7 +250,7 @@ export default function InstallDocPage() {
       <p>
         A supported board must be running the fixed EMWaver firmware for its target before the apps can
         control hardware. Use the bundled firmware image for your board class — ESP32, ESP32-S2,
-        ESP32-S3, or STM32F042. Do not build custom firmware as part of the normal setup flow.
+        ESP32-S3, ESP8266, or STM32F042. Do not build custom firmware as part of the normal setup flow.
       </p>
       <ul>
         <li><strong>Pre-flashed board</strong>: skip this step and connect directly.</li>
@@ -260,12 +264,12 @@ export default function InstallDocPage() {
 
       <h2>4. Connect</h2>
       <ul>
-        <li>Plug the flashed board into your phone (USB-C) or desktop (USB).</li>
+        <li>Plug the flashed board into your phone (USB-C) or desktop (USB), or use the ESP8266 USB-serial setup path before Wi-Fi runtime.</li>
         <li>Open the EMWaver app — the device should appear automatically.</li>
       </ul>
       <blockquote>
-        The board communicates over USB MIDI SysEx. No drivers needed — it enumerates as a
-        standard USB MIDI device.
+        USB-first boards communicate over USB MIDI SysEx. ESP8266 boards use USB-serial for setup
+        and Wi-Fi for runtime control.
       </blockquote>
 
       <h2>5. Run local scripts</h2>

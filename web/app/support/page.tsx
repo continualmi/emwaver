@@ -80,7 +80,7 @@ export default function SupportPage() {
                 a: (
                   <>
                     Currently supported targets include ESP32-family dev boards
-                    (ESP32, ESP32-S2, and ESP32-S3) and the EMWaver Shield carrier. The EMWaver lineup of custom boards is listed
+                    (ESP32, ESP32-S2, and ESP32-S3), ESP8266 dev boards, and the EMWaver Shield carrier. The EMWaver lineup of custom boards is listed
                     in the{" "}
                     <Link href="/docs/hardware" className="text-[color:var(--sky)] underline decoration-[color:var(--link-underline)] hover:decoration-[color:var(--link-underline-hover)]">
                       hardware docs
@@ -89,13 +89,13 @@ export default function SupportPage() {
                     <Link href="/build" className="text-[color:var(--sky)] underline decoration-[color:var(--link-underline)] hover:decoration-[color:var(--link-underline-hover)]">
                       Build page
                     </Link>
-                    . More targets are added as firmware ports are completed.
+                    .
                   </>
                 ),
               },
               {
                 q: "Do I need to install any drivers?",
-                a: "No. Supported boards enumerate as standard USB MIDI devices over USB-C. The native apps detect them automatically — no driver installation, DFU utility, or MCU toolchain required.",
+                a: "No. USB-first boards enumerate as standard USB MIDI devices over USB-C, and ESP8266 boards use the USB-serial bridge for setup before Wi-Fi runtime. The native apps detect supported local transports without an MCU toolchain.",
               },
               {
                 q: "How do firmware updates work?",

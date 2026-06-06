@@ -16,6 +16,12 @@ const SUPPORTED_MCUS = [
     tags: ["Wi-Fi", "BLE", "USB"],
   },
   {
+    name: "ESP8266",
+    description:
+      "ESP8266 boards are supported as Wi-Fi EMWaver targets with USB-serial setup and recovery. They are a compact path for low-cost networked GPIO, ADC, PWM, and SPI workflows.",
+    tags: ["Wi-Fi", "USB-serial"],
+  },
+  {
     name: "STM32F042",
     description:
       "The STM32 MCU behind the classic host-backed EMWaver boards. Used for compact USB-first designs such as GPIO, IR, ISM, and related module-driven variants.",
