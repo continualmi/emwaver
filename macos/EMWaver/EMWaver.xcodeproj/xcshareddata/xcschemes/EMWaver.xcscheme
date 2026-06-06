@@ -74,13 +74,6 @@
             ReferencedContainer = "container:EMWaver.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <EnvironmentVariables>
-         <EnvironmentVariable
-            key = "EMWAVER_AGENT_ENDPOINT"
-            value = "http://127.0.0.1:8090/api/mgpt/responses"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-      </EnvironmentVariables>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"

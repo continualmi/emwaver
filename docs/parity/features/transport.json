@@ -180,8 +180,8 @@
               ]
             },
             {
-              "file": "windows/EMWaver/MainWindow.xaml.cs",
-              "contains": "Connect Wi-Fi|Wi-Fi\\.\\.\\.|ConnectWiFiAsync"
+              "file": "windows/EMWaver/Views/DeviceConnectionWindow.xaml.cs",
+              "contains": "ConnectWiFiAsync|Wi-Fi devices"
             }
           ]
         },
@@ -275,10 +275,9 @@
           "status": "required",
           "evidence": [
             {
-              "file": "windows/EMWaver/Pages/DevicePage.xaml",
+              "file": "windows/EMWaver/Views/DeviceConnectionWindow.xaml",
               "contains": [
-                "Connect Wi-Fi",
-                "Connect Selected Wi-Fi",
+                "Wi-Fi Setup",
                 "Send Wi-Fi Setup",
                 "Clear Setup"
               ]

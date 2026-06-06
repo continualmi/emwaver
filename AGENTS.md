@@ -23,10 +23,10 @@ Implementation details belong in folder-level `README.md` files.
 
 ## 1) Product Vision (core)
 
-EMWaver is a **local-first**, open-source, AI-assisted electronics platform by **Continual MI**. It turns supported MCU boards into a scriptable hardware lab through local apps, managed firmware, and optional Agent assistance.
+EMWaver is a **local-first**, open-source electronics platform by **Continual MI**. It turns supported MCU boards into a scriptable hardware lab through local apps, managed firmware, JavaScript scripts, native script UI, and a desktop MCP bridge for external agents.
 
 Core direction:
-- **Business model:** open-source core plus paid Agent API usage. Revenue should come from the Agent service, not from accounts, hosted cloud control, or gating local hardware access.
+- **Business model:** open-source core plus future paid Continual/MGPT model inference. Revenue should come from model/API usage and bundled Continual offerings, not from accounts, hosted cloud control, or gating local hardware access.
 - **No EMWaver accounts/cloud:** EMWaver itself should not require or maintain product accounts, cloud activation, hosted relay, cloud script storage, cloud sync, or subscription checks for core use.
 - **Local-first core:** users should be able to run local JavaScript scripts without a Continual MI account, EMWaver account, cloud activation, hosted relay, or subscription check.
 - **Local data ownership:** scripts and core local state should live on the user's device. Do not add cloud script storage, cloud script sync, or account-backed local project storage to the open-source core path.
@@ -36,21 +36,22 @@ Core direction:
 - **Hardware repo direction:** EMWaver should become a single open-source monorepo, with imported hardware design repos preserved under `hardware/`.
 - **Firmware:** per-board firmware targets managed by the platform. Users never build or flash firmware manually; apps should handle firmware setup and updates where practical.
 - **UX:** script-first hardware exploration (instant run; no user build/flash loop).
-- **AI:** Agent-assisted workflows are first-class and are the primary paid product direction. Each app may keep its own Agent interface/runtime, but those runtimes are API clients. The only planned network interface is an optional API key to a future Continual MI/MGPT Agent backend.
-- **Client surfaces:** iOS and Android (V1 primary), macOS (development/advanced surface), Windows (deferred to post-V1).
-- **UX:** script-first hardware exploration (instant run; no user build/flash loop). The phone is the primary device — users carry it already, and the Agent is the interface.
-- **Distribution:** mobile store distribution for iOS and Android (V1 primary), with Android APK as an alternate direct install path. macOS DMG for development/advanced use. Windows deferred past V1.
+- **AI:** EMWaver no longer ships a bespoke in-app Agent runtime. Desktop apps expose a local MCP tool surface so external agents can drive the existing engine, scripts, transports, and console output. Mobile apps stay local script runners without an MCP listener.
+- **Client surfaces:** iOS and Android (V1 primary), macOS and Windows (active desktop surfaces), Linux (native desktop app in progress).
+- **UX:** script-first hardware exploration (instant run; no user build/flash loop). The phone is the primary device users carry already; desktop apps are the advanced workbench and MCP bridge.
+- **Distribution:** mobile store distribution for iOS and Android (V1 primary), with Android APK as an alternate direct install path. macOS DMG, Windows installer/ZIP, and staged Linux packages cover desktop use.
 
 ---
 
 ### V1 Platform Priorities
 
-V1 is mobile-first. The phone is the tricorder — the device users always have with them. The Agent is the interface; users don't need a desktop editor if the Agent writes and debugs the scripts.
+V1 is mobile-first. The phone is the portable hardware lab users always have with them. Desktop apps remain the advanced bench surface and the place where external agents attach through MCP.
 
 - **iOS** — V1 primary. App Store distribution. USB-C iPhones and iPads for direct board connection.
 - **Android** — V1 primary. Google Play + APK direct download. USB host mode on all modern Android devices. Industrial field-service path through rugged Android devices (Zebra, Honeywell, Samsung Rugged).
 - **macOS** — V1 development/advanced surface. Firmware flashing, multi-device bench testing, long automation runs. DMG distribution.
-- **Windows** — deferred past V1. Source exists, parity contracts are written, but the WinUI app requires a separate Windows toolchain that blocks progress on this machine.
+- **Windows** — active desktop surface. Installer/ZIP distribution; validation still requires a Windows workstation/toolchain.
+- **Linux** — native Rust + GTK4/libadwaita app in progress. Linux is back as a native app, not as a browser/daemon path.
 
 Firmware strategy: boards should arrive pre-flashed or require a one-time desktop flash. After that, daily use is phone-only.
 
@@ -59,8 +60,8 @@ Firmware strategy: boards should arrive pre-flashed or require a one-time deskto
 ### The Core Thesis
 
 1. **Local-first electronics platform** — EMWaver uses local apps as the default hardware-control path.
-2. **Software-first platform** — the product is the software stack (apps, firmware, runtime, scripts, and Agent), not the hardware. Users supply their own supported MCU board.
-3. **AI-first platform** — agents are first-class for building/testing scripts and interacting with runtime UI.
+2. **Software-first platform** — the product is the software stack (apps, firmware, runtime, scripts, script UI, and MCP tool surface), not the hardware. Users supply their own supported MCU board.
+3. **Agent-ready platform** — agents are first-class as external clients of the local MCP surface, not as bespoke app runtimes.
 4. **Best beginner experience** — buy a cheap supported board, install EMWaver, plug in, and start exploring without accounts, cloud activation, or firmware toolchains.
 
 ### Explicit Tradeoffs
@@ -78,10 +79,10 @@ We intentionally give up:
 
 - Launch without hardware supply chain.
 - Adoption from day one through an open-source local core.
-- Revenue through paid Agent API usage.
+- Revenue through paid Continual/MGPT inference and bundled model access.
 - Multiple supported boards, one unified UX.
 - Mobile-first platforms (iOS, Android) — the device users already carry.
-- Agent-driven exploration loops.
+- Agent-driven exploration loops through the desktop MCP bridge.
 - Larger addressable market (every compatible board owner, every phone owner).
 - Industrial field adoption path through Android rugged devices (Zebra, Honeywell, Samsung Rugged).
 
@@ -89,13 +90,13 @@ We intentionally give up:
 
 ## 3) Important Strategic Notes (high-level)
 
-### Business model (open-source core + Agent API)
+### Business model (open-source core + model inference)
 
 - **Open-source core**: local runtime, firmware payloads, scripts, and hardware support should be useful without payment or account sign-in.
-- **Paid Agent API**: the EMWaver Agent is the primary paid product. It writes, debugs, explains, and improves local JavaScript scripts using server-side Continual MI/MGPT instructions and metered API usage.
-- **No EMWaver cloud product**: do not plan accounts, hosted relay, sync, teams, classrooms, remote fleet behavior, or cloud dashboards as part of the EMWaver core. Any future network service belongs to the focused Continual MI/MGPT Agent backend unless a later product decision explicitly reopens cloud services.
+- **Paid inference/API**: future paid value comes from Continual/MGPT models that are good at using the EMWaver MCP tools, writing scripts, debugging electronics workflows, and interpreting hardware traces.
+- **No EMWaver cloud product**: do not plan accounts, hosted relay, sync, teams, classrooms, remote fleet behavior, or cloud dashboards as part of the EMWaver core. Any future network service belongs to focused Continual/MGPT inference unless a later product decision explicitly reopens cloud services.
 - **No cloud script storage by default**: local scripts should be opened/saved from the user's filesystem or app-local storage. Do not build script sync as a default product assumption.
-- **AI credits/usage**: Agent usage remains a metered resource.
+- **AI credits/usage**: model inference remains a metered resource.
 - **Hardware is optional**: the EMWaver board is a future premium option ("coming soon"), not a launch dependency. Third-party supported boards are first-class.
 
 ### Device trust model
@@ -103,7 +104,7 @@ We intentionally give up:
 - Local hardware control must not be gated by backend activation or account ownership.
 - EMWaver should move away from hardware-UID identity as a product requirement. Local control should work immediately without reading immutable board IDs for activation, minting, ownership, device limits, or gates.
 - Do not introduce hosted device registration, device limits, device minting, or backend ownership checks for core EMWaver hardware control.
-- Backend enforcement applies only to the paid Agent API, not to the open-source local core.
+- Backend enforcement applies only to paid model/API usage, not to the open-source local core.
 
 (Implementation details live in `macos/README.md`; public static web pages live in `../society` under `/emwaver`.)
 
@@ -114,20 +115,21 @@ We intentionally give up:
 - Adding a new supported board = porting firmware + adding its binary to the app bundle.
 - Users see a unified experience regardless of which board they use.
 
-### Agent direction (model strategy)
+### Agent / MCP direction
 
-- EMWaver product language should refer to the **Agent**, not to an EMWaver-specific model line.
-- Near-term EMWaver AI is served by the Continual MI/MGPT backend rather than by prompts or inference logic shipped in this repo.
-- Conversational chat and single-turn control operation are product modes of the Agent, not separate branded model categories.
-- App-level Agent runtimes should collect local script/device/UI/error context and send it to the Agent API. They must not embed production system prompts, proprietary JavaScript instruction packs, hidden board recipes, provider-routing logic, or metering policy.
-- EMWaver Agent clients must use the public/external Agent API surface, such as `/api/mgpt/...` on the configured public host. They must not call MDL-only `/backend-api/...` routes. Those routes are reserved for MDL's trusted internal integration path.
-- Do not change MDL gameplay, MDL `backend-api` behavior, or MGPT internals merely to make an EMWaver Agent flow work. Treat public Agent API failures as public API contract issues unless the user explicitly asks for MGPT/MDL backend implementation work.
+- EMWaver no longer ships or maintains a bespoke Agent chat/runtime in each native app.
+- Desktop apps should expose an in-app local MCP server as the canonical agent interface. The MCP surface routes into the same script engine, console capture, device transports, and filesystem script roots used by the human UI.
+- MCP belongs on desktop only for now: macOS, Windows, and native Linux. iOS and Android keep user script import/app-local storage but do not host an external listening endpoint.
+- MCP tools should be model-friendly and structured: clear names, typed arguments, predictable JSON results, and recovery-oriented error messages.
+- Local MCP access must remain local-first and user-controlled. It must not require EMWaver accounts, cloud activation, backend ownership checks, hosted relay, or paid local hardware access.
+- Do not ship production system prompts, proprietary JavaScript instruction packs, hidden board recipes, provider-routing logic, or metering policy in this repo.
+- Do not change MDL gameplay, MDL `backend-api` behavior, or MGPT internals merely to make an EMWaver tool flow work. External model/API work belongs at the public inference boundary unless the user explicitly asks for MGPT/MDL backend implementation work.
 
 ### Distribution and release posture
 
 - Mobile is V1 primary: App Store for iPhone/iPad, Google Play for Android, with Android APK as an alternate direct install path.
 - macOS DMG for development and advanced use.
-- Windows deferred past V1; installer EXE and ZIP paths defined but not active.
+- Windows installer EXE and ZIP paths are active desktop distribution targets. Linux packaging is staged with the native app.
 - GitHub Releases may host preview downloadable artifacts; the public install page should present mobile first.
 - EMWaver uses one shared product version across native platforms. Keep the root `VERSION` file, iOS/macOS marketing versions, Android versionName, Linux package version, and Windows app/installer version aligned.
 - Release tags use bare SemVer `X.Y.Z` and should match the root `VERSION` value. Direct-download release workflows are run manually and update same-named assets on the existing GitHub Release for that tag; App Store and Google Play submissions remain separate workflows because they have store-specific review and track state.
@@ -170,10 +172,8 @@ Use the local README first when working in a folder:
 - `README.md` (repo root) — public open-source overview, website links, repo map, and doc index
 - `README.txt` (repo root) — compatibility pointer to `README.md`
 - `docs/CURRENT.md` — current-state orientation: what the repo is, what's active, what's archived
-- `docs/DROP_GATEWAY_AND_LINUX.md` — decision record for Gateway/CLI/Linux removal (May 2026)
-- `docs/AGENT_API.md` — paid Agent API-key and endpoint direction
-- `docs/AGENT_EVAL_RUNTIME.md` — current Agent automation model: named hardware primitive tools (spi_transfer, gpio_read/write, analog_read)
-- `docs/AGENT_RUNTIME_AND_TOOLS.html` — visual Agent runtime/tooling document
+- `docs/AGENT_TO_MCP_MIGRATION.html` — current Agent/MGPT removal and desktop MCP migration plan
+- `docs/MCP_CONTRACT.md` — desktop MCP tool contract, transport/auth posture, and result rules
 - `docs/LINUX_MACOS_PARITY_AUDIT.md` — working checklist of macOS-vs-Linux native parity gaps
 - `docs/ESP32_WIFI_REMOTE_ACCESS.md` — user-owned LAN/VPN remote access for ESP32 Wi-Fi
 - `docs/ESP32_WIFI_TRANSPORT_AUDIT.md` — ESP32 Wi-Fi transport audit
@@ -184,10 +184,10 @@ Use the local README first when working in a folder:
 - `docs/RELEASES.md` — release workflows, signing expectations, and public preview assets
 - `docs/SIMULATOR.md` — shared device simulator for cross-platform testing
 - `docs/parity/` — cross-platform feature parity contracts (agent, transport, scripting, firmware, local-first)
-- `docs/archive/` — archived docs from the Gateway/CLI/Linux era and superseded script/UI planning passes
+- `docs/archive/` — archived docs from superseded Gateway/CLI, Agent/MGPT, and script/UI planning passes
 - `videos/README.md` — video planning, direction, lightweight production rules, and writing guidance
 - `.agents/skills/` — canonical EMWaver Codex skills for repo-local product guidance
-- `.agents/skills/archive/` — archived skills (Gateway/CLI)
+- `.agents/skills/archive/` — archived skills for removed workflows
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
 - `esp/README.md` — ESP32 firmware workspace, transport/runtime direction, and internal build notes
 - `../society/README.md` — Continual MI static site; EMWaver public pages live under `/emwaver`
@@ -212,6 +212,7 @@ components (`Picker`, `Button`, `Card`, `Tile`, `Grid`, `Scroll`,
 | Platform | Script engine | UI renderer location |
 | --- | --- | --- |
 | **Windows** | ClearScript (V8) | `windows/EMWaver/Scripting/Render/ScriptRenderer.cs` |
+| **Linux** | V8 / runtime crate | `linux/crates/emwaver-linux-runtime/` and `linux/crates/emwaver-linux-app/` |
 | **macOS** | JavaScriptCore | `macos/EMWaver/EMWaver/Scripting/Render/` |
 | **iOS** | JavaScriptCore | `ios/EMWaver/Scripting/Render/` |
 | **Android** | V8 (J2V8) | `android/app/src/main/java/com/continualmi/emwaver/scripting/render/` |
@@ -237,7 +238,7 @@ components (`Picker`, `Button`, `Card`, `Tile`, `Grid`, `Scroll`,
 
 ## 6) Repo Overview (high level)
 
-- `android/`, `ios/`, `macos/`, `windows/` — native client apps (self-contained, local-first).
+- `android/`, `ios/`, `macos/`, `windows/`, `linux/` — native client apps (self-contained, local-first).
 - `apple/` — shared Swift package (cross-platform Apple modules).
 - `stm/` — STM32 firmware and firmware-related tooling.
 - `esp/` — ESP32 firmware workspace for autonomous and multi-transport board targets.
@@ -256,12 +257,12 @@ components (`Picker`, `Button`, `Card`, `Tile`, `Grid`, `Scroll`,
 
 1. **Managed transport architecture**: USB is first-class for host-backed boards, and the platform may also support BLE/Wi-Fi for board classes designed around them.
 2. **Platform-managed runtime model**: heavy logic should live in host/apps or backend unless a supported autonomous board class explicitly owns that responsibility.
-3. **Software-first business**: revenue comes from paid Agent/API usage through Continual MI/MGPT — not hardware sales, EMWaver accounts, hosted cloud control, or paid local device access.
+3. **Software-first business**: revenue comes from paid Continual/MGPT model/API usage — not hardware sales, EMWaver accounts, hosted cloud control, or paid local device access.
 4. **Local hardware access is free/open**: core local JavaScript execution must not require account sign-in, cloud activation, subscription checks, or hosted relay access.
 5. **Local scripts stay local by default**: no required cloud script storage, cloud project sync, account-backed script library, or hosted file dependency in the core local flow.
 6. **Script-first user experience**: avoid workflows that force end users through MCU toolchains.
 7. **Platform-appropriate distribution**: desktop uses direct installers/downloads; mobile uses app stores, with Android APK available as an alternate path.
-8. **Backend authority is Agent-only**: do not put local core hardware access behind backend policy, device registration, subscription checks, or account state.
+8. **Backend authority is inference-only**: do not put local core hardware access behind backend policy, device registration, subscription checks, or account state.
 9. **No activation gate**: local board access is not governed by plan entitlements or hosted device ownership.
 10. **Multi-board support**: the platform supports multiple MCU targets behind a unified UX.
 11. **CI/Releases policy**: GitHub Actions are for platform CI and optional deployment; public static pages deploy from `../society`, and GitHub Releases are not end-user app distribution for apps.
@@ -275,7 +276,7 @@ components (`Picker`, `Button`, `Card`, `Tile`, `Grid`, `Scroll`,
 - When porting or matching behavior from another supported platform, read the actual source implementation for the reference platform first, not just docs or summaries. Match the real architecture and user-visible behavior; do not invent platform-local shims, fake previews, substitute UI, or prototype-only approximations when a working implementation already exists elsewhere in the repo.
 - Keep AGENTS concise; do not re-expand it with subsystem internals.
 - Do not move secrets into repo docs.
-- Keep local runtime work account-free and cloud-free. The only planned network integration is the paid Agent API key flow to the future Continual MI/MGPT backend.
+- Keep local runtime work account-free and cloud-free. Desktop MCP must be local and user-controlled; any paid model/API integration stays outside the core hardware-control path.
 - Keep imported hardware repos under `hardware/` and preserve history where practical.
 
 Workflow:

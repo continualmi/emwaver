@@ -83,26 +83,21 @@ Representative files:
 
 ## 2.6 `EMWaverScriptsUI`
 
-Higher-level shared UI for script workflows, code editor, and agent chat integrations.
+Higher-level shared UI for script workflows and code editor surfaces.
 
 Representative files:
 - `ScriptsRootView.swift`
 - `EmwCodeEditor.swift`
 - `SignalViewerView.swift`
-- `AgentChat*` files
+- legacy `AgentChat*` files targeted for removal during the Agent-to-MCP migration
 
 `ScriptsRootView` supports an optional host-provided script run hook. macOS uses this to create local script sessions outside the shared single-preview manager while iOS keeps the default single-preview behavior.
 
-Agent configuration direction:
-- the Apple shared Agent UI uses a host-provided Agent endpoint plus user-provided API key,
-- app clients call the public MGPT stateful Responses API for Agent chat, using `/api/mgpt/...` rather than MDL-only `/backend-api/...` routes,
-- on first Agent send, the shared UI creates a persistent universe from the server-side stored prompt `emwaver-prompt`,
-- subsequent turns send only `universe` and `userInput` to MGPT,
-- the package should keep the Agent runtime/interface, collect local script/device/UI/error context, and authenticate with an API key stored locally/keychain-backed by the host app,
-- the package must not bundle production Agent prompts, private JavaScript instructions, provider routing, or metering policy.
-- `EMWaverScriptsUI/Resources/emwaver-prompt.txt` is gitignored and internal-only. Open-source builds without the file should use the public Agent API's server-side stored prompt.
-- The shared Agent composer follows desktop chat conventions on macOS: Return sends the message and Shift-Return inserts a newline.
-- During a multi-step Agent tool turn, the client sends cumulative in-flight tool results back to MGPT so each continuation sees the full active tool transcript while prior completed turns remain server-side in the MGPT universe.
+Agent-to-MCP migration direction:
+- remove the shared Apple Agent UI/runtime, MGPT endpoint client, local Agent key model, and universe/chat persistence,
+- keep script run hooks, console capture, script storage, and rendered script UI reusable across iOS and macOS,
+- macOS external-agent access should be implemented in the macOS app through a local MCP server, not in this shared mobile/desktop UI package,
+- iOS keeps local script import and app-local execution without hosting an MCP listener.
 
 Also bundles package resources, including firmware payload under:
 - `Resources/Firmware/emwaver.bin`

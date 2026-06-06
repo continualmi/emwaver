@@ -5,25 +5,13 @@ struct SettingsView: View {
     @ObservedObject var device: MacUSBManager
     @ObservedObject var appUpdater: MacAppUpdateController
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
     @AppStorage(MacUSBManager.transportDebugLoggingEnabledDefaultsKey) private var transportDebugLoggingEnabled = true
 
-    private let mgptApiURL = URL(string: "https://mdl.continualmi.com/mgpt-api")!
     private let updateFeedURL = URL(string: "https://emwaver.ai/updates/macos/appcast.xml")!
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Agent") {
-                    Text("Add an MGPT API key to enable Agent replies. Local scripts and hardware control work without a key.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Button("MGPT API Platform") {
-                        openURL(mgptApiURL)
-                    }
-                }
-
                 Section("Device access") {
                     Text("Local scripts and hardware control work immediately.")
                         .font(.caption)

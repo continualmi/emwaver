@@ -9,19 +9,6 @@
         app:showAsAction="always" />
 
     <item
-        android:id="@+id/action_agent"
-        android:icon="@drawable/llm"
-        android:title="Agent"
-        app:showAsAction="always" />
-
-    <item
-        android:id="@+id/action_sign_in"
-        android:icon="@drawable/ai_account"
-        android:title="Agent Key"
-        android:visible="false"
-        app:showAsAction="always" />
-
-    <item
         android:id="@+id/action_open_settings"
         android:title="@string/action_open_settings"
         app:showAsAction="never" />

@@ -62,7 +62,7 @@ Use EMWaver when you want to:
 - build instant UI panels for modules directly from scripts;
 - carry a compact USB-C hardware lab that plugs directly into phones, tablets, and laptops;
 - use BLE for cable-free sessions and Wi-Fi for networked or remote hardware control;
-- let an Agent inspect hardware, run primitive tools, probe modules, debug failures, and help with authorized security research.
+- let external agents inspect hardware through the desktop MCP bridge when the user enables it.
 
 ## What Works Today
 
@@ -190,11 +190,11 @@ Scripts and hardware control run locally by default.
 
 Wi-Fi-capable boards can also be controlled over a local network or through user-owned remote access such as VPN, Tailscale, SSH tunneling, or port forwarding.
 
-## Agent-Ready Hardware Interface
+## Desktop MCP Hardware Interface
 
-EMWaver's Agent is more than a script-writing assistant. When enabled, it can work through the same hardware interface exposed to scripts: named primitives such as `spi_transfer`, GPIO reads/writes, analog reads, and board/module probes. That lets the Agent inspect connected hardware, test assumptions, debug wiring or protocol failures, and assist with authorized security research.
+EMWaver is migrating away from in-app Agent chat/runtime code. Desktop apps will expose a local MCP bridge, backed by the same script engine and hardware interface exposed to scripts: `run_script`, `list_scripts`, `spi_transfer`, GPIO reads/writes, analog reads, and board/module probes.
 
-The local scripting and hardware-control path remains useful without Agent assistance. Agent features may use an API key and network access when enabled by the user. Scripts and device control remain local by default.
+The local scripting and hardware-control path remains useful without an external model. MCP access is local, desktop-only, and user-controlled; scripts and device control remain local by default.
 
 ## Documentation
 

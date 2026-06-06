@@ -2,7 +2,7 @@
 
 Native macOS EMWaver application (Swift/SwiftUI + Xcode).
 
-This is the desktop Apple host app for local USB/BLE/Wi-Fi workflows, Agent client UI, and firmware/update UX on macOS.
+This is the desktop Apple host app for local USB/BLE/Wi-Fi workflows, desktop MCP migration work, and firmware/update UX on macOS.
 
 The local-first rule is that connected supported boards can run local JavaScript scripts immediately through the native app. Hardware UIDs may be used for local labels/diagnostics, not product activation or ownership gates.
 
@@ -31,19 +31,18 @@ Entry points:
 
 ## 2) Main code areas
 
-## 2.1 Auth and account
+## 2.1 Agent removal and MCP migration
 
 `macos/EMWaver/EMWaver/Auth/`:
-- local Agent API-key manager + model,
+- legacy Agent API-key manager + model,
 - keychain store,
-- Agent API-key entry UI.
+- legacy Agent API-key entry UI targeted for removal.
 
-Auth UX rule:
-- Agent API-key entry must remain available even when no EMWaver device is connected, so users can configure optional Agent replies independently of local hardware control.
-- supported boards should enter local script/update workflows without a manual claim button or hosted registration step.
-- native clients use a user-provided Agent API key and endpoint.
-- the app stores the API key in Keychain and uses it as the bearer credential for the configured Agent endpoint.
-- local scripts, flashing, and device control must not depend on this key.
+Migration rule:
+- remove the in-app Agent API-key UI/runtime and MGPT endpoint plumbing,
+- keep supported boards entering local script/update workflows without a manual claim button or hosted registration step,
+- route external-agent access through the future local in-app MCP server instead of app-level Agent chat,
+- local scripts, flashing, and device control must not depend on any key.
 
 ## 2.2 Device + transport + host management
 
@@ -96,8 +95,8 @@ Transport behavior:
 - BLE carries the same EMWaver SysEx/superframe payload as USB MIDI; opcodes and command behavior must stay shared in firmware and scripts.
 
 Runtime boundary:
-- The macOS app is self-contained and owns its native script UI, local transport managers, Agent surface, and firmware/update flows.
-- Do not reintroduce the removed Gateway/browser/CLI control plane as the macOS runtime path.
+- The macOS app is self-contained and owns its native script UI, local transport managers, MCP bridge surface, and firmware/update flows.
+- Do not add a separate local daemon or CLI control plane as the macOS runtime path. The desktop MCP server should live in the running app.
 
 Local Debug builds create a derived-data-only ESP helper wrapper from `tools/emwaver-esp-helper/emwaver_esp_helper.py` when PyInstaller is unavailable. Release packaging should still use a frozen helper bundle.
 
@@ -106,7 +105,7 @@ Desktop app updates:
 - the Sparkle feed URL is `https://emwaver.ai/updates/macos/appcast.xml`;
 - release builds need a real Sparkle EdDSA public key in `SPARKLE_PUBLIC_ED_KEY`, with release artifacts signed by the matching private key;
 - the macOS release workflow signs the app/DMG with a Developer ID Application certificate, notarizes the DMG with App Store Connect API credentials, staples the ticket, then generates the Sparkle appcast from the notarized DMG;
-- app updates are independent of EMWaver accounts, Agent API keys, and local hardware access.
+- app updates are independent of EMWaver accounts, model/API keys, and local hardware access.
 
 ## 2.3 UI surfaces
 
@@ -123,14 +122,11 @@ Script sessions:
 - Running sessions appear inline beside their script names, and each row owns its stop control.
 - Each local session owns its own `ScriptPreviewManager` and targets the selected local device id through the existing macOS transport bridge.
 
-Agent configuration on macOS:
-- local development loads repo-root `.env` into process environment at app startup,
-- the macOS Agent interface/runtime calls the public MGPT responses endpoint configured by `EMWAVER_AGENT_ENDPOINT` or `CONTINUAL_AGENT_ENDPOINT`,
-- the endpoint must use the external `/api/mgpt/...` route family, not MDL-only `/backend-api/...` routes,
-- the shared Apple Agent client creates a persistent MGPT universe from stored prompt `emwaver-prompt` and then sends `universe` + `userInput`,
-- the shared Apple Agent client sends the public `emw-1-lite-frozen` model alias for Agent replies,
-- provider selection, private prompts, tool policy, and metering belong server-side on MGPT,
-- the macOS client should use a user-provided Agent API key stored locally/keychain-backed, and local scripts/hardware must work without it.
+Desktop MCP direction on macOS:
+- the macOS app should expose a local, user-enabled MCP server over loopback Streamable HTTP,
+- MCP tools route into the existing script engine, console capture, script storage, and device transports,
+- the planned tool surface includes `list_scripts`, `read_script`, `run_script`, `write_script`, `device_state`, `spi_transfer`, `gpio_read`, `gpio_write`, and `analog_read`,
+- production model prompts, provider routing, and metering do not belong in the macOS app.
 
 ## 3) Firmware update, optional account setup, and tooling
 
@@ -149,7 +145,7 @@ The macOS app bundles the canonical committed firmware images from `firmware/`. 
 Current macOS responsibility in this area:
 - local script execution for connected supported boards without account/backend activation gates,
 - first-party firmware setup/update flows for supported devices,
-- local Agent key entry for optional Agent replies,
+- desktop MCP bridge work for external agents,
 - avoid requiring supported-board hardware UID reads in Run Mode before local use,
 - bundled or operator-selected custom firmware images,
 - operator-readable progress and diagnostic logging for update sessions.

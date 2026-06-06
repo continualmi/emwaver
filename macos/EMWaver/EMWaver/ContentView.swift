@@ -15,16 +15,12 @@ struct ContentView: View {
     @ObservedObject var hostSessions: HostSessionManager
     @ObservedObject var scriptSessions: MacScriptSessionManager
     @ObservedObject var appUpdater: MacAppUpdateController
-    @EnvironmentObject private var auth: AuthenticationManager
     @EnvironmentObject private var appRouter: AppRouter
-    @Environment(\.openURL) private var openURL
 
     let previewManager: ScriptPreviewManager
 
     @State private var showingSettings: Bool = false
     @State private var autoFirmwarePromptKey: String? = nil
-
-    private let mgptApiURL = URL(string: "https://mdl.continualmi.com/mgpt-api")!
 
     private var toolbarDeviceStatus: (icon: String, text: String) {
         if device.isConnected {
@@ -118,22 +114,14 @@ struct ContentView: View {
         ScriptsRootView(
             previewManager: previewManager,
             device: scriptDeviceBridge,
-            agentEndpointProvider: {
-                auth.agentEndpointConfig
-            },
             hostStatusSink: { running, name in
                 // Treat "preview showing" as "script running" on macOS.
                 hostSessions.setScriptStatus(running: running, activeScriptName: name)
-            },
-            agentEnabled: auth.isSignedIn,
-            onRequestAgentUpgrade: {
-                auth.isSignInSheetPresented = true
             },
             onRequestOpenSettings: {
                 showingSettings = true
             },
             leadingHeaderItem: nil,
-            agentLeadingToolbarItem: AnyView(agentKeyToolbarItem),
             navigationTitleAccessoryText: nil,
             onRunScript: { request in
                 scriptSessions.run(request)
@@ -169,10 +157,6 @@ struct ContentView: View {
                 localDevicePicker
             }
         }
-        .sheet(isPresented: $auth.isSignInSheetPresented) {
-            SignInSheet()
-                .environmentObject(auth)
-        }
         .sheet(isPresented: $appRouter.isDeviceSheetPresented) {
             DeviceConnectionSheet(
                 device: device,
@@ -189,10 +173,8 @@ struct ContentView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView(device: device, appUpdater: appUpdater)
         }
-        // Agent lives in the right-side drawer (ScriptsRootView) on macOS.
         .task {
             scriptSessions.attach(device: device)
-            await auth.waitForInitialRestore()
             firmwareUpdater.refreshDfuPresence()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                 triggerAutomaticFirmwarePromptIfNeeded()
@@ -347,43 +329,6 @@ struct ContentView: View {
         }
     }
 
-    @ViewBuilder
-    private var agentKeyToolbarItem: some View {
-        if auth.isSignedIn {
-            Menu {
-                Text("Saved locally")
-                    .foregroundStyle(.secondary)
-
-                Button("Manage Key…") {
-                    auth.isSignInSheetPresented = true
-                }
-
-                Button {
-                    openURL(mgptApiURL)
-                } label: {
-                    Label("MGPT API Platform", systemImage: "globe")
-                }
-
-                Divider()
-
-                Button(role: .destructive) {
-                    Task { await auth.removeKey() }
-                } label: {
-                    Text("Remove Key")
-                }
-            } label: {
-                Image(systemName: "key.fill")
-            }
-            .help("Manage Agent API key")
-        } else {
-            Button {
-                auth.isSignInSheetPresented = true
-            } label: {
-                Image(systemName: "key.slash")
-            }
-            .help("Set up Agent API key")
-        }
-    }
 }
 
 #Preview {
@@ -395,6 +340,5 @@ struct ContentView: View {
         appUpdater: MacAppUpdateController(),
         previewManager: ScriptPreviewManager()
     )
-    .environmentObject(AuthenticationManager())
     .environmentObject(AppRouter())
 }

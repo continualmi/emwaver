@@ -1,6 +1,6 @@
 ---
 name: emwaver-windows
-description: Use when working on the EMWaver Windows 11 app, including WinUI pages, USB and device services, board-aware firmware update flows, self-contained local runtime behavior, Agent API key UI, or macOS parity work for local-first behavior.
+description: Use when working on the EMWaver Windows 11 app, including WPF pages, USB and device services, board-aware firmware update flows, self-contained local runtime behavior, desktop MCP migration, or macOS parity work for local-first behavior.
 ---
 
 # EMWaver Windows
@@ -28,7 +28,7 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/windows`](/Use
 - Windows is intended to track macOS parity for local device control and board-aware firmware updates.
 - Local scripts, local device control, and firmware update flows must not require accounts, activation, hardware UID reads, minting, claiming, device limits, or hosted relay.
 - STM32 and ESP32-S3 use different update paths; keep the app board-aware.
-- Avoid Pro/account language in user-facing core UI. Optional Agent inference should be described as an Agent API key.
+- Avoid Pro/account language in user-facing core UI. In-app Agent/MGPT inference is migration debt; desktop external-agent access should move to MCP.
 - Treat `WindowsDeviceManager.cs` and `FirmwareUpdateManager.cs` as the first files for local transport/update issues.
 - Treat `Services/Cloud/*` as legacy or Agent-key migration debt unless a task explicitly needs the optional Agent API boundary.
 
@@ -39,13 +39,13 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/windows`](/Use
 - `Services/Cloud` and `Services/Pro` are legacy/migration surfaces and should not be pulled into core local hardware control.
 - `Pages/DevicePage*`, `Pages/HostsPage*`, and `Pages/RemoteHostControlPage*` are the main user-facing surfaces for device state and remote control.
 - `Scripting/ScriptEngine.cs`, `Scripting/PlotBufferStore.cs`, and `Scripting/Render/ScriptRenderer.cs` are the core script-runtime entry points.
-- `Services/Agent/AgentApi.cs` is the native app bridge toward the future API-key Agent endpoint.
+- `Services/Agent/*` is legacy Agent/MGPT migration debt; preserve useful primitive semantics for MCP.
 
 ## Common task routing
 
 - Device state and local transport: [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/WindowsDeviceManager.cs`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/WindowsDeviceManager.cs)
 - Firmware update flow: [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/FirmwareUpdateManager.cs`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/FirmwareUpdateManager.cs), [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Dialogs/FirmwareUpdateDialog.xaml.cs`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Dialogs/FirmwareUpdateDialog.xaml.cs)
-- Agent key or legacy hosted host control: [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/Cloud`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/Cloud)
+- Agent/MGPT removal or MCP migration: [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/Agent`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/Agent), [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Scripting`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Scripting)
 - Script UI/runtime bug: [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Scripting`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Scripting), [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Pages/ScriptsPage.xaml.cs`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Pages/ScriptsPage.xaml.cs)
 
 ## Validation posture

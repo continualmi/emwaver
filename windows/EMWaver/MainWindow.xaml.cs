@@ -109,11 +109,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private void OnAgentToggleClick(object sender, RoutedEventArgs e)
-    {
-        _scriptsView.HandleToggleAgent();
-    }
-
     private void OnStopClick(object sender, RoutedEventArgs e)
     {
         _ = _scriptsView.HandleStopRunning();

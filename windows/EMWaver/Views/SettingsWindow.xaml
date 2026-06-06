@@ -15,20 +15,6 @@
         </Grid.RowDefinitions>
 
         <StackPanel Grid.Row="0">
-            <!-- Agent section -->
-            <GroupBox Header="Agent" Padding="12" Margin="0,0,0,12">
-                <StackPanel>
-                    <TextBlock Text="Add an MGPT API key to enable Agent replies. Local scripts and hardware control work without a key."
-                               FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}"
-                               TextWrapping="Wrap" Margin="0,0,0,8" />
-                    <TextBlock>
-                        <Hyperlink NavigateUri="https://mdl.continualmi.com/mgpt-api" Click="OnMgptLinkClick">
-                            MGPT API Platform
-                        </Hyperlink>
-                    </TextBlock>
-                </StackPanel>
-            </GroupBox>
-
             <!-- Script diagnostics section -->
             <GroupBox Header="Script diagnostics" Padding="12" Margin="0,0,0,12">
                 <StackPanel>

@@ -1,10 +1,8 @@
 # Archived Docs
 
-These documents describe a previous phase of EMWaver where the Gateway (Rust backend + browser UI + CLI + Linux support) was the primary cross-platform surface.
+These documents describe previous EMWaver phases, including the old Gateway/browser/CLI surface and the superseded in-app Agent/MGPT direction.
 
-The Gateway, CLI, and Linux support were removed in May 2026. See `docs/DROP_GATEWAY_AND_LINUX.md` for the decision record.
-
-EMWaver now uses self-contained native apps: iOS, Android, macOS, Windows, with a native Linux app in progress.
+EMWaver now uses self-contained native apps: iOS, Android, macOS, Windows, with a native Linux app in progress. Desktop agent access is migrating to the in-app MCP model documented in `docs/AGENT_TO_MCP_MIGRATION.html`.
 
 The active orientation doc is `docs/CURRENT.md`.
 
@@ -22,3 +20,8 @@ The active orientation doc is `docs/CURRENT.md`.
 - `MACOS_SCRIPT_SESSIONS_UI.md` — superseded macOS session UI plan
 - `CROSS_PLATFORM_AGENT_UI_MIGRATION_PLAN.html` — superseded `.js`/`.jsx` parity plan
 - `JSX_UI_MIGRATION_PLAN.html` — superseded JSX migration plan from the older script/UI architecture
+- `AGENT_API.md` — superseded Agent API-key and MGPT endpoint plan
+- `AGENT_EVAL_RUNTIME.md` — superseded macOS Agent script-run model
+- `AGENT_RUNTIME_AND_TOOLS.html` — superseded visual Agent workflow
+- `MGPT_UNIVERSE_AGENT_PLAN.md` — superseded MGPT universe client plan
+- `AGENT.md` — superseded cross-platform Agent parity note

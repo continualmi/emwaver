@@ -50,8 +50,8 @@
               "contains": "DFU|Dfu|StartUpdate"
             },
             {
-              "file": "windows/EMWaver/Dialogs/FirmwareUpdateDialog.xaml.cs",
-              "contains": "Update EMWaver|STM32|DFU"
+              "file": "windows/EMWaver/Views/FirmwareUpdateWindow.xaml.cs",
+              "contains": "STM32|DFU|Update Mode"
             }
           ]
         },
@@ -114,8 +114,8 @@
               "contains": "ESP|EspBootloader|serial"
             },
             {
-              "file": "windows/EMWaver/Dialogs/FirmwareUpdateDialog.xaml.cs",
-              "contains": "Flash ESP32-S3|BOOT/RESET|serial"
+              "file": "windows/EMWaver/Views/FirmwareUpdateWindow.xaml",
+              "contains": "serial USB|BOOT|RESET"
             },
             {
               "file": "windows/EMWaver/EMWaver.csproj",

@@ -112,17 +112,17 @@
     <section id="decision">
       <h2>1. Decision and product boundary</h2>
       <p>
-        If EMWaver adds a Linux desktop application again, it should be a real native app rather than a revived Gateway/browser/CLI stack. The target framework is <strong>Rust + GTK4 + libadwaita</strong>, using Linux-native hardware APIs underneath.
+        Linux is back as a real native desktop application. The target framework is <strong>Rust + GTK4 + libadwaita</strong>, using Linux-native hardware APIs underneath and aligning with the desktop MCP direction once the runtime is ready.
       </p>
       <div class="grid four">
         <div class="card"><span class="tag native">UI</span><h3>GTK4/libadwaita</h3><p>GNOME-class native UI, adaptive layouts, settings, dialogs, toasts, device sheets, and polished desktop behavior.</p></div>
-        <div class="card"><span class="tag native">Language</span><h3>Rust</h3><p>One language for UI glue, async runtime, protocol, USB, BLE, Wi-Fi, Agent client, helpers, tests, and packaging scripts where practical.</p></div>
+        <div class="card"><span class="tag native">Language</span><h3>Rust</h3><p>One language for UI glue, async runtime, protocol, USB, BLE, Wi-Fi, MCP bridge, helpers, tests, and packaging scripts where practical.</p></div>
         <div class="card"><span class="tag hardware">Hardware</span><h3>Linux APIs</h3><p>libusb/udev/serial/HID, BlueZ D-Bus, NetworkManager D-Bus when Wi-Fi configuration is needed, and native sockets/WebSockets.</p></div>
         <div class="card"><span class="tag agent">Agent</span><h3>Local-first + optional Agent</h3><p>Scripts and firmware setup run through the native app, with optional Agent assistance when configured.</p></div>
       </div>
       <div class="callout risk">
         <h3>Do not restore the removed Linux architecture</h3>
-        <p>This plan is not a Gateway revival. No browser UI, localhost daemon requirement, or CLI-first control plane. The Linux app owns its own native runtime just like macOS owns its native runtime.</p>
+        <p>This plan is a native app plan. The Linux app owns its own native runtime just like macOS owns its native runtime, and desktop agent access should come through the same in-app MCP model as the other desktop platforms.</p>
       </div>
     </section>
 
@@ -333,16 +333,16 @@ pub trait EmwaverTransport: Send + Sync {
     </section>
 
     <section id="agent">
-      <h2>8. Agent API integration</h2>
-      <p>The Linux Agent client should match the native app direction: an optional API-key client for public MGPT Agent endpoints. Provider selection, private prompts, tools policy, and metering stay server-side.</p>
+      <h2>8. Desktop MCP integration</h2>
+      <p>The Linux Agent/MGPT client is migration debt. Linux should eventually match the desktop direction: an in-app local MCP server backed by the native script runtime, console capture, filesystem scripts, and selected device transport.</p>
       <table>
         <thead><tr><th>Area</th><th>Linux behavior</th></tr></thead>
         <tbody>
-          <tr><td>Endpoint</td><td>Configured public endpoint using <code>/api/mgpt/...</code>; never MDL-only <code>/backend-api/...</code>.</td></tr>
-          <tr><td>Credential</td><td>User-provided bearer key stored with Secret Service. Missing key disables Agent replies only.</td></tr>
-          <tr><td>Context</td><td>Send selected script, errors, device type, transport kind, firmware version, capabilities, recent logs, and requested hardware primitive result summaries.</td></tr>
-          <tr><td>Hardware tools</td><td>Agent may request named local primitives such as <code>spi_transfer</code>, <code>gpio_read</code>, <code>gpio_write</code>, <code>analog_read</code>; app asks/runs locally through the selected device.</td></tr>
-          <tr><td>Failure mode</td><td>Network/API errors are shown in Agent panel but never block local script editor, device connection, or firmware update.</td></tr>
+          <tr><td>Endpoint</td><td>Loopback Streamable HTTP, explicitly enabled by the user in the running native app.</td></tr>
+          <tr><td>Credential</td><td>Generated local token/pairing secret; no EMWaver account or paid key for local hardware access.</td></tr>
+          <tr><td>Context</td><td>Expose selected script, errors, device type, transport kind, firmware version, capabilities, and recent logs through MCP resources/tools.</td></tr>
+          <tr><td>Hardware tools</td><td>MCP exposes named local primitives such as <code>spi_transfer</code>, <code>gpio_read</code>, <code>gpio_write</code>, and <code>analog_read</code>; the app runs them locally through the selected device.</td></tr>
+          <tr><td>Failure mode</td><td>MCP server errors are local app errors and must never block script editor, device connection, or firmware update flows.</td></tr>
         </tbody>
       </table>
     </section>

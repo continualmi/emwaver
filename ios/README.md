@@ -2,7 +2,7 @@
 
 Native iOS EMWaver application (Swift/SwiftUI + Xcode project).
 
-This app provides mobile UX for EMWaver device control, local scripts, optional Agent assistance, and firmware asset integration.
+This app provides mobile UX for EMWaver device control, local scripts, and firmware asset integration.
 
 ---
 
@@ -22,7 +22,7 @@ Key app entry:
 
 ## 2) Main code areas
 
-## 2.1 Auth
+## 2.1 Agent removal
 
 `ios/EMWaver/Auth/`:
 - `AuthenticationManager.swift`
@@ -30,12 +30,12 @@ Key app entry:
 - `SignInSheet.swift`
 
 Responsibilities:
-- local Agent API-key persistence for optional Agent replies.
+- remove legacy Agent API-key persistence and in-app Agent/MGPT reply flows.
 
 Current guidance:
 - there is no EMWaver account, Google/Firebase sign-in, or hosted session restore path,
-- the visible key sheet stores a user-provided Agent API key locally in Keychain,
-- local scripts and hardware control must not depend on this key.
+- mobile does not host an external MCP endpoint,
+- local scripts and hardware control must not depend on model/API keys.
 
 ## 2.2 Device and transport managers
 
@@ -55,7 +55,7 @@ Responsibilities:
 
 ### Single serial command bus
 
-All command traffic (transport session CONNECT/DISCONNECT/HEARTBEAT, script opcodes like `gpio_read`/`spi_transfer`, and Agent hardware primitives) flows through a single serial bus:
+All command traffic (transport session CONNECT/DISCONNECT/HEARTBEAT and script opcodes like `gpio_read`/`spi_transfer`) flows through a single serial bus:
 
 - **`commandSemaphore`** (`DispatchSemaphore(value: 1)`) wraps every `sendCommand` entry point. Only one command is in flight at any time — script commands, transport session commands, and heartbeat pings all serialize through the same lock.
 - **Commands are synchronous.** Every `sendCommand` acquires the semaphore, dispatches the outgoing packet via the I/O queue, and polls the response buffer until a reply arrives or the timeout expires. The caller blocks until the command completes.
@@ -92,7 +92,7 @@ Interop/legacy native-buffer components exist; keep usage aligned with current p
 
 Open `ios/EMWaver.xcodeproj` in Xcode and run the `EMWaver` scheme on simulator/device.
 
-The iOS Agent key sheet stores a user-provided Agent API key locally in Keychain. Agent calls require `EMWAVER_AGENT_ENDPOINT`, `CONTINUAL_AGENT_ENDPOINT`, or `AgentEndpointURL` in `Info.plist`; local device/script use does not. The endpoint should be the public MGPT responses endpoint under `/api/mgpt/...`, not an MDL-only `/backend-api/...` route. The shared Apple Agent client creates a persistent MGPT universe from stored prompt `emwaver-prompt` and then sends only `universe` + `userInput`.
+The legacy iOS Agent key sheet and MGPT endpoint plumbing are being removed. iOS keeps local script import/app-local storage and local device/script use without hosting an MCP endpoint.
 
 Do not assume CI/agent environment can run full iOS builds; validate on proper macOS/Xcode setup.
 

@@ -21,7 +21,6 @@ struct EMWaverApp: App {
     }
     @StateObject private var device = MacUSBManager()
     @StateObject private var firmwareUpdater = FirmwareUpdateManager()
-    @StateObject private var auth = AuthenticationManager()
     @StateObject private var hostSessions = HostSessionManager()
     @StateObject private var previewManager = ScriptPreviewManager()
     @StateObject private var scriptSessions = MacScriptSessionManager()
@@ -31,11 +30,7 @@ struct EMWaverApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(device: device, firmwareUpdater: firmwareUpdater, hostSessions: hostSessions, scriptSessions: scriptSessions, appUpdater: appUpdater, previewManager: previewManager)
-                .environmentObject(auth)
                 .environmentObject(appRouter)
-                .task {
-                    await auth.waitForInitialRestore()
-                }
                 .onAppear {
                     activateAppIfNeeded()
                 }

@@ -4,21 +4,6 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <PreferenceCategory
-        android:title="Agent"
-        app:iconSpaceReserved="false">
-
-        <EditTextPreference
-            android:key="agent_api_key"
-            android:title="Agent API Key"
-            android:summary="Enter your MGPT API key to enable Agent replies. Local scripts and hardware control do not require a key."
-            android:dialogTitle="Agent API Key"
-            android:dialogMessage="Enter your MGPT API key (emw_sk_...)."
-            app:iconSpaceReserved="false"
-            app:useSimpleSummaryProvider="true" />
-
-    </PreferenceCategory>
-
-    <PreferenceCategory
         android:title="Support &amp; Information"
         app:iconSpaceReserved="false">
 

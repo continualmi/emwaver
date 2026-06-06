@@ -1368,19 +1368,6 @@ public struct ScriptsRootView: View {
                 }
 
                 Button {
-                    withAnimation(.smooth(duration: 0.24)) {
-                        showingAgentPanel.toggle()
-                    }
-                } label: {
-                    Image(systemName: "sparkles")
-                }
-                .help(showingAgentPanel ? "Hide agent panel" : "Show agent panel")
-
-                if let agentLeadingToolbarItem {
-                    agentLeadingToolbarItem
-                }
-
-                Button {
                     withAnimation(.smooth(duration: 0.18)) {
                         showingScriptConsole.toggle()
                     }
@@ -1391,16 +1378,6 @@ public struct ScriptsRootView: View {
             }
         }
         #else
-        if !showingEditor {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showingAgentPanel = true
-                } label: {
-                    Image(systemName: "sparkles")
-                }
-                .accessibilityLabel("Show Agent")
-            }
-        }
         #endif
 
         if showingEditor {

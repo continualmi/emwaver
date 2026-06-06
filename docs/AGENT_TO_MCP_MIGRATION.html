@@ -155,8 +155,8 @@
    [ Claude / agent ]  │   ┌── MCP server ──┐   (new, thin, in-app)   │
           │            │   │  run_script    │                         │
           │  MCP       │   │  spi_transfer  │──┐                      │
-          └──── SSE ───┼──▶│  gpio_*        │  │                      │
-        localhost:PORT │   │  analog_read   │  │                      │
+          └ Streamable ┼──▶│  gpio_*        │  │                      │
+          HTTP/loopback│   │  analog_read   │  │                      │
                        │   │  list_scripts  │  ▼                      │
                        │   └────────────────┘  JS engine  (existing)  │
                        │                            │                 │
@@ -167,7 +167,7 @@
                        └────────────────────────────┼─────────────────┘
                                                      ▼
                                               supported board → electronics</pre>
-  <p>The MCP server carries <b>no logic</b> — no planning loop, no orchestration. It opens a local SSE/HTTP endpoint,
+  <p>The MCP server carries <b>no logic</b> — no planning loop, no orchestration. It opens a local Streamable HTTP endpoint,
   lists tools, and routes each call straight into the engine that's already in the app. That is why it ports cheaply:
   the platform-specific intelligence stays in the engine; only a socket shim is per-platform.</p>
   <div class="note warn"><b>Design discipline:</b> write the MCP tool definitions for a <i>model</i> to consume —
@@ -228,8 +228,10 @@
       <tr><td><code>device_state</code></td><td>Connection / board / transport status</td><td>app state</td></tr>
     </tbody>
   </table>
-  <p>Transport: local <b>SSE/HTTP</b> on a loopback port so an already-running app can be dialed into (no spawning,
-  no flashing). Auth for the local endpoint is a follow-up detail (loopback-only is the v1 default).</p>
+  <p>Transport: local <b>Streamable HTTP</b> on a loopback port so an already-running app can be dialed into (no spawning,
+  no flashing). Legacy SSE support is optional only if a target client still requires it. Auth for the local endpoint
+  starts as explicit in-app enablement plus a generated local token/pairing secret; loopback-only is necessary but not
+  sufficient once tools can write scripts, flash firmware, or operate pins.</p>
 
   <h2 id="keepkill">Keep vs. kill</h2>
   <div class="split">
@@ -263,9 +265,9 @@
   <table>
     <thead><tr><th>Platform</th><th>App</th><th>Agent / MGPT</th><th>User scripts</th><th>MCP server</th></tr></thead>
     <tbody>
-      <tr><td>macOS</td><td><span class="s go">KEEP</span></td><td><span class="s no">removed</span></td><td>live folder</td><td>in-process, loopback SSE</td></tr>
-      <tr><td>Windows</td><td><span class="s go">KEEP</span></td><td><span class="s no">removed</span></td><td>live folder</td><td>in-process, loopback SSE</td></tr>
-      <tr><td>Linux</td><td><span class="s go">KEEP</span></td><td><span class="s no">removed</span></td><td>live folder</td><td>in-process, loopback SSE</td></tr>
+      <tr><td>macOS</td><td><span class="s go">KEEP</span></td><td><span class="s no">removed</span></td><td>live folder</td><td>in-process, loopback Streamable HTTP</td></tr>
+      <tr><td>Windows</td><td><span class="s go">KEEP</span></td><td><span class="s no">removed</span></td><td>live folder</td><td>in-process, loopback Streamable HTTP</td></tr>
+      <tr><td>Linux</td><td><span class="s go">KEEP</span></td><td><span class="s no">removed</span></td><td>live folder</td><td>in-process, loopback Streamable HTTP</td></tr>
       <tr><td>iOS / iPadOS</td><td><span class="s go">KEEP</span></td><td><span class="s no">removed</span></td><td>import into app</td><td>— (sandbox can't host)</td></tr>
       <tr><td>Android</td><td><span class="s go">KEEP</span></td><td><span class="s no">removed</span></td><td>import into app</td><td>— (sandbox can't host)</td></tr>
     </tbody>
@@ -288,14 +290,14 @@
 
   <h2 id="business">Product / business note</h2>
   <p>Killing the agent doesn't mean "no product." The platform (firmware, engine, instant electronics, JS scripting,
-  MCP door) becomes the adoption engine — given away to get reach and to <b>harvest traces</b> of real EMWaver
-  workflows that nobody else can collect. Monetization rides on top:</p>
+  MCP door) becomes the adoption engine — given away to get reach and to collect <b>opt-in workflow traces</b> for
+  debugging, evaluation, and model improvement. Monetization rides on top:</p>
   <div class="cards">
-    <div class="card"><div class="n">now</div><h4>Open platform + MCP</h4><p>Frontier agents drive it. Adoption + trace collection. No bespoke agent to maintain.</p></div>
-    <div class="card"><div class="n">next</div><h4>Fine-tuned MGPT model</h4><p>Trained on collected traces. Pitch isn't "smarter than Opus" — it's cheaper, faster, controllable.</p></div>
+    <div class="card"><div class="n">now</div><h4>Open platform + MCP</h4><p>Frontier agents drive it. Adoption + consented workflow evidence. No bespoke agent to maintain.</p></div>
+    <div class="card"><div class="n">next</div><h4>Fine-tuned MGPT model</h4><p>Trained on opt-in traces. Pitch isn't "smarter than Opus" — it's cheaper, faster, controllable.</p></div>
     <div class="card"><div class="n">wedge</div><h4>Bundled distribution</h4><p>Served through Continual Plus / Max for the MDL base. Inference-as-commodity is thin; bundled + domain-tuned is the moat.</p></div>
   </div>
-  <div class="note warn"><b>Tension to hold honestly:</b> if a frontier model drives the CLI/MCP well, the fine-tuned
+  <div class="note warn"><b>Tension to hold honestly:</b> if a frontier model drives the MCP surface well, the fine-tuned
   model is a cost/integration play, not a capability play — plan the model product as <i>cheaper &amp; bundled</i>,
   not as the only thing that works.</div>
 
@@ -310,9 +312,9 @@
   </ul>
 
   <div class="footer">
-    EMWaver · Continual MI — internal migration plan. Supersedes the Agent/MGPT direction documented in
-    <code>docs/AGENT_API.md</code>, <code>docs/MGPT_UNIVERSE_AGENT_PLAN.md</code>, and
-    <code>docs/AGENT_RUNTIME_AND_TOOLS.html</code>, which should move to <code>docs/archive/</code> once this lands.
+    EMWaver · Continual MI — internal migration plan. Supersedes the archived Agent/MGPT direction documented in
+    <code>docs/archive/AGENT_API.md</code>, <code>docs/archive/MGPT_UNIVERSE_AGENT_PLAN.md</code>, and
+    <code>docs/archive/AGENT_RUNTIME_AND_TOOLS.html</code>.
   </div>
 </main>
 </div>

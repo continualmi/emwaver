@@ -4,7 +4,7 @@ This is the contributor orientation doc for the repository as it exists today.
 
 ## What EMWaver Is
 
-EMWaver is a local-first, open-source electronics platform by Continual MI. It turns supported MCU boards into a scriptable hardware lab through native apps, managed firmware, JavaScript scripts, script-defined UI panels, and optional Agent assistance.
+EMWaver is a local-first, open-source electronics platform by Continual MI. It turns supported MCU boards into a scriptable hardware lab through native apps, managed firmware, JavaScript scripts, script-defined UI panels, and a desktop MCP bridge for external agents.
 
 Core idea:
 
@@ -14,7 +14,7 @@ native app -> local script runtime -> USB/BLE/Wi-Fi transport -> supported board
 
 Scripts are JavaScript files (`.js`). They can use JSX-style syntax inside JavaScript to define native UI panels for connected modules.
 
-On macOS, the Agent works through normal script runs: it can read, patch, run existing scripts, or run unsaved ephemeral JavaScript/JSX scripts, then inspect console output and script status.
+The old in-app Agent/MGPT direction is being removed. Desktop apps will expose the running script engine and hardware tools through a local MCP server; mobile apps keep local script import and app-local execution without hosting an MCP endpoint.
 
 ## Supported Platforms
 
@@ -30,18 +30,17 @@ Mobile is the primary product surface. Desktop apps remain important for develop
 
 ## Current Architecture
 
-- Native apps own discovery, connection state, script execution, rendered script UI, Agent calls, and firmware/update flows.
+- Native apps own discovery, connection state, script execution, rendered script UI, console output, and firmware/update flows.
+- Desktop apps additionally expose a local, user-controlled MCP server so external agents can call tools such as `list_scripts`, `run_script`, `device_state`, `spi_transfer`, `gpio_read`, `gpio_write`, and `analog_read`.
 - USB is first-class for direct board control.
 - BLE supports cable-free mobile sessions where supported by the board.
 - Wi-Fi supports LAN/VPN-style network control for boards designed around it.
 - STM32 and ESP32-family firmware targets are both part of the platform direction.
 - Hardware designs live under `hardware/` and are indexed by `hardware/README.md`.
 
-## Removed Architecture
+## Superseded Architecture
 
-The old Gateway/CLI/browser architecture was removed and archived. Active work should not reintroduce a browser relay, localhost daemon, or CLI-first control plane as the main product path.
-
-Historical Gateway-era docs are under `docs/archive/`. `docs/DROP_GATEWAY_AND_LINUX.md` is a historical decision record about removing the old Gateway-era Linux path. It is not the current Linux app plan.
+The active architecture is native apps plus the desktop MCP bridge. Superseded Gateway/CLI/browser and in-app Agent/MGPT plans belong in `docs/archive/` and should not be used as implementation guidance.
 
 ## Repo Layout
 
@@ -83,10 +82,10 @@ Key contributor docs:
 | `docs/SCHEDULE.md` | Short-term execution tracker |
 | `docs/TESTS.md` | Hardware and app validation suite *(being rebuilt)* |
 | `docs/RELEASES.md` | Release workflows and public preview assets |
-| `docs/AGENT_EVAL_RUNTIME.md` | macOS Agent script-run and console model |
-| `docs/AGENT_RUNTIME_AND_TOOLS.html` | Visual Agent hardware-tool workflow |
+| `docs/AGENT_TO_MCP_MIGRATION.html` | Agent/MGPT removal and desktop MCP migration plan |
+| `docs/MCP_CONTRACT.md` | Desktop MCP tool contract |
 | `docs/LINUX_GTK4_PORT_PLAN.html` | Native Linux app port plan |
 | `docs/LINUX_MACOS_PARITY_AUDIT.md` | Current macOS-vs-Linux native parity checklist |
 | `docs/SIMULATOR.md` | Shared simulator direction |
 | `docs/parity/` | Cross-platform parity contracts |
-| `docs/archive/` | Historical Gateway/CLI/rebirth-era docs |
+| `docs/archive/` | Historical Gateway/CLI, Agent/MGPT, and rebirth-era docs |

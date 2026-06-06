@@ -33,7 +33,7 @@
           "evidence": [
             {
               "file": "macos/README.md",
-              "contains": "without account sign-in"
+              "contains": "without account sign-in|without a manual claim button or hosted registration step"
             }
           ]
         },
@@ -42,7 +42,7 @@
           "evidence": [
             {
               "file": "ios/README.md",
-              "contains": "local scripts and hardware control must not depend on this key|local device/script use does not"
+              "contains": "local scripts and hardware control must not depend on model/API keys|local script import/app-local storage"
             }
           ]
         },

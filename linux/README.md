@@ -2,11 +2,11 @@
 
 Native Linux EMWaver application workspace.
 
-This is the Rust + GTK4/libadwaita port track described in `docs/LINUX_GTK4_PORT_PLAN.html`. It is a new native app, not a revival of the removed Gateway, browser UI, or CLI control plane.
+This is the Rust + GTK4/libadwaita port track described in `docs/LINUX_GTK4_PORT_PLAN.html`. It is a native app and part of the desktop MCP direction once the runtime is ready.
 
 Local-first rules:
 - local scripts, device discovery, and firmware setup must not require an EMWaver account, cloud activation, hosted relay, subscription check, device registration, or hardware ownership gate;
-- optional Agent replies use a user-provided API key and public `/api/mgpt/...` endpoints;
+- in-app Agent/MGPT replies are being removed in favor of a future local desktop MCP bridge;
 - scripts and app state stay on the user's Linux machine by default.
 
 ## Script UI runtime architecture goal
@@ -93,7 +93,7 @@ See also `TRANSPORT_PARITY_AUDIT.md` for active differences and follow-up items.
 - `crates/emwaver-linux-runtime` - JavaScript-facing runtime compiler and command-step generation.
 - `crates/emwaver-linux-transport` - common transport traits plus USB/BLE/Wi-Fi adapters; simulator support is internal test infrastructure, not a user-facing device choice.
 - `crates/emwaver-linux-firmware` - STM32 DFU and ESP32 serial flashing orchestration.
-- `crates/emwaver-linux-agent` - optional MGPT Agent API client and secret-store boundary.
+- `crates/emwaver-linux-agent` - legacy optional MGPT Agent API client targeted for removal/replacement by desktop MCP work.
 - `resources/udev/99-emwaver.rules` - Linux device access rules for supported run/update modes.
 
 ## Current implementation status
@@ -113,15 +113,15 @@ The first native slice is M0/M1:
 - the GTK shell is now script-workspace first, loads the shared `assets/default-scripts` bundle, groups scripts as Examples/Libraries/Kernel/Custom Scripts, keeps bundled scripts read-only, defaults the main content to runtime preview, supports local New/Save/Make Copy behavior, and exposes row-level Run/Edit/Stop controls with inline running state aligned with the macOS script workspace direction;
 - the GTK script workspace uses GtkSourceView for JavaScript editing with line numbers, syntax highlighting, find, go-to-line, line wrap, script search, and a runtime output switch that renders captured script UI trees with native GTK widgets for common layout/control nodes;
 - script UI rendering now uses a macOS-style live session boundary: GTK keeps widgets on the main thread, a worker owns the Boa runtime and script action invocation, and the packet bridge keeps the selected local transport connected for action-driven device I/O;
-- the GTK shell has a toggleable right-side Agent drawer with local chat controls, suggestions, composer, setup notice, and current script/device/log context routed through the public MGPT Agent client when a Settings/Secret Service key or `EMWAVER_AGENT_ENDPOINT`/`EMWAVER_AGENT_API_KEY` development override is configured;
+- the GTK shell still contains a legacy right-side Agent drawer and MGPT client path; this is migration debt and should be removed as the desktop MCP bridge takes over external-agent access;
 - the GTK device sheet now follows the macOS device workflow more closely with selected-device status, grouped local transports, transport badges, board/firmware/UID metadata, manual Wi-Fi target validation, firmware action context, and udev permission guidance;
 - the GTK firmware sheet is board-aware, validates bundled STM32 and ESP32-S3 firmware image plans, probes STM32 DFU presence, shows image offsets/paths, routes STM32 flashing through the local Rust DFU backend, and routes ESP32-S3 serial flashing through the bundled esptool-compatible helper with BOOT/RESET guidance and progress logs;
 - the firmware crate can plan bundled STM32 and ESP32-S3 images, validate required bundled assets, flash STM32 DFU through the existing Rust DFU backend, and orchestrate ESP32-S3 serial flashing with fixed offsets through the local helper;
 - the Wi-Fi transport crate can build manual LAN/VPN targets, expose them as selectable devices via `EMWAVER_WIFI_HOST`/`EMWAVER_WIFI_PORT`, discover `_emwaver._tcp.local.` records over mDNS, filter TXT metadata for protocol `1` plus `wifi` capability, validate discovered records with a hardware UID WebSocket probe before showing them live, and send/receive EMWaver SysEx superframes over WebSocket binary messages;
 - the BLE transport crate now carries the same EMWaver service/command/notify UUID contract as macOS, validates BlueZ adapter/address targets, scans BlueZ adapters through `btleplug`, connects matching peripherals, writes command frames to the command characteristic, and reads notification frames from the notify characteristic;
-- the Agent crate uses the public MGPT `universe`/`userInput` request shape, folds local context into user-visible input, stores the optional Agent key through Secret Service's `secret-tool` boundary when available, keeps the endpoint in XDG config, and exposes typed hardware primitive command builders for `spi_transfer`, `gpio_mode`, `gpio_write`, `gpio_read`, and `analog_read`;
-- Agent and firmware crates expose local-first orchestration boundaries without gating local hardware access;
-- the app crate contains a GTK4/libadwaita shell that shows script editor controls, log output, local device metadata, firmware, settings, and Agent panels.
+- the legacy Agent crate currently exposes MGPT request helpers and typed hardware primitive command builders; keep the primitive semantics while moving the external-agent boundary to MCP;
+- firmware crates expose local-first orchestration boundaries without gating local hardware access;
+- the app crate contains a GTK4/libadwaita shell that shows script editor controls, log output, local device metadata, firmware, settings, and migration-era Agent panels.
 
 Full JavaScript runtime parity beyond the initial command/gpio/device API, local module loading, JSX/script-tree capture, initial GTK script-tree rendering, and first script UI action invocation path, Linux hardware validation for BLE GATT I/O and ESP32 serial flashing, Wi-Fi provisioning UI/status, and packaged installers are staged behind the crate boundaries and are not complete yet.
 
@@ -160,4 +160,4 @@ cargo build --manifest-path linux/Cargo.toml --release -p emwaver-linux-app
 EMWAVER_LINUX_VERSION=$(cat ../VERSION) linux/scripts/package-linux.sh
 ```
 
-Do not add a localhost daemon or browser relay to make the app run. Hardware transports belong in-process behind `emwaver-linux-transport`.
+Do not add a separate daemon or browser relay to make the app run. Hardware transports belong in-process behind `emwaver-linux-transport`, and the future MCP server should be part of the running native app.

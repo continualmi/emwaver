@@ -195,7 +195,6 @@ private final class IOSScriptSession {
 
 struct ScriptsContainerView: View {
     @EnvironmentObject var bleManager: USBManager
-    @EnvironmentObject private var auth: AuthenticationManager
     @EnvironmentObject private var hostSessions: HostSessionManager
     @StateObject private var scriptSessions = IOSScriptSessionManager()
     @State private var isWiFiConnectPresented = false
@@ -211,16 +210,9 @@ struct ScriptsContainerView: View {
         NavigationStack {
             ScriptsRootView(
                 device: scriptDevice,
-                agentEndpointProvider: {
-                    auth.agentEndpointConfig
-                },
                 hostStatusSink: { running, name in
                     // Treat preview showing as script running on iOS.
                     hostSessions.setScriptStatus(running: running, activeScriptName: name)
-                },
-                agentEnabled: auth.isSignedIn,
-                onRequestAgentUpgrade: {
-                    auth.isSignInSheetPresented = true
                 },
                 onRequestOpenSettings: {
                     isSettingsPresented = true
@@ -301,35 +293,7 @@ struct ScriptsContainerView: View {
                             .accessibilityLabel("\(connectionStatusText), target \(selectedDeviceLabel)")
                         }
                     }
-
-                    ToolbarItemGroup(placement: .navigationBarTrailing) {
-                        Menu {
-                            if auth.hasSavedKey {
-                                Text(auth.userLabel)
-                                    .foregroundStyle(.secondary)
-                                Divider()
-                                Button("Replace Agent Key") {
-                                    auth.isSignInSheetPresented = true
-                                }
-                                Button("Clear Agent Key", role: .destructive) {
-                                    auth.clearAgentApiKey()
-                                }
-                            } else {
-                                Button("Agent Key") {
-                                    auth.isSignInSheetPresented = true
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "key.fill")
-                        }
-
-                    }
                 }
-        }
-        .sheet(isPresented: $auth.isSignInSheetPresented) {
-            SignInSheet()
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $isSettingsPresented) {
             IOSSettingsView()

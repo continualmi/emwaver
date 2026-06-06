@@ -13,7 +13,7 @@ This folder contains the full Windows client:
 - script runtime UI and tooling pages,
 - native local script/runtime views,
 - firmware update flow integration,
-- Agent client surfaces.
+- desktop MCP bridge migration.
 
 The local-first rule is that connected supported boards can run local `.js` scripts immediately without account sign-in, backend activation, subscription checks, claimed-device cache membership, hardware-UID registration, device minting, or device limits.
 
@@ -36,7 +36,7 @@ WPF views:
 - `Views/DeviceConnectionWindow*`
 - `Views/SettingsWindow*`
 - `Views/FirmwareUpdateWindow*`
-- `Views/AgentKeyWindow*`
+- legacy `Views/AgentKeyWindow*` targeted for removal
 
 Core service layer:
 - `Services/UsbMidiSysex.cs` (shared SysEx/superframe transport codec)
@@ -73,7 +73,7 @@ Windows also supports a manual ESP32 Wi-Fi runtime connection through the firmwa
 
 All EMWaver transports must use a **transport session heartbeat** to detect disconnections reliably. Platform-level transport status signals (BLE GATT disconnection callbacks, USB device removal events, Wi-Fi socket closures) are unreliable across OS versions and board states — a BLE peripheral can stop responding without the OS ever firing `Disconnected`; a USB MIDI device can silently vanish without a removal event. The only way to confirm the device is actually still there is to ask it: send a known opcode and verify the echo comes back.
 
-The EMWaver protocol is a **single serial bus** — one stream of commands, responses, and streaming data multiplexed over a shared 36-byte superframe lane. The heartbeat is just another command queued on that bus alongside script opcodes and Agent tool calls. There is no contention or separate channel; the heartbeat naturally interleaves without disrupting other traffic. The firmware echoes it immediately, and the round-trip time confirms liveness without adding protocol complexity.
+The EMWaver protocol is a **single serial bus** — one stream of commands, responses, and streaming data multiplexed over a shared 36-byte superframe lane. The heartbeat is just another command queued on that bus alongside script opcodes and future MCP tool calls. There is no contention or separate channel; the heartbeat naturally interleaves without disrupting other traffic. The firmware echoes it immediately, and the round-trip time confirms liveness without adding protocol complexity.
 
 **Protocol:** The app sends opcode `0x0B` (TransportSession) with sub-opcode `0x03` (Heartbeat) every 2 seconds over the active transport (USB MIDI, BLE, or Wi-Fi). The firmware echoes the heartbeat back on the same transport. If the host does not receive the echo within a window of two heartbeat intervals, the connection is marked as lost, and `ConnectedPort` / `IsConnected` is cleared.
 
@@ -91,7 +91,7 @@ Scripts UI and runtime behavior are centered in `ScriptsPage` and `Scripting/*` 
 
 ## 3.3 Architecture boundary
 
-The Windows app is self-contained. The removed Gateway/browser/CLI architecture is not part of the Windows runtime. Windows keeps its own native script UI, local transport managers, Agent surface, and firmware/update flows.
+The Windows app is self-contained. Windows keeps its own native script UI, local transport managers, desktop MCP bridge surface, and firmware/update flows. The desktop MCP server should live in the running app and route into the same runtime as the human UI.
 
 ## 3.4 Firmware update path
 
@@ -112,37 +112,30 @@ Windows now follows the same board-class split as macOS:
 
 Settings surface includes app-level preferences such as:
 - script diagnostics visibility,
-- local Agent API key configuration.
+- future local MCP enablement/status.
 - desktop app update checks.
 
 Desktop app updates are local-first and account-free. Windows checks the EMWaver-owned manifest at `https://emwaver.ai/updates/windows/latest.json`, with a GitHub Release metadata fallback, then downloads the version-pinned installer URL declared by that manifest. The installer is verified with the manifest SHA-256 when present and launched with Inno Setup silent/restart-safe arguments.
 
 The Windows app intentionally ships a single stable light UI theme; the former dark theme option is disabled.
 
-The Agent pane stores local chat conversations and messages in SQLite at
-`%LOCALAPPDATA%/EMWaver/agent-chat.sqlite`. The stored chats are local UI state;
-Agent requests still use the user-provided API key and the configured MGPT
-endpoint, and local scripts/hardware remain usable without that key. The WPF
-Agent drawer includes macOS-like starter cards, local conversation selection,
-rename/delete controls, cancellable sends, code block rendering, copy actions,
-and best-effort apply actions for full code blocks and simple unified patches.
-It also ports the native Agent hardware primitive model for Windows: the Agent
-can request local `list_scripts`, `read_script`, `apply_patch_to_script`,
-`run_script`, `stop_script`, `get_device_status`, `spi_transfer`, `gpio_mode`,
-`gpio_write`, `gpio_read`, `analog_read`, and `sleep` tool calls through
-`emw-tool` JSON blocks; Windows renders the local tool result cards inline.
+The WPF Agent drawer, Agent API key storage, SQLite chat storage, and MGPT
+client path are legacy migration debt. Their hardware primitive model is being
+repackaged as the desktop MCP surface: external agents should use MCP tools
+such as `list_scripts`, `read_script`, `run_script`, `write_script`,
+`device_state`, `spi_transfer`, `gpio_write`, `gpio_read`, and `analog_read`.
 The WPF script editor uses AvalonEdit syntax highlighting plus visible Find and
 Go to Line controls.
 
 ## 3.6 Current parity status vs macOS
 
-Windows is intended to track the current macOS app in the firmware setup/update and local gateway layers.
+Windows is intended to track the current macOS app in the firmware setup/update, local runtime, and desktop MCP layers.
 
 What Windows already has:
 - USB run-mode transport,
 - ESP32 BLE run-mode transport,
 - STM32 DFU firmware flashing,
-- local Agent API-key auth for optional Agent replies.
+- legacy Agent API-key auth targeted for removal.
 
 Windows now includes:
 - board-aware device state (`board_type`, last detected board info),

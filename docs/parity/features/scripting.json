@@ -46,7 +46,6 @@
             {
               "file": "windows/EMWaver/EMWaver.csproj",
               "contains": [
-                "SyncDefaultScripts",
                 "Assets\\\\DefaultScripts",
                 "\\*\\.js"
               ]

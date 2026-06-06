@@ -6,7 +6,7 @@ ESP32 LAN OTA is a future local-first update path for boards already provisioned
 
 - OTA should use same-LAN or user-owned routed reachability such as VPN, SSH tunnel, or Tailscale.
 - Native apps may expose app-local OTA/update UI where platform constraints allow.
-- OTA should fit the native-app runtime model and should not revive the removed Gateway/browser/CLI control plane.
+- OTA should fit the native-app runtime model and the desktop MCP direction where relevant.
 
 ## Current Non-Goals
 

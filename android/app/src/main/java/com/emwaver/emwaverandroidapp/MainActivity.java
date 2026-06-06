@@ -54,10 +54,6 @@ import java.util.List;
 import java.util.Locale;
 
 import com.emwaver.emwaverandroidapp.databinding.ActivityMainBinding;
-import com.emwaver.emwaverandroidapp.agent.AgentApiKeyStore;
-import com.emwaver.emwaverandroidapp.ui.agent.AgentChatBottomSheetDialogFragment;
-import com.emwaver.emwaverandroidapp.ui.auth.SignInBottomSheetDialogFragment;
-
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "MainActivity";
@@ -118,28 +114,6 @@ public class MainActivity extends AppCompatActivity {
                 }
                 if (menuItem.getItemId() == R.id.action_connection) {
                     showConnectionActionsDialog();
-                    return true;
-                }
-                if (menuItem.getItemId() == R.id.action_agent) {
-                    AgentChatBottomSheetDialogFragment dialog = new AgentChatBottomSheetDialogFragment();
-                    dialog.show(getSupportFragmentManager(), "AgentChat");
-                    return true;
-                }
-                if (menuItem.getItemId() == R.id.action_sign_in) {
-                    AgentApiKeyStore keyStore = AgentApiKeyStore.getInstance();
-                    keyStore.ensureInitialized(MainActivity.this);
-
-                    if (keyStore.hasAgentKey()) {
-                        new AlertDialog.Builder(MainActivity.this)
-                                .setTitle("Agent Key")
-                                .setMessage("Agent key saved")
-                                .setPositiveButton("Remove key", (d, w) -> keyStore.clear())
-                                .setNegativeButton("Close", null)
-                                .show();
-                    } else {
-                        SignInBottomSheetDialogFragment dialog = new SignInBottomSheetDialogFragment();
-                        dialog.show(getSupportFragmentManager(), "SignIn");
-                    }
                     return true;
                 }
                 return false;

@@ -60,11 +60,6 @@
                     <Button x:Name="StopButton" Content="⏹" Width="36" Height="28" ToolTip="Stop"
                             Click="OnStopClick" Visibility="Collapsed" />
 
-                    <Separator Style="{StaticResource {x:Static ToolBar.SeparatorStyleKey}}" />
-
-                    <ToggleButton x:Name="AgentToggle" Content="Agent" Width="60" Height="28"
-                                  IsChecked="False" Click="OnAgentToggleClick" Margin="0,0,6,0" />
-
                     <!-- Action buttons -->
                     <Button Content="New" Width="50" Height="28" Click="OnNewClick" Margin="0,0,2,0" />
                     <Button Content="Save" Width="50" Height="28" Click="OnSaveClick" Margin="0,0,2,0" />

@@ -100,12 +100,6 @@ android {
         buildConfigField "String", "EMWAVER_BUNDLED_FW_VERSION", '"' + emwaverBundledFwVersion + '"'
         buildConfigField "String", "EMWAVER_COMMIT", '"' + emwaverCommit + '"'
 
-        def agentEndpoint = envOr("EMWAVER_AGENT_ENDPOINT", "")
-        def continualAgentEndpoint = envOr("CONTINUAL_AGENT_ENDPOINT", "")
-
-        buildConfigField "String", "EMWAVER_AGENT_ENDPOINT", '"' + agentEndpoint + '"'
-        buildConfigField "String", "CONTINUAL_AGENT_ENDPOINT", '"' + continualAgentEndpoint + '"'
-
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 

@@ -2,7 +2,7 @@
 
 Native Android EMWaver application (Gradle project, Java/Kotlin-style Android app structure).
 
-This app provides mobile EMWaver device workflows: USB/BLE communication, local scripting surfaces, settings, Agent API-key UI, and firmware asset packaging.
+This app provides mobile EMWaver device workflows: USB/BLE communication, local scripting surfaces, settings, and firmware asset packaging.
 
 ---
 
@@ -52,8 +52,7 @@ Key components:
 
 Notable UX coverage reflected by resources:
 - script lists/editor dialogs,
-- agent chat dialogs,
-- local Agent API-key dialog,
+- local script dialogs,
 - device update dialogs.
 
 ---
@@ -114,10 +113,9 @@ Current Android board split:
 
 When changing Android transport, connection lifecycle, or firmware update UX behavior, update this README in the same PR.
 
-Android Agent direction:
-- Keep the Android Agent chat interface/runtime.
-- Migrate Agent inference to the future Continual MI/MGPT endpoint with a user-provided Agent API key stored locally/credential-backed.
-- Store Agent chat conversations and messages locally in app-private SQLite (`agent-chat.sqlite`) so the mobile Agent UI can restore the same chat history shape as macOS/iOS and Windows.
+Android Agent-to-MCP direction:
+- Remove the Android Agent chat interface/runtime and MGPT API-key plumbing.
+- Android does not host an MCP server; it keeps local script import/app-local storage and local script execution.
 - Do not require an EMWaver account, cloud sync, activated devices, hardware-UID registration, or device limits for local scripts/hardware.
-- Hosted cloud files, hosted host-session UI, Firebase sign-in, hosted remote control, and cloud/local backend switching have been removed from the Android app.
-- Local USB/BLE device and script use must not depend on backend configuration.
+- Hosted cloud files, hosted host-session UI, Firebase sign-in, hosted remote control, and cloud/local backend switching remain out of the Android app.
+- Local USB/BLE/Wi-Fi device and script use must not depend on backend configuration.

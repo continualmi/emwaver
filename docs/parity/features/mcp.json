@@ -1,0 +1,144 @@
+{
+  "component": "mcp",
+  "features": [
+    {
+      "id": "mcp.desktop_bridge_direction",
+      "description": "Desktop apps are the planned local MCP bridge; mobile apps remain local script runners without a listening MCP endpoint.",
+      "parity": "documented_exceptions",
+      "platforms": {
+        "macos": {
+          "status": "planned",
+          "reason": "macOS should host an in-app local MCP server backed by the existing script engine and transports.",
+          "evidence": [
+            {
+              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
+              "contains": "macOS</td><td><span class=\"s go\">KEEP</span></td><td><span class=\"s no\">removed</span></td><td>live folder</td><td>in-process"
+            }
+          ]
+        },
+        "ios": {
+          "status": "not_applicable",
+          "reason": "iOS keeps user script import/app-local execution and does not host an external MCP listener.",
+          "evidence": [
+            {
+              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
+              "contains": "iOS / iPadOS</td><td><span class=\"s go\">KEEP</span></td><td><span class=\"s no\">removed</span></td><td>import into app</td><td>"
+            }
+          ]
+        },
+        "windows": {
+          "status": "planned",
+          "reason": "Windows should host an in-app local MCP server backed by the existing script engine and transports.",
+          "evidence": [
+            {
+              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
+              "contains": "Windows</td><td><span class=\"s go\">KEEP</span></td><td><span class=\"s no\">removed</span></td><td>live folder</td><td>in-process"
+            }
+          ]
+        },
+        "android": {
+          "status": "not_applicable",
+          "reason": "Android keeps user script import/app-local execution and does not host an external MCP listener.",
+          "evidence": [
+            {
+              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
+              "contains": "Android</td><td><span class=\"s go\">KEEP</span></td><td><span class=\"s no\">removed</span></td><td>import into app</td><td>"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "mcp.tool_contract",
+      "description": "The desktop MCP contract exposes script lifecycle, device state, and hardware primitive tools.",
+      "parity": "documented_exceptions",
+      "platforms": {
+        "macos": {
+          "status": "planned",
+          "reason": "macOS has the desktop runtime and should host the first in-app MCP bridge.",
+          "evidence": [
+            {
+              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
+              "contains": [
+                "list_scripts",
+                "run_script",
+                "spi_transfer",
+                "gpio_read",
+                "analog_read",
+                "device_state"
+              ]
+            }
+          ]
+        },
+        "ios": {
+          "status": "not_applicable",
+          "reason": "Mobile does not expose an external MCP server."
+        },
+        "windows": {
+          "status": "planned",
+          "reason": "Windows tracks the desktop runtime direction and should expose the same MCP tool contract.",
+          "evidence": [
+            {
+              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
+              "contains": [
+                "list_scripts",
+                "run_script",
+                "spi_transfer",
+                "gpio_read",
+                "analog_read",
+                "device_state"
+              ]
+            }
+          ]
+        },
+        "android": {
+          "status": "not_applicable",
+          "reason": "Mobile does not expose an external MCP server."
+        }
+      }
+    },
+    {
+      "id": "agent.mgpt_removal",
+      "description": "In-app Agent chat, MGPT API keys, universe persistence, and MGPT responses clients are being removed from all native apps.",
+      "parity": "all_required",
+      "platforms": {
+        "macos": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
+              "contains": "Rip out the Agent — all five apps"
+            }
+          ]
+        },
+        "ios": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
+              "contains": "Rip out MGPT — all five apps"
+            }
+          ]
+        },
+        "windows": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
+              "contains": "Rip out the Agent — all five apps"
+            }
+          ]
+        },
+        "android": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
+              "contains": "Rip out MGPT — all five apps"
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
