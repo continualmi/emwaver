@@ -132,6 +132,15 @@ public partial class MainWindow : Window
         };
         window.ShowDialog();
     }
+    private void OnMcpClick(object sender, RoutedEventArgs e)
+    {
+        var vm = new ViewModels.SettingsViewModel(AppServices.Settings);
+        var window = new McpInfoWindow(vm)
+        {
+            Owner = this,
+        };
+        window.ShowDialog();
+    }
     private void OnSettingsClick(object sender, RoutedEventArgs e)
     {
         var vm = new ViewModels.SettingsViewModel(AppServices.Settings);

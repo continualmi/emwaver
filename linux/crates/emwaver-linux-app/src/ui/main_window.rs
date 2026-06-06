@@ -130,11 +130,16 @@ pub fn build_main_window(app: &adw::Application) {
         .icon_name("software-update-available-symbolic")
         .tooltip_text("Firmware")
         .build();
+    let mcp_button = gtk::Button::builder()
+        .icon_name("network-server-symbolic")
+        .tooltip_text("Desktop MCP")
+        .build();
     let settings_button = gtk::Button::builder()
         .icon_name("emblem-system-symbolic")
         .tooltip_text("Settings")
         .build();
     header.pack_end(&settings_button);
+    header.pack_end(&mcp_button);
     header.pack_end(&firmware_button);
 
     let source_buffer = make_source_buffer();
@@ -778,6 +783,24 @@ pub fn build_main_window(app: &adw::Application) {
         let mcp_server_handle = mcp_server_handle.clone();
         let mcp_last_error = mcp_last_error.clone();
         settings_button.connect_clicked(move |_| {
+            present_settings_dialog(
+                &window,
+                &run_log_expander,
+                &script_repository,
+                &mcp_snapshot,
+                &mcp_server_handle,
+                &mcp_last_error,
+            );
+        });
+    }
+    {
+        let window = window.clone();
+        let run_log_expander = run_log_expander.clone();
+        let script_repository = script_repository.clone();
+        let mcp_snapshot = mcp_snapshot.clone();
+        let mcp_server_handle = mcp_server_handle.clone();
+        let mcp_last_error = mcp_last_error.clone();
+        mcp_button.connect_clicked(move |_| {
             present_settings_dialog(
                 &window,
                 &run_log_expander,
@@ -2426,6 +2449,28 @@ fn present_settings_dialog(
     token_box.append(&token_entry);
     token_box.append(&reset_token);
     mcp_card.append(&settings_row("Token", &token_box));
+    mcp_card.append(
+        &gtk::Label::builder()
+            .label("Use the endpoint with a local MCP client that supports Streamable HTTP. Send the token as a Bearer authorization header.")
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(vec!["dim-label"])
+            .build(),
+    );
+    let docs_box = gtk::Box::new(Orientation::Horizontal, 8);
+    docs_box.append(
+        &gtk::LinkButton::builder()
+            .label("EMWaver MCP docs")
+            .uri("https://emwaver.ai/docs/mcp")
+            .build(),
+    );
+    docs_box.append(
+        &gtk::LinkButton::builder()
+            .label("Official MCP docs")
+            .uri("https://modelcontextprotocol.io/docs/getting-started/intro")
+            .build(),
+    );
+    mcp_card.append(&docs_box);
     root.append(&gtk::Frame::builder().child(&mcp_card).build());
 
     {

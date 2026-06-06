@@ -96,7 +96,7 @@ Representative files:
 Agent-to-MCP migration direction:
 - keep the shared Apple package free of Agent UI/runtime, MGPT endpoint clients, local Agent key models, and universe/chat persistence,
 - keep script run hooks, console capture, script storage, and rendered script UI reusable across iOS and macOS,
-- macOS external-agent access should be implemented in the macOS app through a local MCP server, not in this shared mobile/desktop UI package,
+- macOS MCP-client access should be implemented in the macOS app through a local MCP server, not in this shared mobile/desktop UI package,
 - iOS keeps local script import and app-local execution without hosting an MCP listener.
 
 Also bundles package resources, including firmware payload under:

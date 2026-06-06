@@ -4,7 +4,7 @@ This is the contributor orientation doc for the repository as it exists today.
 
 ## What EMWaver Is
 
-EMWaver is a local-first, open-source electronics platform by Continual MI. It turns supported MCU boards into a scriptable hardware lab through native apps, managed firmware, JavaScript scripts, script-defined UI panels, and a desktop MCP bridge for external agents.
+EMWaver is a local-first, open-source electronics platform by Continual MI. It turns supported MCU boards into a scriptable hardware lab through native apps, managed firmware, JavaScript scripts, script-defined UI panels, and a desktop MCP bridge for MCP clients.
 
 Core idea:
 
@@ -14,7 +14,7 @@ native app -> local script runtime -> USB/BLE/Wi-Fi transport -> supported board
 
 Scripts are JavaScript files (`.js`). They can use JSX-style syntax inside JavaScript to define native UI panels for connected modules.
 
-The old in-app Agent/MGPT direction is being removed. Desktop apps will expose the running script engine and hardware tools through a local MCP server; mobile apps keep local script import and app-local execution without hosting an MCP endpoint.
+The old in-app Agent/MGPT direction has been removed from the native app source. Desktop apps expose the running script engine and hardware tools through a local MCP server; mobile apps keep local script import and app-local execution without hosting an MCP endpoint.
 
 ## Supported Platforms
 
@@ -31,7 +31,7 @@ Mobile is the primary product surface. Desktop apps remain important for develop
 ## Current Architecture
 
 - Native apps own discovery, connection state, script execution, rendered script UI, console output, and firmware/update flows.
-- Desktop apps additionally expose a local, user-controlled MCP server so external agents can call tools such as `list_scripts`, `run_script`, `device_state`, `spi_transfer`, `gpio_read`, `gpio_write`, and `analog_read`.
+- Desktop apps additionally expose a local, user-controlled MCP server so MCP clients can call tools such as `list_scripts`, `run_script`, `device_state`, `spi_transfer`, `gpio_read`, `gpio_write`, and `analog_read`.
 - USB is first-class for direct board control.
 - BLE supports cable-free mobile sessions where supported by the board.
 - Wi-Fi supports LAN/VPN-style network control for boards designed around it.
@@ -68,7 +68,7 @@ emwaver/
 
 User documentation lives on the website:
 
-- https://emwaver.ai/emwaver/docs/
+- https://emwaver.ai/docs/
 
 Contributor docs in this repo should stay close to the subsystem they describe. Prefer the local folder README for implementation details.
 

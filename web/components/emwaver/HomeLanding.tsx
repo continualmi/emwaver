@@ -36,7 +36,7 @@ type Pillar = {
   href: string;
   cta: string;
   image?: string;
-  visual?: "agent";
+  visual?: "mcp";
   accent: string; // css color var
   glow: string;
 };
@@ -82,15 +82,15 @@ const PILLARS: Pillar[] = [
     glow: "rgba(78,231,199,0.20)",
   },
   {
-    id: "agent",
+    id: "mcp",
     index: "04",
     eyebrow: "Desktop MCP",
-    title: "Agent tools without app chat.",
+    title: "MCP tools without app chat.",
     headline: "Expose local tools only when you enable them.",
-    body: "Desktop EMWaver apps can expose a local MCP bridge with named tools like spi_transfer, gpio_read, analog_read, run_script, and device_state. External agents use those tools to turn working flows into reusable local .js scripts with UI controls and live plots.",
-    href: "/docs",
+    body: "Desktop EMWaver apps can expose a local MCP bridge with named tools like spi_transfer, gpio_read, analog_read, run_script, and device_state. MCP clients use those tools to turn working flows into reusable local .js scripts with UI controls and live plots.",
+    href: "/docs/mcp",
     cta: "Read the docs",
-    visual: "agent",
+    visual: "mcp",
     accent: "var(--copper)",
     glow: "rgba(240,166,106,0.18)",
   },
@@ -233,7 +233,7 @@ function Hero() {
    ────────────────────────────────────────────────────────────── */
 
 const AGENT_LINES: {
-  kind: "user" | "tool" | "result" | "agent";
+  kind: "user" | "tool" | "result" | "mcp";
   fn?: string;
   text: string;
 }[] = [
@@ -243,10 +243,10 @@ const AGENT_LINES: {
   { kind: "result", text: "0xEF 0x40 0x18  · chip identified" },
   { kind: "tool", fn: "analog_read", text: "A0" },
   { kind: "result", text: "2.48 V" },
-  { kind: "agent", text: "Writing dashboard.js — buttons, live plot, log viewer." },
+  { kind: "mcp", text: "Writing dashboard.js — buttons, live plot, log viewer." },
 ];
 
-function AgentConsole() {
+function McpConsole() {
   return (
     <div className="absolute inset-0 bg-[#04060d]">
       <div className="flex items-center gap-2 border-b border-[color:var(--line)] px-4 py-3">
@@ -287,16 +287,16 @@ function AgentConsole() {
                 <span className="text-[color:var(--sky)]">{line.text}</span>
               </>
             )}
-            {line.kind === "agent" && (
+            {line.kind === "mcp" && (
               <>
-                <span className="text-[color:var(--copper)]">external agent ›</span>
+                <span className="text-[color:var(--copper)]">mcp client ›</span>
                 <span className="text-[color:var(--ink)]">{line.text}</span>
               </>
             )}
           </motion.div>
         ))}
         <div className="flex items-center gap-2 pt-1">
-          <span className="text-[color:var(--copper)]">external agent ›</span>
+          <span className="text-[color:var(--copper)]">mcp client ›</span>
           <motion.span
             animate={{ opacity: [1, 0.15, 1] }}
             transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}
@@ -349,8 +349,8 @@ function PillarContent({ pillar }: { pillar: Pillar }) {
       {/* visual */}
       <div className="order-1 lg:order-2">
         <div className="relative mx-auto aspect-[16/11] w-full max-h-[46vh] max-w-[620px] overflow-hidden rounded-2xl border border-[color:var(--line)] bg-black shadow-[0_40px_120px_var(--shadow-heavy)] lg:max-h-[60vh] lg:max-w-none">
-          {pillar.visual === "agent" ? (
-            <AgentConsole />
+          {pillar.visual === "mcp" ? (
+            <McpConsole />
           ) : (
             <motion.div
               initial={{ scale: 1.08 }}

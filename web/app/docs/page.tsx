@@ -28,7 +28,7 @@ export default function DocsIndex() {
         </li>
         <li>
           <strong>Run a script</strong> — use built-in examples, write your own
-          JSX-based <code>.js</code> script, or enable desktop MCP so an external agent can assemble the flow.
+          JSX-based <code>.js</code> script, or enable desktop MCP so an MCP client can assemble the flow.
         </li>
       </ol>
 
@@ -48,7 +48,7 @@ export default function DocsIndex() {
         </li>
         <li>
           <strong>Desktop MCP flows</strong> — when you enable the desktop MCP bridge, an external
-          agent can list scripts, run them on real hardware, inspect device state, and call SPI/GPIO/analog tools.
+          MCP client can list scripts, run them on real hardware, inspect device state, and call SPI/GPIO/analog tools.
         </li>
       </ul>
 
@@ -122,6 +122,11 @@ export default function DocsIndex() {
 }
 
 const NEXT_LINKS = [
+  {
+    href: "/docs/mcp",
+    title: "Connect desktop MCP",
+    desc: "Enable the local MCP server, copy the endpoint/token, and expose EMWaver tools to an MCP client.",
+  },
   {
     href: "/docs/scripts",
     title: "Learn the scripting model",

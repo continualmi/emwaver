@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import AppKit
 import EMWaverScriptsUI
 import EMWaverScriptRuntime
 
@@ -21,6 +22,7 @@ struct ContentView: View {
     let previewManager: ScriptPreviewManager
 
     @State private var showingSettings: Bool = false
+    @State private var showingMcpInfo: Bool = false
     @State private var autoFirmwarePromptKey: String? = nil
 
     private var toolbarDeviceStatus: (icon: String, text: String) {
@@ -155,6 +157,13 @@ struct ContentView: View {
         }
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
+                Button {
+                    showingMcpInfo = true
+                } label: {
+                    Label("MCP", systemImage: "point.3.connected.trianglepath.dotted")
+                }
+                .help("Desktop MCP")
+
                 localDevicePicker
             }
         }
@@ -173,6 +182,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView(device: device, appUpdater: appUpdater, mcpServer: mcpServer)
+        }
+        .sheet(isPresented: $showingMcpInfo) {
+            MacMcpInfoView(mcpServer: mcpServer)
         }
         .task {
             scriptSessions.attach(device: device)
@@ -330,6 +342,76 @@ struct ContentView: View {
         }
     }
 
+}
+
+private struct MacMcpInfoView: View {
+    @ObservedObject var mcpServer: MacMcpServer
+    @Environment(\.dismiss) private var dismiss
+    @AppStorage(MacMcpSettings.enabledKey) private var mcpServerEnabled = false
+    @AppStorage(MacMcpSettings.tokenKey) private var mcpServerToken = MacMcpSettings.token
+
+    private var statusText: String {
+        if !mcpServerEnabled {
+            return "Disabled"
+        }
+        if mcpServer.isRunning {
+            return "Enabled on loopback"
+        }
+        if let error = mcpServer.lastErrorText, !error.isEmpty {
+            return "Start failed: \(error)"
+        }
+        return "Starting"
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("Desktop MCP") {
+                    Toggle("Enable local MCP server", isOn: $mcpServerEnabled)
+                    LabeledContent("Status", value: statusText)
+                    copyRow("Endpoint", value: mcpServer.endpointURL)
+                    copyRow("Bearer token", value: mcpServerToken)
+                    Button("Reset token") {
+                        mcpServerToken = MacMcpSettings.resetToken()
+                    }
+                }
+
+                Section("Connect") {
+                    Text("Use the endpoint and bearer token in an MCP client that supports local Streamable HTTP servers.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Link("EMWaver MCP docs", destination: URL(string: "https://emwaver.ai/docs/mcp")!)
+                    Link("Official MCP docs", destination: URL(string: "https://modelcontextprotocol.io/docs/getting-started/intro")!)
+                }
+            }
+            .formStyle(.grouped)
+            .navigationTitle("MCP")
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .onChange(of: mcpServerEnabled) {
+                mcpServer.syncWithSettings()
+            }
+            .frame(minWidth: 560, minHeight: 420)
+        }
+    }
+
+    private func copyRow(_ title: String, value: String) -> some View {
+        LabeledContent(title) {
+            HStack {
+                Text(value)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .textSelection(.enabled)
+                Button("Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(value, forType: .string)
+                }
+            }
+        }
+    }
 }
 
 #Preview {

@@ -39,8 +39,12 @@ local utility storage for app-owned credentials such as Wi-Fi setup details.
 
 Migration rule:
 - keep supported boards entering local script/update workflows without a manual claim button or hosted registration step,
-- route external-agent access through the local in-app MCP server instead of app-level Agent chat,
+- route MCP-client access through the local in-app MCP server instead of app-level Agent chat,
 - local scripts, flashing, and device control must not depend on any key.
+
+The macOS toolbar exposes an `MCP` button. It opens the local MCP modal with the
+enable switch, loopback endpoint, bearer token, reset/copy actions, and links to
+the EMWaver MCP docs plus the official MCP docs.
 
 ## 2.2 Device + transport + host management
 
@@ -144,7 +148,7 @@ The macOS app bundles the canonical committed firmware images from `firmware/`. 
 Current macOS responsibility in this area:
 - local script execution for connected supported boards without account/backend activation gates,
 - first-party firmware setup/update flows for supported devices,
-- desktop MCP bridge work for external agents,
+- desktop MCP bridge work for MCP clients,
 - avoid requiring supported-board hardware UID reads in Run Mode before local use,
 - bundled or operator-selected custom firmware images,
 - operator-readable progress and diagnostic logging for update sessions.

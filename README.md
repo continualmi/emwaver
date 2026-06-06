@@ -11,10 +11,10 @@
 </p>
 
 <p align="center">
-  <a href="https://continualmi.com/emwaver">Website</a> ·
-  <a href="https://continualmi.com/emwaver/docs">Documentation</a> ·
-  <a href="https://continualmi.com/emwaver/install">Install</a> ·
-  <a href="https://continualmi.com/emwaver/build">Supported hardware</a> ·
+  <a href="https://emwaver.ai">Website</a> ·
+  <a href="https://emwaver.ai/docs">Documentation</a> ·
+  <a href="https://emwaver.ai/install">Install</a> ·
+  <a href="https://emwaver.ai/build">Supported hardware</a> ·
   <a href="https://continualmi.com">Continual MI</a>
 </p>
 
@@ -62,7 +62,7 @@ Use EMWaver when you want to:
 - build instant UI panels for modules directly from scripts;
 - carry a compact USB-C hardware lab that plugs directly into phones, tablets, and laptops;
 - use BLE for cable-free sessions and Wi-Fi for networked or remote hardware control;
-- let external agents inspect hardware through the desktop MCP bridge when the user enables it.
+- connect MCP clients to local desktop hardware tools when the user enables Desktop MCP.
 
 ## What Works Today
 
@@ -72,7 +72,7 @@ EMWaver currently includes native app work for:
 - iOS / iPadOS
 - macOS
 - Windows
-- Linux, in progress
+- Linux preview, in progress
 
 The platform is designed around:
 
@@ -91,7 +91,7 @@ EMWaver is not one fixed device. The repository includes nine hardware designs f
 
 See the public build page for the hardware catalog:
 
-- [emwaver.ai/emwaver/build](https://emwaver.ai/emwaver/build/)
+- [emwaver.ai/build](https://emwaver.ai/build/)
 
 The hardware sources live under [`hardware/`](hardware/):
 
@@ -132,12 +132,13 @@ web/                     Static website sources and exports
 
 For users:
 
-1. Choose a supported board from the [hardware catalog](https://continualmi.com/emwaver/build).
-2. Install an app from the [install page](https://continualmi.com/emwaver/install):
+1. Choose a supported board from the [hardware catalog](https://emwaver.ai/build).
+2. Install an app from the [install page](https://emwaver.ai/install):
    - [iPhone and iPad on the App Store](https://apps.apple.com/us/app/emwaver/id6747035939)
    - Android through Google Play internal testing or the direct [Android APK](https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-android.apk)
    - [macOS DMG](https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-macos.dmg)
    - [Windows installer](https://github.com/continualmi/emwaver/releases/latest/download/EMWaverSetup-windows-x64.exe) or [Windows ZIP with `EMWaver.exe`](https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-windows-x64.zip)
+   - [Linux DEB preview](https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-linux-amd64.deb)
 3. Connect a supported board.
 4. Open or write a JavaScript hardware script and run it locally.
 
@@ -192,15 +193,17 @@ Wi-Fi-capable boards can also be controlled over a local network or through user
 
 ## Desktop MCP Hardware Interface
 
-EMWaver is migrating away from in-app Agent chat/runtime code. Desktop apps will expose a local MCP bridge, backed by the same script engine and hardware interface exposed to scripts: `run_script`, `list_scripts`, `spi_transfer`, GPIO reads/writes, analog reads, and board/module probes.
+EMWaver no longer ships an in-app Agent chat/runtime. Desktop apps expose a local, user-enabled MCP bridge backed by the same script engine and hardware interface exposed to scripts: `run_script`, `list_scripts`, `read_script`, `write_script`, `stop_script`, `device_state`, `spi_transfer`, GPIO reads/writes, analog reads, and board/module probes.
 
-The local scripting and hardware-control path remains useful without an external model. MCP access is local, desktop-only, and user-controlled; scripts and device control remain local by default.
+The local scripting and hardware-control path remains useful without MCP enabled. MCP access is local, desktop-only, token-protected, and user-controlled; scripts and device control remain local by default. Open the `MCP` button in the macOS, Windows, or Linux desktop app to enable the server and copy the endpoint/token.
+
+Mobile apps keep local script import, app-local storage, and local script execution, but they do not host an MCP endpoint.
 
 ## Documentation
 
 User documentation lives on the EMWaver website:
 
-- [emwaver.ai/emwaver/docs](https://emwaver.ai/emwaver/docs/)
+- [emwaver.ai/docs](https://emwaver.ai/docs/)
 
 Repository docs are mainly for contributors working on apps, firmware, hardware, tests, and release engineering. Start with the README closest to the subsystem you are changing.
 

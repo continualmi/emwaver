@@ -5,7 +5,7 @@ const VIDEOS = [
   {
     title: "EMWaver Platform Capabilities",
     summary:
-      "A walkthrough of the software platform, agent workflows, and real hardware control flows.",
+      "A walkthrough of the software platform, desktop MCP workflows, and real hardware control flows.",
     href: "https://youtu.be/Tyr9nzmqRUs",
     embedUrl: "https://www.youtube-nocookie.com/embed/Tyr9nzmqRUs?rel=0",
     eyebrow: "Platform walkthrough",

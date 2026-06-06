@@ -274,11 +274,12 @@ export default function InstallDocPage() {
         and press Run. Scripts can include JSX-style UI syntax for native module panels.
       </p>
 
-      <h2>6. Desktop MCP for external agents</h2>
+      <h2>6. Desktop MCP</h2>
       <p>
-        Desktop apps can expose a local, user-enabled MCP bridge so an external agent can inspect
+        Desktop apps can expose a local, user-enabled MCP bridge so an MCP client can inspect
         device state, list and run scripts, and call hardware tools such as SPI transfers, GPIO
-        reads/writes, and analog reads. The local script runtime works without any agent access. See the{" "}
+        reads/writes, and analog reads. The local script runtime works without MCP enabled. See the{" "}
+        <Link href="/docs/mcp">desktop MCP guide</Link> for connection details and the{" "}
         <Link href="/docs/scripts">scripting guide</Link> for script details.
       </p>
     </>

@@ -120,7 +120,7 @@ The Windows app intentionally ships a single stable light UI theme; the former d
 
 The WPF Agent drawer, Agent API key storage, SQLite chat storage, and MGPT
 client path have been removed. Their hardware primitive model is now
-repackaged as the desktop MCP surface: external agents should use MCP
+repackaged as the desktop MCP surface: MCP clients should use MCP
 tools such as `list_scripts`, `read_script`, `run_script`, `write_script`,
 `device_state`, `spi_transfer`, `gpio_write`, `gpio_read`, and `analog_read`.
 The WPF script editor uses AvalonEdit syntax highlighting plus visible Find and
@@ -133,6 +133,7 @@ Windows is intended to track the current macOS app in the firmware setup/update,
 Current MCP implementation:
 
 - Settings exposes a `Desktop MCP` section with an enable switch, loopback endpoint, and generated bearer token.
+- The main toolbar exposes an `MCP` button that opens the same local endpoint/token surface plus documentation links.
 - When enabled, the running app serves Streamable-HTTP-style JSON-RPC at `http://127.0.0.1:3923/mcp`.
 - The tool slice supports script list/read/write/run/stop, device status, and direct hardware primitives: `list_scripts`, `read_script`, `write_script`, `run_script`, `stop_script`, `device_state`, `spi_transfer`, `gpio_read`, `gpio_write`, and `analog_read`.
 - The server is intentionally in-process; do not add a sidecar, daemon, or CLI control plane for this path.

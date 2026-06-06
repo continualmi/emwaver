@@ -1,0 +1,72 @@
+<Window
+    x:Class="EMWaver.Views.McpInfoWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Desktop MCP"
+    Width="560" Height="420"
+    MinWidth="520" MinHeight="360"
+    WindowStartupLocation="CenterOwner">
+
+    <Grid Background="{DynamicResource AppWindowBackgroundBrush}" Margin="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Margin="0,0,0,16">
+            <TextBlock Text="Desktop MCP" FontSize="22" FontWeight="SemiBold" Foreground="{DynamicResource AppTextPrimaryBrush}" />
+            <TextBlock Text="Expose EMWaver's local script and hardware tools to an MCP client."
+                       Margin="0,6,0,0"
+                       Foreground="{DynamicResource AppTextSecondaryBrush}" />
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="104" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <CheckBox Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="2"
+                      Content="Enable local MCP server"
+                      IsChecked="{Binding McpServerEnabled, Mode=TwoWay}"
+                      Margin="0,0,0,12" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="Status" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,0,12,8" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding McpServerStatus}" Margin="0,0,0,8" />
+
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Endpoint" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,0,12,8" />
+            <TextBox x:Name="EndpointTextBox" Grid.Row="2" Grid.Column="1" Text="{Binding McpEndpointUrl}" IsReadOnly="True" Margin="0,0,8,8" />
+            <Button Grid.Row="2" Grid.Column="2" Content="Copy" Width="64" Margin="0,0,0,8" Click="OnCopyEndpointClick" />
+
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="Token" Foreground="{DynamicResource AppTextSecondaryBrush}" Margin="0,0,12,8" />
+            <TextBox x:Name="TokenTextBox" Grid.Row="3" Grid.Column="1" Text="{Binding McpServerToken}" IsReadOnly="True" Margin="0,0,8,8" />
+            <StackPanel Grid.Row="3" Grid.Column="2" Orientation="Horizontal" Margin="0,0,0,8">
+                <Button Content="Copy" Width="64" Margin="0,0,8,0" Click="OnCopyTokenClick" />
+                <Button Content="Reset" Width="64" Click="OnResetTokenClick" />
+            </StackPanel>
+
+            <StackPanel Grid.Row="4" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,8,0,0">
+                <TextBlock Text="Use this endpoint with a local MCP client that supports Streamable HTTP. Send the token as a Bearer authorization header."
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource AppTextSecondaryBrush}" />
+                <WrapPanel Margin="0,14,0,0">
+                    <Button Content="EMWaver MCP docs" Margin="0,0,8,8" Click="OnEmwaverDocsClick" />
+                    <Button Content="Official MCP docs" Margin="0,0,8,8" Click="OnOfficialDocsClick" />
+                </WrapPanel>
+            </StackPanel>
+        </Grid>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+            <Button Content="Close" Width="86" Click="OnCloseClick" />
+        </StackPanel>
+    </Grid>
+</Window>

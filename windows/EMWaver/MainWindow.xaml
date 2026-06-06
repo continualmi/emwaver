@@ -63,6 +63,7 @@
                     <!-- Action buttons -->
                     <Button Content="New" Width="50" Height="28" Click="OnNewClick" Margin="0,0,2,0" />
                     <Button Content="Save" Width="50" Height="28" Click="OnSaveClick" Margin="0,0,2,0" />
+                    <Button Content="MCP" Width="50" Height="28" Click="OnMcpClick" Margin="0,0,2,0" ToolTip="Desktop MCP" />
                     <Button x:Name="MoreButton" Content="⋯" Width="36" Height="28" Margin="0,0,2,0" Click="OnMoreClick">
                         <Button.ContextMenu>
                             <ContextMenu>

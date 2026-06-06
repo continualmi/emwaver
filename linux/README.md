@@ -6,7 +6,7 @@ This is the Rust + GTK4/libadwaita port track described in `docs/LINUX_GTK4_PORT
 
 Local-first rules:
 - local scripts, device discovery, and firmware setup must not require an EMWaver account, cloud activation, hosted relay, subscription check, device registration, or hardware ownership gate;
-- in-app Agent/MGPT replies are removed; future external-agent access belongs to the local desktop MCP bridge;
+- in-app Agent/MGPT replies are removed; future MCP-client access belongs to the local desktop MCP bridge;
 - scripts and app state stay on the user's Linux machine by default.
 
 ## Script UI runtime architecture goal
@@ -113,6 +113,7 @@ The first native slice is M0/M1:
 - the GTK script workspace uses GtkSourceView for JavaScript editing with line numbers, syntax highlighting, find, go-to-line, line wrap, script search, and a runtime output switch that renders captured script UI trees with native GTK widgets for common layout/control nodes;
 - script UI rendering now uses a macOS-style live session boundary: GTK keeps widgets on the main thread, a worker owns the Boa runtime and script action invocation, and the packet bridge keeps the selected local transport connected for action-driven device I/O;
 - the GTK shell no longer contains the legacy Agent drawer or MGPT client path; the running app owns the local desktop MCP tool surface;
+- the GTK header exposes a Desktop MCP button that opens the local endpoint/token controls and documentation links;
 - the GTK device sheet now follows the macOS device workflow more closely with selected-device status, grouped local transports, transport badges, board/firmware/UID metadata, manual Wi-Fi target validation, firmware action context, and udev permission guidance;
 - the GTK firmware sheet is board-aware, validates bundled STM32 and ESP32-S3 firmware image plans, probes STM32 DFU presence, shows image offsets/paths, routes STM32 flashing through the local Rust DFU backend, and routes ESP32-S3 serial flashing through the bundled esptool-compatible helper with BOOT/RESET guidance and progress logs;
 - the firmware crate can plan bundled STM32 and ESP32-S3 images, validate required bundled assets, flash STM32 DFU through the existing Rust DFU backend, and orchestrate ESP32-S3 serial flashing with fixed offsets through the local helper;

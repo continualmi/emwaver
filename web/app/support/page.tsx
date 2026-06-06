@@ -73,7 +73,7 @@ export default function SupportPage() {
             {[
               {
                 q: "Do I need to create an account?",
-                a: "No. EMWaver is local-first and open-source. Core hardware control — plugging in a board, running scripts, and exploring signals — does not require an account, cloud activation, or a subscription. External Agent help is separate from local hardware access.",
+                a: "No. EMWaver is local-first and open-source. Core hardware control — plugging in a board, running scripts, and exploring signals — does not require an account, cloud activation, or a subscription. Desktop MCP is optional and local.",
               },
               {
                 q: "What boards are supported?",
@@ -106,15 +106,14 @@ export default function SupportPage() {
                 a: "The firmware source is open-source and the repos are available, but the platform is designed so end users do not need to go through a compile/flash loop. If you want to hack on firmware, that path is available — just not required for normal use.",
               },
               {
-                q: "What does the Agent do?",
+                q: "What does Desktop MCP do?",
                 a: (
                   <>
-                    The Agent assists with writing, debugging, explaining, and improving local
-                    JavaScript scripts. On desktop, external agents can use the local MCP bridge
-                    you enable in the app to inspect device state, run scripts, and call hardware
-                    tools such as SPI, GPIO, and analog reads. See{" "}
-                    <Link href="/docs/scripts" className="text-[color:var(--sky)] underline decoration-[color:var(--link-underline)] hover:decoration-[color:var(--link-underline-hover)]">
-                      scripting docs
+                    Desktop MCP exposes local EMWaver tools to an MCP-capable client while the
+                    desktop app is running. When you enable it, the client can inspect device state,
+                    run scripts, and call hardware tools such as SPI, GPIO, and analog reads. See{" "}
+                    <Link href="/docs/mcp" className="text-[color:var(--sky)] underline decoration-[color:var(--link-underline)] hover:decoration-[color:var(--link-underline-hover)]">
+                      MCP docs
                     </Link>{" "}
                     for details.
                   </>
