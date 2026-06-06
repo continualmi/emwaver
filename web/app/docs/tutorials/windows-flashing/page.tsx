@@ -11,17 +11,13 @@ export default function WindowsFlashingTutorial() {
         ESP32 firmware onto a supported dev board (ESP32, ESP32-S2, or ESP32-S3) — no ESP-IDF or manual build loop required.
       </p>
 
-      <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 my-6">
-        <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--sky)]">
-          What you&rsquo;ll need
-        </div>
-        <ul className="mt-2 space-y-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-          <li>A Windows 11 PC</li>
-          <li>An ESP32-family dev board (ESP32, ESP32-S2, or ESP32-S3)</li>
-          <li>A USB-C cable that supports data</li>
-          <li>The EMWaver Windows app</li>
-        </ul>
-      </section>
+      <h2>What you&rsquo;ll need</h2>
+      <ul>
+        <li>A Windows 11 PC</li>
+        <li>An ESP32-family dev board (ESP32, ESP32-S2, or ESP32-S3)</li>
+        <li>A USB-C cable that supports data</li>
+        <li>The EMWaver Windows app</li>
+      </ul>
 
       <h2>1. Download and install</h2>
       <p>
@@ -146,29 +142,21 @@ export default function WindowsFlashingTutorial() {
       </ul>
 
       <h2>Troubleshooting</h2>
-      <div className="mt-4 grid gap-3">
-        <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
-          <h3 className="mt-0 text-base">Bootloader not detected</h3>
-          <p className="text-sm">
-            Hold BOOT, press and release RST, then release BOOT after a second. If it still does
-            not appear, click Refresh in the flashing section or try another data-capable USB cable.
-          </p>
-        </div>
-        <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
-          <h3 className="mt-0 text-base">Wrong COM port selected</h3>
-          <p className="text-sm">
-            Use the port selector in the firmware flashing window. Pick the port that appears when
-            the ESP32 is plugged in or enters bootloader mode.
-          </p>
-        </div>
-        <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
-          <h3 className="mt-0 text-base">Device does not reconnect after flashing</h3>
-          <p className="text-sm">
-            Reset or replug the board without holding BOOT. If it stays in bootloader mode, press
-            RST again with BOOT released.
-          </p>
-        </div>
-      </div>
+      <h3>Bootloader not detected</h3>
+      <p>
+        Hold BOOT, press and release RST, then release BOOT after a second. If it still does
+        not appear, click Refresh in the flashing section or try another data-capable USB cable.
+      </p>
+      <h3>Wrong COM port selected</h3>
+      <p>
+        Use the port selector in the firmware flashing window. Pick the port that appears when
+        the ESP32 is plugged in or enters bootloader mode.
+      </p>
+      <h3>Device does not reconnect after flashing</h3>
+      <p>
+        Reset or replug the board without holding BOOT. If it stays in bootloader mode, press
+        RST again with BOOT released.
+      </p>
 
       <h2>Next steps</h2>
       <p>With firmware flashed and a working connection:</p>

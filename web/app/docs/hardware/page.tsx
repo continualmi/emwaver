@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { CatalogImage } from "@/components/emwaver/CatalogImage";
 import { getCurrentBoards, type HardwareDevice } from "@/lib/emwaver/hardwareCatalog";
@@ -67,63 +66,21 @@ export default function HardwareDocPage() {
       </p>
 
       <h2>Direct support</h2>
-      <div className="mt-4 grid gap-4 md:grid-cols-2">
-        <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
-          <div className="flex flex-wrap items-start gap-4">
-            <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)]">
-              <Image
-                src="/landing3.png"
-                alt="ESP32-family board support"
-                fill
-                unoptimized
-                className="object-cover"
-              />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-lg font-semibold text-[color:var(--ink)]">
-                Any ESP32-family board
-              </div>
-              <div className="mt-1 text-xs text-[color:var(--ink-dim)]">
-                MCU: ESP32, ESP32-S2, ESP32-S3
-              </div>
-            </div>
-          </div>
-          <p className="mt-3 text-sm leading-6 text-[color:var(--ink-dim)]">
-            Any supported board built around an ESP32, ESP32-S2, or ESP32-S3 can
-            work directly with EMWaver. ESP32-S3 is the best fit when you want
-            USB, BLE, and Wi-Fi on the same device. ESP32-S2 supports USB and
-            Wi-Fi. Classic ESP32 supports Wi-Fi and BLE. This is the fastest way
-            to get started because you do not need to build anything from the
-            EMWaver lineup first.
-          </p>
-        </div>
-        <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
-          <div className="flex flex-wrap items-start gap-4">
-            <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)]">
-              <Image
-                src="/landing1.jpeg"
-                alt="STM32F042 board support"
-                fill
-                unoptimized
-                className="object-cover"
-              />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="text-lg font-semibold text-[color:var(--ink)]">
-                Any STM32F042 board
-              </div>
-              <div className="mt-1 text-xs text-[color:var(--ink-dim)]">
-                MCU: STM32F042
-              </div>
-            </div>
-          </div>
-          <p className="mt-3 text-sm leading-6 text-[color:var(--ink-dim)]">
-            Any supported board built around an STM32F042 can also work
-            directly with EMWaver, especially for the classic USB-first,
-            host-backed path used by the original board family.
-          </p>
-        </div>
-      </div>
+      <h3>Any ESP32-family board <span className="font-normal text-[color:var(--ink-dim)]">— ESP32, ESP32-S2, ESP32-S3</span></h3>
+      <p>
+        Any supported board built around an ESP32, ESP32-S2, or ESP32-S3 can
+        work directly with EMWaver. ESP32-S3 is the best fit when you want
+        USB, BLE, and Wi-Fi on the same device. ESP32-S2 supports USB and
+        Wi-Fi. Classic ESP32 supports Wi-Fi and BLE. This is the fastest way
+        to get started because you do not need to build anything from the
+        EMWaver lineup first.
+      </p>
+      <h3>Any STM32F042 board</h3>
+      <p>
+        Any supported board built around an STM32F042 can also work
+        directly with EMWaver, especially for the classic USB-first,
+        host-backed path used by the original board family.
+      </p>
 
       <h2>EMWaver lineup</h2>
       <div className="mt-4 grid gap-4">
