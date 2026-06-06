@@ -89,12 +89,12 @@ Representative files:
 - `ScriptsRootView.swift`
 - `EmwCodeEditor.swift`
 - `SignalViewerView.swift`
-- legacy `AgentChat*` files targeted for removal during the Agent-to-MCP migration
+- legacy `AgentChat*` files removed during the Agent-to-MCP migration
 
 `ScriptsRootView` supports an optional host-provided script run hook. macOS uses this to create local script sessions outside the shared single-preview manager while iOS keeps the default single-preview behavior.
 
 Agent-to-MCP migration direction:
-- remove the shared Apple Agent UI/runtime, MGPT endpoint client, local Agent key model, and universe/chat persistence,
+- keep the shared Apple package free of Agent UI/runtime, MGPT endpoint clients, local Agent key models, and universe/chat persistence,
 - keep script run hooks, console capture, script storage, and rendered script UI reusable across iOS and macOS,
 - macOS external-agent access should be implemented in the macOS app through a local MCP server, not in this shared mobile/desktop UI package,
 - iOS keeps local script import and app-local execution without hosting an MCP listener.

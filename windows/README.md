@@ -72,7 +72,7 @@ Windows also supports a manual ESP32 Wi-Fi runtime connection through the firmwa
 
 All EMWaver transports must use a **transport session heartbeat** to detect disconnections reliably. Platform-level transport status signals (BLE GATT disconnection callbacks, USB device removal events, Wi-Fi socket closures) are unreliable across OS versions and board states — a BLE peripheral can stop responding without the OS ever firing `Disconnected`; a USB MIDI device can silently vanish without a removal event. The only way to confirm the device is actually still there is to ask it: send a known opcode and verify the echo comes back.
 
-The EMWaver protocol is a **single serial bus** — one stream of commands, responses, and streaming data multiplexed over a shared 36-byte superframe lane. The heartbeat is just another command queued on that bus alongside script opcodes and future MCP tool calls. There is no contention or separate channel; the heartbeat naturally interleaves without disrupting other traffic. The firmware echoes it immediately, and the round-trip time confirms liveness without adding protocol complexity.
+The EMWaver protocol is a **single serial bus** — one stream of commands, responses, and streaming data multiplexed over a shared 36-byte superframe lane. The heartbeat is just another command queued on that bus alongside script opcodes and MCP tool calls. There is no contention or separate channel; the heartbeat naturally interleaves without disrupting other traffic. The firmware echoes it immediately, and the round-trip time confirms liveness without adding protocol complexity.
 
 **Protocol:** The app sends opcode `0x0B` (TransportSession) with sub-opcode `0x03` (Heartbeat) every 2 seconds over the active transport (USB MIDI, BLE, or Wi-Fi). The firmware echoes the heartbeat back on the same transport. If the host does not receive the echo within a window of two heartbeat intervals, the connection is marked as lost, and `ConnectedPort` / `IsConnected` is cleared.
 
@@ -111,7 +111,7 @@ Windows now follows the same board-class split as macOS:
 
 Settings surface includes app-level preferences such as:
 - script diagnostics visibility,
-- future local MCP enablement/status.
+- local MCP enablement/status.
 - desktop app update checks.
 
 Desktop app updates are local-first and account-free. Windows checks the EMWaver-owned manifest at `https://emwaver.ai/updates/windows/latest.json`, with a GitHub Release metadata fallback, then downloads the version-pinned installer URL declared by that manifest. The installer is verified with the manifest SHA-256 when present and launched with Inno Setup silent/restart-safe arguments.
@@ -141,7 +141,8 @@ What Windows already has:
 - USB run-mode transport,
 - ESP32 BLE run-mode transport,
 - STM32 DFU firmware flashing,
-- the legacy Agent API-key auth path removed.
+- the legacy Agent API-key auth path removed,
+- local MCP enablement/status and hardware primitive tools.
 
 Windows now includes:
 - board-aware device state (`board_type`, last detected board info),

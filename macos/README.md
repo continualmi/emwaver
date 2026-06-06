@@ -39,7 +39,7 @@ local utility storage for app-owned credentials such as Wi-Fi setup details.
 
 Migration rule:
 - keep supported boards entering local script/update workflows without a manual claim button or hosted registration step,
-- route external-agent access through the future local in-app MCP server instead of app-level Agent chat,
+- route external-agent access through the local in-app MCP server instead of app-level Agent chat,
 - local scripts, flashing, and device control must not depend on any key.
 
 ## 2.2 Device + transport + host management

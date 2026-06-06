@@ -20,7 +20,7 @@ This is the durable working tracker for current EMWaver priorities. `SCHEDULE.md
 | `P0` | Agent-to-MCP migration | `active` | Remove in-app Agent/MGPT, make desktop MCP + filesystem scripts canonical, and keep mobile as local script import/run. Plan: `docs/AGENT_TO_MCP_MIGRATION.html`; contract: `docs/MCP_CONTRACT.md`. |
 | `P0` | Cross-platform CC1101 validation | `done` | `cc1101.js` reads/writes registers across Windows, macOS, Android, and iOS (2026-05-24). |
 | `P0` | Documentation cleanup | `active` | Remove stale Agent/MGPT, old browser/daemon control-plane, Windows-deferred, and Linux-removed wording from active/public docs and platform READMEs. |
-| `P0` | MCP hardware primitive tools | `planned` | Repackage `spi_transfer`, GPIO, analog, and module-probe flows as desktop MCP tools backed by the native app/device transport. |
+| `P0` | MCP hardware primitive tools | `done/source` | Desktop MCP source now exposes `spi_transfer`, GPIO, and analog tools backed by native app/device transports on macOS, Windows, and Linux. Real-hardware validation remains part of the hardware test suite. |
 | `P0` | Script-defined native UI | `active` | JavaScript scripts can define instant native panels with JSX-style syntax. Keep docs clear that JSX is syntax inside JS, not a separate product surface. |
 | `P0` | Mobile UI polish | `active` | Improve iOS and Android script/device flows for phone use after Agent/MGPT removal. |
 | `P1` | ESP32 Wi-Fi transport | `hardware validation pending` | Validate same-LAN and LAN/VPN-style control on real ESP32-S3 hardware. |
