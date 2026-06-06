@@ -18,6 +18,7 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::watch;
 
 pub const DEFAULT_PORT: u16 = 3923;
 const ENDPOINT_PATH: &str = "/mcp";
@@ -43,13 +44,165 @@ impl McpDeviceSnapshot {
     }
 }
 
+#[derive(Clone, Default)]
+struct McpRuns {
+    inner: Arc<Mutex<BTreeMap<String, Arc<McpScriptRun>>>>,
+}
+
+impl McpRuns {
+    fn insert(&self, run: Arc<McpScriptRun>) {
+        if let Ok(mut runs) = self.inner.lock() {
+            runs.insert(run.id.clone(), run);
+        }
+    }
+
+    fn remove(&self, run_id: &str) -> Option<Arc<McpScriptRun>> {
+        self.inner
+            .lock()
+            .ok()
+            .and_then(|mut runs| runs.remove(run_id))
+    }
+
+    fn drain(&self) -> Vec<Arc<McpScriptRun>> {
+        self.inner
+            .lock()
+            .map(|mut runs| {
+                let drained = runs.values().cloned().collect::<Vec<_>>();
+                runs.clear();
+                drained
+            })
+            .unwrap_or_default()
+    }
+}
+
+struct McpScriptRun {
+    id: String,
+    name: String,
+    status: Mutex<String>,
+    console: Mutex<Vec<McpConsoleLine>>,
+    error: Mutex<Option<McpConsoleLine>>,
+    cancel_tx: Mutex<Option<watch::Sender<bool>>>,
+}
+
+impl McpScriptRun {
+    fn new(id: String, name: String, cancel_tx: watch::Sender<bool>) -> Self {
+        Self {
+            id,
+            name,
+            status: Mutex::new("running".to_string()),
+            console: Mutex::new(Vec::new()),
+            error: Mutex::new(None),
+            cancel_tx: Mutex::new(Some(cancel_tx)),
+        }
+    }
+
+    fn record_console(&self, text: impl Into<String>) {
+        if let Ok(mut console) = self.console.lock() {
+            console.push(McpConsoleLine::new("info", text.into()));
+        }
+    }
+
+    fn record_error(&self, text: impl Into<String>) {
+        let line = McpConsoleLine::new("error", text.into());
+        if let Ok(mut error) = self.error.lock() {
+            *error = Some(line.clone());
+        }
+        if let Ok(mut console) = self.console.lock() {
+            console.push(line);
+        }
+        self.set_status("failed");
+    }
+
+    fn finish(&self, status: &str) {
+        let Ok(mut current) = self.status.lock() else {
+            return;
+        };
+        if current.as_str() != "stopped" {
+            *current = status.to_string();
+        }
+    }
+
+    fn set_status(&self, status: &str) {
+        if let Ok(mut current) = self.status.lock() {
+            *current = status.to_string();
+        }
+    }
+
+    fn stop(&self) {
+        self.set_status("stopped");
+        if let Ok(mut cancel_tx) = self.cancel_tx.lock() {
+            if let Some(tx) = cancel_tx.take() {
+                let _ = tx.send(true);
+            }
+        }
+    }
+
+    fn status(&self) -> String {
+        self.status
+            .lock()
+            .map(|status| status.clone())
+            .unwrap_or_else(|_| "unknown".to_string())
+    }
+
+    fn console_json(&self) -> Vec<Value> {
+        self.console
+            .lock()
+            .map(|console| console.iter().map(McpConsoleLine::json).collect())
+            .unwrap_or_default()
+    }
+
+    fn error_json(&self) -> Value {
+        self.error
+            .lock()
+            .ok()
+            .and_then(|error| error.as_ref().map(McpConsoleLine::json))
+            .unwrap_or(Value::Null)
+    }
+}
+
+#[derive(Clone)]
+struct McpConsoleLine {
+    level: String,
+    text: String,
+    timestamp: String,
+}
+
+impl McpConsoleLine {
+    fn new(level: impl Into<String>, text: impl Into<String>) -> Self {
+        Self {
+            level: level.into(),
+            text: text.into(),
+            timestamp: chrono_like_timestamp(),
+        }
+    }
+
+    fn json(&self) -> Value {
+        json!({
+            "level": self.level,
+            "text": self.text,
+            "timestamp": self.timestamp
+        })
+    }
+}
+
+fn stop_all_runs(runs: &McpRuns) -> usize {
+    let drained = runs.drain();
+    let count = drained.len();
+    for run in drained {
+        run.stop();
+    }
+    count
+}
+
 pub struct McpServerHandle {
     shutdown_tx: Option<mpsc::Sender<()>>,
     join: Option<thread::JoinHandle<()>>,
+    runs: McpRuns,
 }
 
 impl Drop for McpServerHandle {
     fn drop(&mut self) {
+        stop_all_runs(&self.runs);
         if let Some(tx) = self.shutdown_tx.take() {
             let _ = tx.send(());
         }
@@ -66,6 +219,8 @@ impl McpServerHandle {
     ) -> Result<Self, String> {
         let (ready_tx, ready_rx) = mpsc::channel::<Result<(), String>>();
         let (shutdown_tx, shutdown_rx) = mpsc::channel::<()>();
+        let runs = McpRuns::default();
+        let thread_runs = runs.clone();
 
         let join = thread::Builder::new()
             .name("emwaver-linux-mcp".to_string())
@@ -106,8 +261,9 @@ impl McpServerHandle {
                             Ok(Ok((stream, _))) => {
                                 let repository = repository.clone();
                                 let snapshot = snapshot.clone();
+                                let runs = thread_runs.clone();
                                 tokio::spawn(async move {
-                                    let _ = handle_client(stream, repository, snapshot).await;
+                                    let _ = handle_client(stream, repository, snapshot, runs).await;
                                 });
                             }
                             Ok(Err(_)) => break,
@@ -122,6 +278,7 @@ impl McpServerHandle {
             Ok(Ok(())) => Ok(Self {
                 shutdown_tx: Some(shutdown_tx),
                 join: Some(join),
+                runs,
             }),
             Ok(Err(error)) => {
                 let _ = shutdown_tx.send(());
@@ -222,6 +379,7 @@ async fn handle_client(
     mut stream: TcpStream,
     repository: ScriptRepository,
     snapshot: Arc<Mutex<McpDeviceSnapshot>>,
+    runs: McpRuns,
 ) -> std::io::Result<()> {
     let request = read_http_request(&mut stream).await?;
     if request.method.to_uppercase() != "POST" || request.path != ENDPOINT_PATH {
@@ -246,7 +404,7 @@ async fn handle_client(
         return Ok(());
     }
 
-    let (status, body) = handle_json_rpc(&request.body, &repository, &snapshot);
+    let (status, body) = handle_json_rpc(&request.body, &repository, &snapshot, &runs);
     if status == 202 {
         write_empty_response(&mut stream, 202, "Accepted").await
     } else {
@@ -268,6 +426,7 @@ fn handle_json_rpc(
     body: &[u8],
     repository: &ScriptRepository,
     snapshot: &Arc<Mutex<McpDeviceSnapshot>>,
+    runs: &McpRuns,
 ) -> (u16, Value) {
     let Ok(value) = serde_json::from_slice::<Value>(body) else {
         return (
@@ -280,7 +439,7 @@ fn handle_json_rpc(
         Value::Array(items) => {
             let responses: Vec<Value> = items
                 .into_iter()
-                .filter_map(|item| handle_single_json_rpc(item, repository, snapshot))
+                .filter_map(|item| handle_single_json_rpc(item, repository, snapshot, runs))
                 .collect();
             if responses.is_empty() {
                 (202, Value::Null)
@@ -289,7 +448,7 @@ fn handle_json_rpc(
             }
         }
         Value::Object(_) => {
-            if let Some(response) = handle_single_json_rpc(value, repository, snapshot) {
+            if let Some(response) = handle_single_json_rpc(value, repository, snapshot, runs) {
                 (200, response)
             } else {
                 (202, Value::Null)
@@ -306,6 +465,7 @@ fn handle_single_json_rpc(
     request: Value,
     repository: &ScriptRepository,
     snapshot: &Arc<Mutex<McpDeviceSnapshot>>,
+    runs: &McpRuns,
 ) -> Option<Value> {
     let id = request.get("id").cloned();
     let id = id?;
@@ -316,7 +476,7 @@ fn handle_single_json_rpc(
     let result = match method {
         "initialize" => initialize_result(request.get("params")),
         "tools/list" => tools_list_result(),
-        "tools/call" => tools_call_result(request.get("params"), repository, snapshot),
+        "tools/call" => tools_call_result(request.get("params"), repository, snapshot, runs),
         _ => {
             return Some(json_rpc_error(
                 id,
@@ -476,6 +636,7 @@ fn tools_call_result(
     params: Option<&Value>,
     repository: &ScriptRepository,
     snapshot: &Arc<Mutex<McpDeviceSnapshot>>,
+    runs: &McpRuns,
 ) -> Value {
     let name = params
         .and_then(|value| value.get("name"))
@@ -486,8 +647,8 @@ fn tools_call_result(
         Some("list_scripts") => list_scripts_tool(repository),
         Some("read_script") => read_script_tool(repository, arguments),
         Some("write_script") => write_script_tool(repository, arguments),
-        Some("run_script") => run_script_tool(repository, arguments, snapshot),
-        Some("stop_script") => stop_script_tool(arguments),
+        Some("run_script") => run_script_tool(repository, arguments, snapshot, runs),
+        Some("stop_script") => stop_script_tool(arguments, runs),
         Some("device_state") => device_state_tool(snapshot),
         Some("spi_transfer") => spi_transfer_tool(arguments, snapshot),
         Some("gpio_read") => gpio_read_tool(arguments, snapshot),
@@ -525,6 +686,7 @@ fn run_script_tool(
     repository: &ScriptRepository,
     arguments: Option<&Value>,
     snapshot: &Arc<Mutex<McpDeviceSnapshot>>,
+    runs: &McpRuns,
 ) -> Value {
     let resolved = resolve_run_source(repository, arguments);
     let Ok((name, source)) = resolved else {
@@ -551,29 +713,58 @@ fn run_script_tool(
 
     let modules = repository.module_sources().unwrap_or_default();
     let run_id = uuid::Uuid::new_v4().to_string();
-    let lines = run_device_script(device, &source, &modules);
-    let ok = !lines.iter().any(|line| {
-        let lowered = line.to_lowercase();
-        lowered.contains("failed")
-            || lowered.contains("not implemented")
-            || lowered.contains("not available")
-    });
+    let (cancel_tx, cancel_rx) = watch::channel(false);
+    let run = Arc::new(McpScriptRun::new(run_id.clone(), name.clone(), cancel_tx));
+    run.record_console("Linux MCP script run started.");
+    runs.insert(run.clone());
+
+    tokio::spawn(run_device_script_task(
+        run.clone(),
+        device,
+        source,
+        modules,
+        cancel_rx,
+    ));
 
     json!({
-        "ok": ok,
+        "ok": true,
         "run_id": run_id,
-        "status": if ok { "completed" } else { "failed" },
+        "status": "running",
         "name": name,
-        "console": console_json(lines)
+        "console": run.console_json(),
+        "error": Value::Null
     })
 }
 
-fn stop_script_tool(_arguments: Option<&Value>) -> Value {
+fn stop_script_tool(arguments: Option<&Value>, runs: &McpRuns) -> Value {
+    let run_id = arguments
+        .and_then(|value| value.get("run_id"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty());
+
+    if let Some(run_id) = run_id {
+        let Some(run) = runs.remove(run_id) else {
+            return tool_error(
+                "run_not_found",
+                &format!("MCP script run not found: {run_id}"),
+                Some("Call run_script first, or omit run_id to stop all MCP-started runs."),
+            );
+        };
+        run.stop();
+        return json!({
+            "ok": true,
+            "run_id": run_id,
+            "status": run.status(),
+            "console": run.console_json(),
+            "error": run.error_json()
+        });
+    }
+
+    let stopped = stop_all_runs(runs);
     json!({
         "ok": true,
-        "status": "not_running",
-        "stopped": 0,
-        "note": "Linux MCP run_script currently executes synchronously; persistent MCP run sessions are still pending."
+        "status": "stopped",
+        "stopped": stopped
     })
 }
 
@@ -625,58 +816,56 @@ fn resolve_run_source(
     Ok((script.name, source))
 }
 
-fn run_device_script(
+async fn run_device_script_task(
+    run: Arc<McpScriptRun>,
     device: DeviceRecord,
-    source: &str,
-    module_sources: &BTreeMap<String, String>,
-) -> Vec<String> {
-    let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-    else {
-        return vec!["Failed to create script runtime.".to_string()];
+    source: String,
+    module_sources: BTreeMap<String, String>,
+    mut cancel_rx: watch::Receiver<bool>,
+) {
+    if *cancel_rx.borrow() {
+        run.record_console("Linux MCP script run stopped before transport startup.");
+        run.finish("stopped");
+        return;
+    }
+
+    let mut transport = match open_transport_for_device(&device).await {
+        Ok(transport) => transport,
+        Err(err) => {
+            run.record_error(format!("Script transport failed: {err}"));
+            return;
+        }
     };
 
-    match device.transport {
-        TransportKind::Simulator => vec![
-            "Simulator is an internal test transport and is not available in the Linux app UI."
-                .to_string(),
-        ],
-        TransportKind::UsbMidi => runtime.block_on(async {
-            let candidate = match LinuxUsbManager::default().discover() {
-                Ok(candidates) => candidates
-                    .into_iter()
-                    .find(|candidate| candidate.id == device.id),
-                Err(err) => return vec![format!("USB discovery failed: {err}")],
-            };
-            let Some(candidate) = candidate else {
-                return vec![format!("USB device {} is no longer present.", device.id)];
-            };
-            let mut transport = match LinuxUsbMidiTransport::new(candidate) {
-                Ok(transport) => transport,
-                Err(err) => return vec![format!("USB transport setup failed: {err}")],
-            };
-            run_with_transport(source, module_sources, &mut transport).await
-        }),
-        TransportKind::Wifi => runtime.block_on(async {
-            let target = match manual_wifi_target_from_device(&device) {
-                Ok(target) => target,
-                Err(err) => return vec![err],
-            };
-            let mut transport = LinuxWifiTransport::new(target);
-            run_with_transport(source, module_sources, &mut transport).await
-        }),
-        TransportKind::Ble => runtime.block_on(async {
-            let target = match ble_target_from_device(&device) {
-                Ok(target) => target,
-                Err(err) => return vec![err],
-            };
-            let mut transport = LinuxBleTransport::new(target);
-            run_with_transport(source, module_sources, &mut transport).await
-        }),
-        other => vec![format!(
-            "{other:?} script execution is not implemented yet."
-        )],
+    let lines = run_with_transport(&source, &module_sources, &mut *transport, &mut cancel_rx).await;
+    for line in &lines {
+        let lowered = line.to_lowercase();
+        if lowered.contains("failed")
+            || lowered.contains("not implemented")
+            || lowered.contains("not available")
+        {
+            run.record_error(line.clone());
+        } else {
+            run.record_console(line.clone());
+        }
+    }
+
+    let failed = lines.iter().any(|line| {
+        let lowered = line.to_lowercase();
+        lowered.contains("failed")
+            || lowered.contains("not implemented")
+            || lowered.contains("not available")
+    });
+    let stopped = lines.iter().any(|line| {
+        let lowered = line.to_lowercase();
+        lowered.contains("stopped")
+    });
+    if stopped {
+        run.finish("stopped");
+    } else if failed {
+        run.finish("failed");
+    } else {
+        run.finish("completed");
     }
 }
 
@@ -684,12 +873,23 @@ async fn run_with_transport(
     source: &str,
     module_sources: &BTreeMap<String, String>,
     transport: &mut dyn EmwaverTransport,
+    cancel_rx: &mut watch::Receiver<bool>,
 ) -> Vec<String> {
-    if let Err(err) = transport.connect().await {
-        return vec![format!("Transport connect failed: {err}")];
+    if *cancel_rx.borrow() {
+        let _ = transport.close().await;
+        return vec!["Script stopped before execution.".to_string()];
     }
-    let result = execute_javascript_with_modules(source, module_sources, transport).await;
+    let result = tokio::select! {
+        biased;
+        _ = cancel_rx.changed() => {
+            None
+        }
+        result = execute_javascript_with_modules(source, module_sources, transport) => Some(result)
+    };
     let _ = transport.close().await;
+    let Some(result) = result else {
+        return vec!["Script stopped by MCP stop_script.".to_string()];
+    };
     match result {
         Ok(report) => report.log,
         Err(err) => vec![format!("Script failed: {err}")],

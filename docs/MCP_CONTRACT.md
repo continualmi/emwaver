@@ -13,7 +13,7 @@ This is the desktop Agent replacement contract. EMWaver apps do not ship a bespo
 
 - macOS, Windows, and Linux have the first in-app MCP slice in source: Settings exposes enablement, endpoint, and token controls; the app hosts `POST /mcp` on loopback when enabled.
 - The desktop tools implemented in source are `list_scripts`, `read_script`, `write_script`, `run_script`, `stop_script`, `device_state`, `spi_transfer`, `gpio_read`, `gpio_write`, and `analog_read`.
-- macOS and Windows keep MCP-started run sessions alive until `stop_script`; Linux currently executes `run_script` synchronously and returns `stop_script` as `not_running` until GTK session-worker MCP wiring lands.
+- macOS and Windows keep MCP-started run sessions alive until `stop_script`; Linux keeps MCP-started run records with cancellable worker tasks, but still needs full GTK session-worker ownership for live UI/event parity.
 - Linux app compilation still requires Linux/GTK system libraries; validate that slice on a GTK4/libadwaita host.
 - Linux hardware primitive tools use the selected USB/BLE/Wi-Fi transport. BLE and Wi-Fi primitive calls claim the firmware transport session before sending the command and release it afterward when practical.
 - Linux SPI primitive transfers are currently constrained by the Linux command lane to 14 TX bytes per call.
@@ -39,4 +39,4 @@ This is the desktop Agent replacement contract. EMWaver apps do not ship a bespo
 - Errors include `{ ok: false, error: { code, message, recovery? } }`.
 - Hardware tools must report when no selected device is connected instead of probing implicitly.
 - Script tools and the app UI resolve the same script roots.
-- `run_script` returns the same captured console output the app shows.
+- `run_script` returns captured console output available at start time; `stop_script` returns the current stored console snapshot for MCP-started runs.
