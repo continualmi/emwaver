@@ -53,7 +53,7 @@ Representative files:
 - `PlotBufferStore.swift`
 - `RustBufferCore.swift` (interop surface)
 
-macOS/iOS Apple runtime now includes the first EMWaver JSX migration slice:
+macOS/iOS Apple runtime includes EMWaver JSX authoring support:
 `ScriptJSXTranspiler` rewrites a small uppercase JSX subset such as
 `<Column><Text>Hello</Text></Column>` into `JSX.h(...)` calls before
 JavaScriptCore evaluates a script. The macOS runtime now loads
@@ -89,12 +89,11 @@ Representative files:
 - `ScriptsRootView.swift`
 - `EmwCodeEditor.swift`
 - `SignalViewerView.swift`
-- legacy `AgentChat*` files removed during the Agent-to-MCP migration
 
 `ScriptsRootView` supports an optional host-provided script run hook. macOS uses this to create local script sessions outside the shared single-preview manager while iOS keeps the default single-preview behavior.
 
-Agent-to-MCP migration direction:
-- keep the shared Apple package free of Agent UI/runtime, MGPT endpoint clients, local Agent key models, and universe/chat persistence,
+Desktop MCP direction:
+- keep the shared Apple package focused on scripts, storage, rendering, and local runtime behavior,
 - keep script run hooks, console capture, script storage, and rendered script UI reusable across iOS and macOS,
 - macOS MCP-client access should be implemented in the macOS app through a local MCP server, not in this shared mobile/desktop UI package,
 - iOS keeps local script import and app-local execution without hosting an MCP listener.

@@ -14,7 +14,7 @@ This suite is currently run manually when changing platform parity contracts.
 
 ## Structure
 
-- `features/mcp.json` - Agent-to-MCP migration, desktop MCP bridge direction, and mobile MCP exceptions.
+- `features/mcp.json` - desktop MCP bridge contract and mobile MCP exceptions.
 - `features/transport.json` - USB MIDI and BLE runtime transport parity.
 - `features/scripting.json` - script asset and simulator-test parity.
 - `features/firmware.json` - STM32 DFU and ESP32-S3 serial update parity.

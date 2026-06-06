@@ -2,7 +2,7 @@
 
 Native macOS EMWaver application (Swift/SwiftUI + Xcode).
 
-This is the desktop Apple host app for local USB/BLE/Wi-Fi workflows, desktop MCP migration work, and firmware/update UX on macOS.
+This is the desktop Apple host app for local USB/BLE/Wi-Fi workflows, Desktop MCP, and firmware/update UX on macOS.
 
 The local-first rule is that connected supported boards can run local JavaScript scripts immediately through the native app. Hardware UIDs may be used for local labels/diagnostics, not product activation or ownership gates.
 
@@ -31,15 +31,11 @@ Entry points:
 
 ## 2) Main code areas
 
-## 2.1 MCP migration
+## 2.1 Desktop MCP
 
-The legacy Agent API-key manager, MGPT endpoint plumbing, and in-app Agent
-entry UI have been removed from the macOS app. `KeychainStore.swift` remains as
-local utility storage for app-owned credentials such as Wi-Fi setup details.
-
-Migration rule:
+Desktop MCP rule:
 - keep supported boards entering local script/update workflows without a manual claim button or hosted registration step,
-- route MCP-client access through the local in-app MCP server instead of app-level Agent chat,
+- route MCP-client access through the local in-app MCP server,
 - local scripts, flashing, and device control must not depend on any key.
 
 The macOS toolbar exposes an `MCP` button. It opens the local MCP modal with the
@@ -148,7 +144,7 @@ The macOS app bundles the canonical committed firmware images from `firmware/`. 
 Current macOS responsibility in this area:
 - local script execution for connected supported boards without account/backend activation gates,
 - first-party firmware setup/update flows for supported devices,
-- desktop MCP bridge work for MCP clients,
+- desktop MCP bridge for MCP clients,
 - avoid requiring supported-board hardware UID reads in Run Mode before local use,
 - bundled or operator-selected custom firmware images,
 - operator-readable progress and diagnostic logging for update sessions.

@@ -21,7 +21,7 @@ If you only read one thing first, read:
 - Device metadata endpoints (firmware version, device name, signed identity reads).
 - Building/exporting `.elf` and `.bin` artifacts for app bundling.
 
-This folder does **not** own host, gateway, or Agent logic; it is strictly MCU-side firmware and build helpers.
+This folder does **not** own host app, desktop MCP, or product runtime logic; it is strictly MCU-side firmware and build helpers.
 
 ### Board-specific notes (STM32F042 — EMWaver board)
 

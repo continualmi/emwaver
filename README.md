@@ -64,9 +64,9 @@ Use EMWaver when you want to:
 - use BLE for cable-free sessions and Wi-Fi for networked or remote hardware control;
 - connect MCP clients to local desktop hardware tools when the user enables Desktop MCP.
 
-## What Works Today
+## Platform
 
-EMWaver currently includes native app work for:
+EMWaver ships native app surfaces for:
 
 - Android
 - iOS / iPadOS
@@ -193,7 +193,7 @@ Wi-Fi-capable boards can also be controlled over a local network or through user
 
 ## Desktop MCP Hardware Interface
 
-EMWaver no longer ships an in-app Agent chat/runtime. Desktop apps expose a local, user-enabled MCP bridge backed by the same script engine and hardware interface exposed to scripts: `run_script`, `list_scripts`, `read_script`, `write_script`, `stop_script`, `device_state`, `spi_transfer`, GPIO reads/writes, analog reads, and board/module probes.
+Desktop apps expose a local, user-enabled MCP bridge backed by the same script engine and hardware interface exposed to scripts: `run_script`, `list_scripts`, `read_script`, `write_script`, `stop_script`, `device_state`, `spi_transfer`, GPIO reads/writes, analog reads, and board/module probes.
 
 The local scripting and hardware-control path remains useful without MCP enabled. MCP access is local, desktop-only, token-protected, and user-controlled; scripts and device control remain local by default. Open the `MCP` button in the macOS, Windows, or Linux desktop app to enable the server and copy the endpoint/token.
 

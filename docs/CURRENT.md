@@ -14,7 +14,7 @@ native app -> local script runtime -> USB/BLE/Wi-Fi transport -> supported board
 
 Scripts are JavaScript files (`.js`). They can use JSX-style syntax inside JavaScript to define native UI panels for connected modules.
 
-The old in-app Agent/MGPT direction has been removed from the native app source. Desktop apps expose the running script engine and hardware tools through a local MCP server; mobile apps keep local script import and app-local execution without hosting an MCP endpoint.
+Desktop apps expose the running script engine and hardware tools through a local MCP server. Mobile apps keep local script import and app-local execution without hosting an MCP endpoint.
 
 ## Supported Platforms
 
@@ -38,9 +38,9 @@ Mobile is the primary product surface. Desktop apps remain important for develop
 - STM32 and ESP32-family firmware targets are both part of the platform direction.
 - Hardware designs live under `hardware/` and are indexed by `hardware/README.md`.
 
-## Superseded Architecture
+## Architecture Boundaries
 
-The active architecture is native apps plus the desktop MCP bridge. Superseded browser/daemon control-plane and in-app Agent/MGPT plans belong in `docs/archive/` and should not be used as implementation guidance.
+The active architecture is native apps plus the desktop MCP bridge. Browser daemons, hosted relays, and app-side model runtimes are not part of the current local-control path.
 
 ## Repo Layout
 
@@ -80,12 +80,9 @@ Key contributor docs:
 | `docs/CURRENT.md` | Current-state orientation |
 | `docs/PLANNING.md` | Active priorities and next steps |
 | `docs/SCHEDULE.md` | Short-term execution tracker |
-| `docs/TESTS.md` | Hardware and app validation suite *(being rebuilt)* |
 | `docs/RELEASES.md` | Release workflows and public preview assets |
-| `docs/AGENT_TO_MCP_MIGRATION.html` | Agent/MGPT removal and desktop MCP migration plan |
 | `docs/MCP_CONTRACT.md` | Desktop MCP tool contract |
-| `docs/LINUX_GTK4_PORT_PLAN.html` | Native Linux app port plan |
 | `docs/LINUX_MACOS_PARITY_AUDIT.md` | Current macOS-vs-Linux native parity checklist |
 | `docs/SIMULATOR.md` | Shared simulator direction |
 | `docs/parity/` | Cross-platform parity contracts |
-| `docs/archive/` | Historical browser/daemon control-plane, in-app Agent/MGPT, and rebirth-era docs |
+| `docs/archive/` | Historical plans and superseded implementation notes |

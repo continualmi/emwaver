@@ -7,10 +7,10 @@ EMWaver is an open-source, local-first electronics platform — and contribution
 Before diving in, read these three things:
 
 1. **[AGENTS.md](AGENTS.md)** — the repo-wide source of truth for product vision, non-negotiable policies, and the folder documentation map.
-2. **[README.md](README.md)** — the public overview: what EMWaver is, what works today, and the repository map.
+2. **[README.md](README.md)** — the public overview: what EMWaver is, platform surfaces, and the repository map.
 3. **[docs/CURRENT.md](docs/CURRENT.md)** — the contributor orientation doc: current architecture, supported platforms, and doc routing.
 
-The short version: EMWaver turns supported MCU boards into a scriptable hardware lab through native apps (iOS, Android, macOS, Windows, Linux). The core is open-source and local-first. Local hardware control must work without accounts, cloud activation, or subscription checks. Desktop external-agent access is moving to a local MCP server hosted by the running desktop app.
+The short version: EMWaver turns supported MCU boards into a scriptable hardware lab through native apps (iOS, Android, macOS, Windows, Linux). The core is open-source and local-first. Local hardware control must work without accounts, cloud activation, or subscription checks. Desktop MCP is hosted by the running desktop app.
 
 ## Repo layout
 

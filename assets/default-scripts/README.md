@@ -3,7 +3,7 @@
 This folder is the canonical source for bundled EMWaver scripts:
 
 - macOS now bundles the `.js` scripts and visible `emw-*` libraries from this folder.
-- Android still needs a matching runtime migration; the canonical default assets are no longer `.emw`.
+- Android still needs matching runtime parity; the canonical default assets are JavaScript files.
 - Native apps load from this folder path in repo workflows.
 
 The target public source format is JavaScript. Keep new macOS examples and

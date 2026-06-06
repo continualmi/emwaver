@@ -52,4 +52,4 @@ This is the working checklist for the native Linux GTK4 port against the macOS a
 - Linux editor uses GtkSourceView with syntax highlighting, line numbers, find, go-to-line, and line wrap.
 - Linux has USB MIDI, Wi-Fi WebSocket/mDNS, and BlueZ BLE GATT transport paths behind the shared transport trait.
 - Linux firmware flow can plan bundled STM32 and ESP32-S3 images and call the local flashing backends.
-- Linux no longer carries in-app Agent/MGPT credentials; desktop MCP settings plus script/status and hardware primitive MCP tools are present in the GTK app source.
+- Linux desktop MCP settings plus script/status and hardware primitive MCP tools are present in the GTK app source.

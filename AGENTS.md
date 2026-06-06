@@ -15,7 +15,7 @@ Implementation details belong in folder-level `README.md` files.
 
 ---
 
-## 0) Agent Workflow
+## 0) Automation Workflow
 
 - Keep validation logs compact. `xcodebuild`, ESP-IDF, and other embedded build systems can emit very large logs that waste conversation context. Prefer quiet or filtered output by default, such as `xcodebuild -quiet ...`, `idf.py build 2>&1 | tail -120`, or focused `rg` filters for `error:`, `warning:`, and file paths. Only capture or paste full build logs when the compact output is insufficient to diagnose a failure.
 
@@ -23,10 +23,10 @@ Implementation details belong in folder-level `README.md` files.
 
 ## 1) Product Vision (core)
 
-EMWaver is a **local-first**, open-source electronics platform by **Continual MI**. It turns supported MCU boards into a scriptable hardware lab through local apps, managed firmware, JavaScript scripts, native script UI, and a desktop MCP bridge for external agents.
+EMWaver is a **local-first**, open-source electronics platform by **Continual MI**. It turns supported MCU boards into a scriptable hardware lab through local apps, managed firmware, JavaScript scripts, native script UI, and a desktop MCP bridge for MCP clients.
 
 Core direction:
-- **Business model:** open-source core plus future paid Continual/MGPT model inference. Revenue should come from model/API usage and bundled Continual offerings, not from accounts, hosted cloud control, or gating local hardware access.
+- **Business model:** open-source core plus future paid Continual model inference. Revenue should come from model/API usage and bundled Continual offerings, not from accounts, hosted cloud control, or gating local hardware access.
 - **No EMWaver accounts/cloud:** EMWaver itself should not require or maintain product accounts, cloud activation, hosted relay, cloud script storage, cloud sync, or subscription checks for core use.
 - **Local-first core:** users should be able to run local JavaScript scripts without a Continual MI account, EMWaver account, cloud activation, hosted relay, or subscription check.
 - **Local data ownership:** scripts and core local state should live on the user's device. Do not add cloud script storage, cloud script sync, or account-backed local project storage to the open-source core path.
@@ -36,7 +36,7 @@ Core direction:
 - **Hardware repo direction:** EMWaver should become a single open-source monorepo, with imported hardware design repos preserved under `hardware/`.
 - **Firmware:** per-board firmware targets managed by the platform. Users never build or flash firmware manually; apps should handle firmware setup and updates where practical.
 - **UX:** script-first hardware exploration (instant run; no user build/flash loop).
-- **AI:** EMWaver no longer ships a bespoke in-app Agent runtime. Desktop apps expose a local MCP tool surface so external agents can drive the existing engine, scripts, transports, and console output. Mobile apps stay local script runners without an MCP listener.
+- **MCP:** Desktop apps expose a local MCP tool surface so MCP clients can drive the existing engine, scripts, transports, and console output. Mobile apps stay local script runners without an MCP listener.
 - **Client surfaces:** iOS and Android (V1 primary), macOS and Windows (active desktop surfaces), Linux (native desktop app in progress).
 - **UX:** script-first hardware exploration (instant run; no user build/flash loop). The phone is the primary device users carry already; desktop apps are the advanced workbench and MCP bridge.
 - **Distribution:** mobile store distribution for iOS and Android (V1 primary), with Android APK as an alternate direct install path. macOS DMG, Windows installer/ZIP, and staged Linux packages cover desktop use.
@@ -45,7 +45,7 @@ Core direction:
 
 ### V1 Platform Priorities
 
-V1 is mobile-first. The phone is the portable hardware lab users always have with them. Desktop apps remain the advanced bench surface and the place where external agents attach through MCP.
+V1 is mobile-first. The phone is the portable hardware lab users always have with them. Desktop apps remain the advanced bench surface and the place where MCP clients attach.
 
 - **iOS** — V1 primary. App Store distribution. USB-C iPhones and iPads for direct board connection.
 - **Android** — V1 primary. Google Play + APK direct download. USB host mode on all modern Android devices. Industrial field-service path through rugged Android devices (Zebra, Honeywell, Samsung Rugged).
@@ -61,7 +61,7 @@ Firmware strategy: boards should arrive pre-flashed or require a one-time deskto
 
 1. **Local-first electronics platform** — EMWaver uses local apps as the default hardware-control path.
 2. **Software-first platform** — the product is the software stack (apps, firmware, runtime, scripts, script UI, and MCP tool surface), not the hardware. Users supply their own supported MCU board.
-3. **Agent-ready platform** — agents are first-class as external clients of the local MCP surface, not as bespoke app runtimes.
+3. **MCP-ready platform** — MCP clients are first-class users of the local desktop tool surface.
 4. **Best beginner experience** — buy a cheap supported board, install EMWaver, plug in, and start exploring without accounts, cloud activation, or firmware toolchains.
 
 ### Explicit Tradeoffs
@@ -79,10 +79,10 @@ We intentionally give up:
 
 - Launch without hardware supply chain.
 - Adoption from day one through an open-source local core.
-- Revenue through paid Continual/MGPT inference and bundled model access.
+- Revenue through paid Continual inference and bundled model access.
 - Multiple supported boards, one unified UX.
 - Mobile-first platforms (iOS, Android) — the device users already carry.
-- Agent-driven exploration loops through the desktop MCP bridge.
+- MCP-assisted exploration loops through the desktop bridge.
 - Larger addressable market (every compatible board owner, every phone owner).
 - Industrial field adoption path through Android rugged devices (Zebra, Honeywell, Samsung Rugged).
 
@@ -93,8 +93,8 @@ We intentionally give up:
 ### Business model (open-source core + model inference)
 
 - **Open-source core**: local runtime, firmware payloads, scripts, and hardware support should be useful without payment or account sign-in.
-- **Paid inference/API**: future paid value comes from Continual/MGPT models that are good at using the EMWaver MCP tools, writing scripts, debugging electronics workflows, and interpreting hardware traces.
-- **No EMWaver cloud product**: do not plan accounts, hosted relay, sync, teams, classrooms, remote fleet behavior, or cloud dashboards as part of the EMWaver core. Any future network service belongs to focused Continual/MGPT inference unless a later product decision explicitly reopens cloud services.
+- **Paid inference/API**: future paid value comes from Continual models that are good at using the EMWaver MCP tools, writing scripts, debugging electronics workflows, and interpreting hardware traces.
+- **No EMWaver cloud product**: do not plan accounts, hosted relay, sync, teams, classrooms, remote fleet behavior, or cloud dashboards as part of the EMWaver core. Any future network service belongs to focused Continual inference unless a later product decision explicitly reopens cloud services.
 - **No cloud script storage by default**: local scripts should be opened/saved from the user's filesystem or app-local storage. Do not build script sync as a default product assumption.
 - **AI credits/usage**: model inference remains a metered resource.
 - **Hardware is optional**: the EMWaver board is a future premium option ("coming soon"), not a launch dependency. Third-party supported boards are first-class.
@@ -115,15 +115,14 @@ We intentionally give up:
 - Adding a new supported board = porting firmware + adding its binary to the app bundle.
 - Users see a unified experience regardless of which board they use.
 
-### Agent / MCP direction
+### Desktop MCP direction
 
-- EMWaver no longer ships or maintains a bespoke Agent chat/runtime in each native app.
-- Desktop apps should expose an in-app local MCP server as the canonical agent interface. The MCP surface routes into the same script engine, console capture, device transports, and filesystem script roots used by the human UI.
+- Desktop apps should expose an in-app local MCP server as the canonical model/client interface. The MCP surface routes into the same script engine, console capture, device transports, and filesystem script roots used by the human UI.
 - MCP belongs on desktop only for now: macOS, Windows, and native Linux. iOS and Android keep user script import/app-local storage but do not host an external listening endpoint.
 - MCP tools should be model-friendly and structured: clear names, typed arguments, predictable JSON results, and recovery-oriented error messages.
 - Local MCP access must remain local-first and user-controlled. It must not require EMWaver accounts, cloud activation, backend ownership checks, hosted relay, or paid local hardware access.
 - Do not ship production system prompts, proprietary JavaScript instruction packs, hidden board recipes, provider-routing logic, or metering policy in this repo.
-- Do not change MDL gameplay, MDL `backend-api` behavior, or MGPT internals merely to make an EMWaver tool flow work. External model/API work belongs at the public inference boundary unless the user explicitly asks for MGPT/MDL backend implementation work.
+- Do not change MDL gameplay, MDL `backend-api` behavior, or Continual model internals merely to make an EMWaver tool flow work. External model/API work belongs at the public inference boundary unless the user explicitly asks for MDL/backend implementation work.
 
 ### Distribution and release posture
 
@@ -143,7 +142,7 @@ We intentionally give up:
 
 - EMWaver is an important product surface, but it is not the company's primary benchmark for continual intelligence.
 - MDL is currently the main mission vehicle for continual-learning evaluation and long-horizon product loops.
-- EMWaver work should stay focused, launch-closing, and product-driven so it does not consume the bandwidth needed for MDL and MGPT progress.
+- EMWaver work should stay focused, launch-closing, and product-driven so it does not consume the bandwidth needed for MDL and Continual model progress.
 
 ---
 
@@ -172,7 +171,6 @@ Use the local README first when working in a folder:
 - `README.md` (repo root) — public open-source overview, website links, repo map, and doc index
 - `README.txt` (repo root) — compatibility pointer to `README.md`
 - `docs/CURRENT.md` — current-state orientation: what the repo is, what's active, what's archived
-- `docs/AGENT_TO_MCP_MIGRATION.html` — current Agent/MGPT removal and desktop MCP migration plan
 - `docs/MCP_CONTRACT.md` — desktop MCP tool contract, transport/auth posture, and result rules
 - `docs/LINUX_MACOS_PARITY_AUDIT.md` — working checklist of macOS-vs-Linux native parity gaps
 - `docs/ESP32_WIFI_REMOTE_ACCESS.md` — user-owned LAN/VPN remote access for ESP32 Wi-Fi
@@ -183,8 +181,8 @@ Use the local README first when working in a folder:
 - `docs/TESTS.md` — active manual hardware test suite, test codes, and pass/pending tracking
 - `docs/RELEASES.md` — release workflows, signing expectations, and public preview assets
 - `docs/SIMULATOR.md` — shared device simulator for cross-platform testing
-- `docs/parity/` — cross-platform feature parity contracts (agent, transport, scripting, firmware, local-first)
-- `docs/archive/` — archived docs from superseded browser/daemon, in-app Agent/MGPT, and script/UI planning passes
+- `docs/parity/` — cross-platform feature parity contracts (MCP, transport, scripting, firmware, local-first)
+- `docs/archive/` — archived docs from superseded implementation plans
 - `videos/README.md` — video planning, direction, lightweight production rules, and writing guidance
 - `.agents/skills/` — canonical EMWaver Codex skills for repo-local product guidance
 - `.agents/skills/archive/` — archived skills for removed workflows
@@ -257,7 +255,7 @@ components (`Picker`, `Button`, `Card`, `Tile`, `Grid`, `Scroll`,
 
 1. **Managed transport architecture**: USB is first-class for host-backed boards, and the platform may also support BLE/Wi-Fi for board classes designed around them.
 2. **Platform-managed runtime model**: heavy logic should live in host/apps or backend unless a supported autonomous board class explicitly owns that responsibility.
-3. **Software-first business**: revenue comes from paid Continual/MGPT model/API usage — not hardware sales, EMWaver accounts, hosted cloud control, or paid local device access.
+3. **Software-first business**: revenue comes from paid Continual model/API usage — not hardware sales, EMWaver accounts, hosted cloud control, or paid local device access.
 4. **Local hardware access is free/open**: core local JavaScript execution must not require account sign-in, cloud activation, subscription checks, or hosted relay access.
 5. **Local scripts stay local by default**: no required cloud script storage, cloud project sync, account-backed script library, or hosted file dependency in the core local flow.
 6. **Script-first user experience**: avoid workflows that force end users through MCU toolchains.
@@ -291,8 +289,8 @@ Workflow:
 
 - The Continual MI organization workspace on this machine is rooted at `/Users/luisml/continualmi`.
 - For shared Continual MI company context and a compact summary of every repo, read `../AGENTS.md`.
-- Short version: Continual MI is an LLC founded by Luís Marnoto from Sintra, Portugal, focused on advancing machine intelligence and continual learning; EMWaver is the electronics/software product, `mdl` is the shared Monte Lua engine/platform and contains `montelua`, `mgpt`, and `continual-core`, and `society` is the company site and community surface.
+- Short version: Continual MI is an LLC founded by Luís Marnoto from Sintra, Portugal, focused on advancing machine intelligence and continual learning; EMWaver is the electronics/software product, `mdl` is the shared Monte Lua engine/platform and contains `montelua` plus `continual-core`, and `society` is the company site and community surface.
 - Active organization repos are expected to be cloned inside that directory as `/Users/luisml/continualmi/emwaver`, `/Users/luisml/continualmi/society`, and `/Users/luisml/continualmi/mdl`.
 - From this repository, the other active organization repos are available one directory up and down again as sibling paths such as `../society` and `../mdl`.
-- Agents working in this repo may inspect and modify files across those sibling repositories when a task requires coordinated cross-repo changes.
+- Automation in this repo may inspect and modify files across those sibling repositories when a task requires coordinated cross-repo changes.
 - Keep cross-repo edits intentional and update the relevant local docs in each touched repository.

@@ -24,9 +24,6 @@ Key app entry:
 
 ## 2.1 MCP boundary
 
-The legacy Agent API-key persistence, sign-in sheet, and in-app Agent/MGPT reply
-flows have been removed.
-
 Current guidance:
 - there is no EMWaver account, Google/Firebase sign-in, or hosted session restore path,
 - mobile does not host an external MCP endpoint,

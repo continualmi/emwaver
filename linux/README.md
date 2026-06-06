@@ -2,11 +2,11 @@
 
 Native Linux EMWaver application workspace.
 
-This is the Rust + GTK4/libadwaita port track described in `docs/LINUX_GTK4_PORT_PLAN.html`. It is a native app and part of the desktop MCP direction once the runtime is ready.
+This is the Rust + GTK4/libadwaita native app workspace. Linux follows the same local app + script runtime + Desktop MCP direction as macOS and Windows.
 
 Local-first rules:
 - local scripts, device discovery, and firmware setup must not require an EMWaver account, cloud activation, hosted relay, subscription check, device registration, or hardware ownership gate;
-- in-app Agent/MGPT replies are removed; future MCP-client access belongs to the local desktop MCP bridge;
+- MCP-client access belongs to the local desktop MCP bridge;
 - scripts and app state stay on the user's Linux machine by default.
 
 ## Script UI runtime architecture goal
@@ -112,7 +112,7 @@ The first native slice is M0/M1:
 - the GTK shell is now script-workspace first, loads the shared `assets/default-scripts` bundle, groups scripts as Examples/Libraries/Kernel/Custom Scripts, keeps bundled scripts read-only, defaults the main content to runtime preview, supports local New/Save/Make Copy behavior, and exposes row-level Run/Edit/Stop controls with inline running state aligned with the macOS script workspace direction;
 - the GTK script workspace uses GtkSourceView for JavaScript editing with line numbers, syntax highlighting, find, go-to-line, line wrap, script search, and a runtime output switch that renders captured script UI trees with native GTK widgets for common layout/control nodes;
 - script UI rendering now uses a macOS-style live session boundary: GTK keeps widgets on the main thread, a worker owns the Boa runtime and script action invocation, and the packet bridge keeps the selected local transport connected for action-driven device I/O;
-- the GTK shell no longer contains the legacy Agent drawer or MGPT client path; the running app owns the local desktop MCP tool surface;
+- the GTK shell owns the local desktop MCP tool surface;
 - the GTK header exposes a Desktop MCP button that opens the local endpoint/token controls and documentation links;
 - the GTK device sheet now follows the macOS device workflow more closely with selected-device status, grouped local transports, transport badges, board/firmware/UID metadata, manual Wi-Fi target validation, firmware action context, and udev permission guidance;
 - the GTK firmware sheet is board-aware, validates bundled STM32 and ESP32-S3 firmware image plans, probes STM32 DFU presence, shows image offsets/paths, routes STM32 flashing through the local Rust DFU backend, and routes ESP32-S3 serial flashing through the bundled esptool-compatible helper with BOOT/RESET guidance and progress logs;

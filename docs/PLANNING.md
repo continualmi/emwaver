@@ -4,7 +4,7 @@ This is the durable working tracker for current EMWaver priorities. `SCHEDULE.md
 
 ## Current Focus
 
-- **Open-source readiness:** make the active native-app + desktop MCP architecture easy to understand, with superseded browser/daemon and in-app Agent/MGPT plans archived.
+- **Open-source readiness:** make the active native-app + desktop MCP architecture easy to understand for users and contributors.
 - **Mobile-first product:** iOS and Android are primary. The phone is the portable local hardware lab.
 - **Desktop apps:** macOS and Windows are active native apps for development, bench testing, firmware setup, long runs, advanced workflows, and the local MCP bridge.
 - **Linux native app:** Linux is being rebuilt as a native Rust + GTK4/libadwaita app and now carries the desktop MCP source slice; GTK-host validation remains pending.
@@ -17,14 +17,12 @@ This is the durable working tracker for current EMWaver priorities. `SCHEDULE.md
 
 | Priority | Area | Status | Notes |
 | --- | --- | --- | --- |
-| `P0` | Agent-to-MCP migration | `done/source` | In-app Agent/MGPT source has been removed, desktop MCP + filesystem scripts are canonical on desktop, and mobile remains local script import/run. Contract: `docs/MCP_CONTRACT.md`; public docs: `/docs/mcp`. |
 | `P0` | Cross-platform CC1101 validation | `done` | `cc1101.js` reads/writes registers across Windows, macOS, Android, and iOS (2026-05-24). |
-| `P0` | Documentation cleanup | `done/source` | Active/public docs and platform READMEs now reflect desktop MCP, Linux preview, Windows active, and no old browser/daemon control plane. |
 | `P0` | MCP hardware primitive tools | `done/source` | Desktop MCP source now exposes `spi_transfer`, GPIO, and analog tools backed by native app/device transports on macOS, Windows, and Linux. Real-hardware validation remains part of the hardware test suite. |
 | `P0` | Script-defined native UI | `active` | JavaScript scripts can define instant native panels with JSX-style syntax. Keep docs clear that JSX is syntax inside JS, not a separate product surface. |
-| `P0` | Mobile UI polish | `active` | Improve iOS and Android script/device flows for phone use after Agent/MGPT removal. |
+| `P0` | Mobile UI polish | `active` | Improve iOS and Android script/device flows for phone-first use. |
 | `P1` | ESP32 Wi-Fi transport | `hardware validation pending` | Validate same-LAN and LAN/VPN-style control on real ESP32-S3 hardware. |
-| `P1` | Native Linux app | `in progress` | Port the native-app model to Rust + GTK4/libadwaita with USB/BLE/Wi-Fi. Plan: `docs/LINUX_GTK4_PORT_PLAN.html`. |
+| `P1` | Native Linux app | `in progress` | Port the native-app model to Rust + GTK4/libadwaita with USB/BLE/Wi-Fi. See `linux/README.md`. |
 | `P1` | Device simulator | `active` | Shared fixture across native platforms for protocol and UI testing. |
 | `P1` | Hardware media/assets | `planned` | Keep canonical board/module images and manufacturing files under `hardware/<board>/`. |
 | `P2` | Multi-device automation bench | `planned` | Two or more simultaneous boards with isolated device/script buffers. |

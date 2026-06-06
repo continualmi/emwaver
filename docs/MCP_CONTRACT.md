@@ -1,6 +1,6 @@
 # EMWaver MCP Contract
 
-This is the desktop Agent replacement contract. EMWaver apps do not ship a bespoke in-app Agent runtime. Desktop apps expose a local, user-enabled MCP server that routes into the same script engine, console capture, script storage, and device transports used by the human UI.
+Desktop EMWaver apps expose a local, user-enabled MCP server that routes into the same script engine, console capture, script storage, and device transports used by the human UI.
 
 ## Scope
 
@@ -9,7 +9,7 @@ This is the desktop Agent replacement contract. EMWaver apps do not ship a bespo
 - The endpoint is loopback-only Streamable HTTP with explicit in-app enablement and a generated local token/pairing secret.
 - MCP access must not require EMWaver accounts, cloud activation, hosted relay, subscription checks, hardware ownership, or device registration.
 
-## Implementation Status
+## Current Status
 
 - macOS, Windows, and Linux have the first in-app MCP slice in source: Settings exposes enablement, endpoint, and token controls; the app hosts `POST /mcp` on loopback when enabled.
 - The desktop tools implemented in source are `list_scripts`, `read_script`, `write_script`, `run_script`, `stop_script`, `device_state`, `spi_transfer`, `gpio_read`, `gpio_write`, and `analog_read`.

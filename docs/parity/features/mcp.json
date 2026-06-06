@@ -3,7 +3,7 @@
   "features": [
     {
       "id": "mcp.desktop_bridge_direction",
-      "description": "Desktop apps are the planned local MCP bridge; mobile apps remain local script runners without a listening MCP endpoint.",
+      "description": "Desktop apps host the local MCP bridge; mobile apps remain local script runners without a listening MCP endpoint.",
       "parity": "documented_exceptions",
       "platforms": {
         "macos": {
@@ -27,11 +27,11 @@
         },
         "ios": {
           "status": "not_applicable",
-          "reason": "iOS keeps user script import/app-local execution and does not host an external MCP listener.",
+          "reason": "iOS keeps user script import/app-local execution and does not host an MCP listener.",
           "evidence": [
             {
-              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
-              "contains": "iOS / iPadOS</td><td><span class=\"s go\">KEEP</span></td><td><span class=\"s no\">removed</span></td><td>import into app</td><td>"
+              "file": "ios/README.md",
+              "contains": "iOS keeps local script import/app-local storage and local device/script use without hosting an MCP endpoint."
             }
           ]
         },
@@ -56,11 +56,11 @@
         },
         "android": {
           "status": "not_applicable",
-          "reason": "Android keeps user script import/app-local execution and does not host an external MCP listener.",
+          "reason": "Android keeps user script import/app-local execution and does not host an MCP listener.",
           "evidence": [
             {
-              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
-              "contains": "Android</td><td><span class=\"s go\">KEEP</span></td><td><span class=\"s no\">removed</span></td><td>import into app</td><td>"
+              "file": "android/README.md",
+              "contains": "Android does not host an MCP server; it keeps local script import/app-local storage and local script execution."
             }
           ]
         },
@@ -152,62 +152,6 @@
                 "gpio_write",
                 "analog_read"
               ]
-            }
-          ]
-        }
-      }
-    },
-    {
-      "id": "agent.mgpt_removal",
-      "description": "In-app Agent chat, MGPT API keys, universe persistence, and MGPT responses clients are being removed from all native apps.",
-      "parity": "all_required",
-      "platforms": {
-        "macos": {
-          "status": "required",
-          "evidence": [
-            {
-              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
-              "contains": "Rip out the Agent — all five apps"
-            }
-          ]
-        },
-        "ios": {
-          "status": "required",
-          "evidence": [
-            {
-              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
-              "contains": "Rip out MGPT — all five apps"
-            }
-          ]
-        },
-        "windows": {
-          "status": "required",
-          "evidence": [
-            {
-              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
-              "contains": "Rip out the Agent — all five apps"
-            }
-          ]
-        },
-        "android": {
-          "status": "required",
-          "evidence": [
-            {
-              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
-              "contains": "Rip out MGPT — all five apps"
-            }
-          ]
-        },
-        "linux": {
-          "status": "required",
-          "evidence": [
-            {
-              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
-              "contains": "Rip out the Agent — all five apps"
-            },
-            {
-              "file": "linux/README.md",
-              "contains": "no longer contains the legacy Agent drawer or MGPT client path"
             }
           ]
         }
