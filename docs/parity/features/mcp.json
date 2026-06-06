@@ -78,6 +78,7 @@
               "file": "macos/EMWaver/EMWaver/MacMcpServer.swift",
               "contains": [
                 "list_scripts",
+                "write_script",
                 "device_state"
               ]
             }
@@ -94,6 +95,7 @@
               "file": "windows/EMWaver/Services/McpServer.cs",
               "contains": [
                 "list_scripts",
+                "write_script",
                 "device_state"
               ]
             }

@@ -289,6 +289,12 @@ public sealed class McpServer : IDisposable
                 {
                     ["script_id"] = new JsonObject { ["type"] = "string" }
                 }, required: ["script_id"])),
+                Tool("write_script", "Create or update a local JavaScript script in the Windows app script folder.", ObjectSchema(new Dictionary<string, JsonNode?>
+                {
+                    ["script_id"] = new JsonObject { ["type"] = "string" },
+                    ["path"] = new JsonObject { ["type"] = "string" },
+                    ["content"] = new JsonObject { ["type"] = "string" }
+                }, required: ["content"])),
                 Tool("device_state", "Return current EMWaver device, transport, firmware, and discovery state.", EmptySchema())
             }
         };
@@ -302,6 +308,7 @@ public sealed class McpServer : IDisposable
         {
             "list_scripts" => await ListScriptsToolAsync().ConfigureAwait(false),
             "read_script" => await ReadScriptToolAsync(arguments).ConfigureAwait(false),
+            "write_script" => await WriteScriptToolAsync(arguments).ConfigureAwait(false),
             "device_state" => DeviceStateTool(),
             _ => ToolError("unsupported_tool", $"Unsupported MCP tool: {name ?? "<missing>"}")
         };
@@ -352,6 +359,65 @@ public sealed class McpServer : IDisposable
         {
             ["ok"] = true,
             ["script"] = scriptJson
+        };
+    }
+
+    private async Task<JsonObject> WriteScriptToolAsync(JsonObject? arguments)
+    {
+        var content = arguments?["content"]?.GetValue<string>();
+        if (content == null)
+        {
+            return ToolError("missing_content", "write_script requires content");
+        }
+
+        var scripts = (await _scripts.ListScriptsAsync().ConfigureAwait(false)).ToList();
+        var scriptId = arguments?["script_id"]?.GetValue<string>();
+        ScriptInfo? target = null;
+
+        if (!string.IsNullOrWhiteSpace(scriptId))
+        {
+            target = scripts.FirstOrDefault(s => string.Equals(ScriptId(s), scriptId, StringComparison.OrdinalIgnoreCase));
+            if (target == null)
+            {
+                return ToolError("script_not_found", $"Script not found: {scriptId}", "Call list_scripts again; the script may have been renamed or deleted.");
+            }
+            if (target.IsBundled)
+            {
+                return ToolError("script_read_only", "Bundled scripts are read-only", "Create a local script with path and content, or copy the bundled script in the app UI first.");
+            }
+
+            await _scripts.SaveScriptTextAsync(target, content).ConfigureAwait(false);
+            _scripts.RefreshAll();
+            return new JsonObject
+            {
+                ["ok"] = true,
+                ["created"] = false,
+                ["script"] = ScriptJson(target)
+            };
+        }
+
+        var requestedPath = arguments?["path"]?.GetValue<string>();
+        var fileName = LocalScriptFileName(requestedPath);
+        target = scripts.FirstOrDefault(s => !s.IsBundled && string.Equals(s.FileName, fileName, StringComparison.OrdinalIgnoreCase));
+        if (target != null)
+        {
+            await _scripts.SaveScriptTextAsync(target, content).ConfigureAwait(false);
+            _scripts.RefreshAll();
+            return new JsonObject
+            {
+                ["ok"] = true,
+                ["created"] = false,
+                ["script"] = ScriptJson(target)
+            };
+        }
+
+        var created = await _scripts.CreateLocalScriptAsync(fileName, content).ConfigureAwait(false);
+        _scripts.RefreshAll();
+        return new JsonObject
+        {
+            ["ok"] = true,
+            ["created"] = true,
+            ["script"] = ScriptJson(created)
         };
     }
 
@@ -436,6 +502,16 @@ public sealed class McpServer : IDisposable
     }
 
     private static string ScriptId(ScriptInfo script) => $"{(script.IsBundled ? "bundled" : "local")}:{script.FileName}";
+
+    private static string LocalScriptFileName(string? requestedPath)
+    {
+        var raw = string.IsNullOrWhiteSpace(requestedPath) ? "mcp-script.js" : Path.GetFileName(requestedPath.Trim());
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            raw = "mcp-script.js";
+        }
+        return raw.EndsWith(".js", StringComparison.OrdinalIgnoreCase) ? raw : raw + ".js";
+    }
 
     private static JsonObject Tool(string name, string description, JsonObject inputSchema)
     {

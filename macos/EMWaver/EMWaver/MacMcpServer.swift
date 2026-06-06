@@ -225,6 +225,11 @@ final class MacMcpServer: ObservableObject {
                 Self.tool(name: "read_script", description: "Read one script by script_id from the same roots used by the app UI.", inputSchema: Self.objectSchema(properties: [
                     "script_id": ["type": "string"]
                 ], required: ["script_id"])),
+                Self.tool(name: "write_script", description: "Create or update a local JavaScript script in the macOS app script folder.", inputSchema: Self.objectSchema(properties: [
+                    "script_id": ["type": "string"],
+                    "path": ["type": "string"],
+                    "content": ["type": "string"]
+                ], required: ["content"])),
                 Self.tool(name: "device_state", description: "Return current EMWaver device, transport, firmware, and discovery state.", inputSchema: Self.emptySchema())
             ]
         ]
@@ -240,6 +245,8 @@ final class MacMcpServer: ObservableObject {
             structured = ["ok": true, "scripts": listScripts().map { $0.json }]
         case "read_script":
             structured = readScript(arguments: arguments)
+        case "write_script":
+            structured = writeScript(arguments: arguments)
         case "device_state":
             structured = deviceState()
         default:
@@ -275,6 +282,45 @@ final class MacMcpServer: ObservableObject {
         }
     }
 
+    private func writeScript(arguments: [String: Any]?) -> [String: Any] {
+        guard let content = arguments?["content"] as? String else {
+            return Self.toolError(code: "missing_content", message: "write_script requires content")
+        }
+
+        let scripts = listScripts()
+        if let scriptId = arguments?["script_id"] as? String, !scriptId.isEmpty {
+            guard let script = scripts.first(where: { $0.id.caseInsensitiveCompare(scriptId) == .orderedSame }) else {
+                return Self.toolError(code: "script_not_found", message: "Script not found: \(scriptId)", recovery: "Call list_scripts again; the script may have been renamed or deleted.")
+            }
+            guard script.editable else {
+                return Self.toolError(code: "script_read_only", message: "Bundled scripts are read-only", recovery: "Create a local script with path and content, or copy the bundled script in the app UI first.")
+            }
+
+            do {
+                try content.write(to: script.url, atomically: true, encoding: .utf8)
+                return ["ok": true, "created": false, "script": script.json]
+            } catch {
+                return Self.toolError(code: "script_write_failed", message: error.localizedDescription)
+            }
+        }
+
+        guard let scriptsDir = localScriptsDirectory(create: true) else {
+            return Self.toolError(code: "script_directory_unavailable", message: "Local script directory is unavailable")
+        }
+
+        let fileName = Self.localScriptFileName(arguments?["path"] as? String)
+        let url = scriptsDir.appendingPathComponent(fileName, isDirectory: false)
+        let created = !FileManager.default.fileExists(atPath: url.path)
+
+        do {
+            try content.write(to: url, atomically: true, encoding: .utf8)
+            let script = MacMcpScript(id: "local:\(fileName)", name: fileName, url: url, editable: true, sourceKind: "custom")
+            return ["ok": true, "created": created, "script": script.json]
+        } catch {
+            return Self.toolError(code: "script_write_failed", message: error.localizedDescription)
+        }
+    }
+
     private func listScripts() -> [MacMcpScript] {
         let fileManager = FileManager.default
         var scripts: [MacMcpScript] = []
@@ -291,8 +337,7 @@ final class MacMcpServer: ObservableObject {
             ))
         }
 
-        if let documents = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first {
-            let scriptsDir = documents.appendingPathComponent("scripts", isDirectory: true)
+        if let scriptsDir = localScriptsDirectory(create: false) {
             let local = (try? fileManager.contentsOfDirectory(at: scriptsDir, includingPropertiesForKeys: nil)) ?? []
             for url in local where url.pathExtension.lowercased() == "js" {
                 let name = url.lastPathComponent
@@ -312,6 +357,17 @@ final class MacMcpServer: ObservableObject {
             }
             return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
         }
+    }
+
+    private func localScriptsDirectory(create: Bool) -> URL? {
+        guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            return nil
+        }
+        let scriptsDir = documents.appendingPathComponent("scripts", isDirectory: true)
+        if create {
+            try? FileManager.default.createDirectory(at: scriptsDir, withIntermediateDirectories: true)
+        }
+        return scriptsDir
     }
 
     private func deviceState() -> [String: Any] {
@@ -377,6 +433,19 @@ final class MacMcpServer: ObservableObject {
         case "kernel": return 2
         default: return 3
         }
+    }
+
+    private static func localScriptFileName(_ requestedPath: String?) -> String {
+        var raw = (requestedPath?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
+            ? URL(fileURLWithPath: requestedPath ?? "").lastPathComponent
+            : "mcp-script.js"
+        if raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            raw = "mcp-script.js"
+        }
+        if !raw.lowercased().hasSuffix(".js") {
+            raw += ".js"
+        }
+        return raw
     }
 
     private func send(status: Int, reason: String, body: Data, connection: NWConnection) {

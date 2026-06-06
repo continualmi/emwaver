@@ -164,6 +164,6 @@ Current MCP implementation:
 
 - Settings exposes a `Desktop MCP` section with an enable switch, loopback endpoint, and generated bearer token.
 - When enabled, the running app serves Streamable-HTTP-style JSON-RPC at `http://127.0.0.1:3923/mcp`.
-- The initial tool slice is read/status-only: `list_scripts`, `read_script`, and `device_state`.
+- The initial tool slice supports script list/read/write plus device status: `list_scripts`, `read_script`, `write_script`, and `device_state`.
 - The server uses the same `ScriptRepository` roots as the GTK script list and a refreshed app-model device snapshot.
 - Local validation on macOS is blocked by missing GTK4/libadwaita system packages; run app-level checks on a Linux host with `gtk4`, `libadwaita`, `gdk-pixbuf-2.0`, and `graphene-gobject-1.0` development packages installed.

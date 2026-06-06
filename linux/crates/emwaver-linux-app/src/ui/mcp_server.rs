@@ -355,6 +355,20 @@ fn tools_list_result() -> Value {
                 }
             },
             {
+                "name": "write_script",
+                "description": "Create or update a local JavaScript script in the Linux app script folder.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "script_id": { "type": "string" },
+                        "path": { "type": "string" },
+                        "content": { "type": "string" }
+                    },
+                    "required": ["content"],
+                    "additionalProperties": false
+                }
+            },
+            {
                 "name": "device_state",
                 "description": "Return current EMWaver device, transport, firmware, and discovery state.",
                 "inputSchema": empty_schema()
@@ -376,6 +390,7 @@ fn tools_call_result(
     let structured = match name {
         Some("list_scripts") => list_scripts_tool(repository),
         Some("read_script") => read_script_tool(repository, arguments),
+        Some("write_script") => write_script_tool(repository, arguments),
         Some("device_state") => device_state_tool(snapshot),
         _ => tool_error(
             "unsupported_tool",
@@ -402,6 +417,82 @@ fn list_scripts_tool(repository: &ScriptRepository) -> Value {
             "scripts": scripts.into_iter().map(script_json).collect::<Vec<_>>()
         }),
         Err(error) => tool_error("list_scripts_failed", &error.to_string(), None),
+    }
+}
+
+fn write_script_tool(repository: &ScriptRepository, arguments: Option<&Value>) -> Value {
+    let Some(content) = arguments
+        .and_then(|value| value.get("content"))
+        .and_then(Value::as_str)
+    else {
+        return tool_error("missing_content", "write_script requires content", None);
+    };
+
+    if let Some(script_id) = arguments
+        .and_then(|value| value.get("script_id"))
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+    {
+        let Ok(scripts) = repository.list_scripts() else {
+            return tool_error("script_not_found", "Could not list scripts", None);
+        };
+        let Some(script) = scripts
+            .into_iter()
+            .find(|script| script.id.eq_ignore_ascii_case(script_id))
+        else {
+            return tool_error(
+                "script_not_found",
+                &format!("Script not found: {script_id}"),
+                Some("Call list_scripts again; the script may have been renamed or deleted."),
+            );
+        };
+        if !script.is_editable() {
+            return tool_error(
+                "script_read_only",
+                "Bundled scripts are read-only",
+                Some("Create a local script with path and content, or copy the bundled script in the app UI first."),
+            );
+        }
+
+        return match repository.save_script(&script, content) {
+            Ok(()) => json!({
+                "ok": true,
+                "created": false,
+                "script": script_json(script)
+            }),
+            Err(error) => tool_error("script_write_failed", &error.to_string(), None),
+        };
+    }
+
+    let file_name = local_script_file_name(
+        arguments
+            .and_then(|value| value.get("path"))
+            .and_then(Value::as_str),
+    );
+
+    if let Ok(scripts) = repository.list_scripts() {
+        if let Some(script) = scripts
+            .into_iter()
+            .find(|script| script.is_editable() && script.name.eq_ignore_ascii_case(&file_name))
+        {
+            return match repository.save_script(&script, content) {
+                Ok(()) => json!({
+                    "ok": true,
+                    "created": false,
+                    "script": script_json(script)
+                }),
+                Err(error) => tool_error("script_write_failed", &error.to_string(), None),
+            };
+        }
+    }
+
+    match repository.create_script(&file_name, content) {
+        Ok(script) => json!({
+            "ok": true,
+            "created": true,
+            "script": script_json(script)
+        }),
+        Err(error) => tool_error("script_write_failed", &error.to_string(), None),
     }
 }
 
@@ -470,6 +561,19 @@ fn script_json(script: ScriptListItem) -> Value {
         "editable": script.is_editable(),
         "source_kind": script.kind_label().to_lowercase().replace(' ', "_")
     })
+}
+
+fn local_script_file_name(path: Option<&str>) -> String {
+    let raw = path
+        .and_then(|value| std::path::Path::new(value).file_name())
+        .and_then(|value| value.to_str())
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or("mcp-script.js");
+    if raw.to_lowercase().ends_with(".js") {
+        raw.to_string()
+    } else {
+        format!("{raw}.js")
+    }
 }
 
 fn empty_schema() -> Value {
