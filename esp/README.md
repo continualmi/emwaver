@@ -6,7 +6,13 @@ This folder contains the EMWaver ESP firmware workspace (ESP-IDF).
 
 # EMWaver ESP Firmware
 
-Primary targets: ESP32-S3, ESP32-S2, and classic ESP32 running on ESP-IDF v5.5.1.
+Primary ESP-IDF targets: ESP32-S3, ESP32-S2, and classic ESP32 running on ESP-IDF v5.5.1.
+
+ESP8266 support lives in the separate `esp/esp8266/` subworkspace because
+ESP8266 is supported by Espressif's official ESP8266_RTOS_SDK rather than modern
+ESP-IDF. That port reuses the EMWaver SysEx/superframe protocol, exposes
+`board=esp8266` with `cap=wifi,serial`, uses USB-serial for setup/recovery, and
+uses Wi-Fi WebSocket as the runtime transport.
 
 This workspace was restored from git history as the starting point for bringing ESP32 support back to EMWaver.
 
@@ -25,6 +31,7 @@ Product direction for this folder:
 - `sdkconfig.ci` - CI configuration file
 - `dependencies.lock` - Component dependencies lock file
 - `setup.sh` - ESP-IDF environment setup script (must be sourced)
+- `esp8266/` - official ESP8266_RTOS_SDK Wi-Fi + USB-serial setup port
 
 ## Internal developer setup
 
@@ -187,6 +194,22 @@ for Windows adapters that do not negotiate a large enough GATT write MTU.
 
 Expected target capabilities:
 - ESP32: `board=esp32`, `cap=wifi,ble`
+
+## ESP8266 support
+
+ESP8266 support is a separate official-SDK port under `esp/esp8266/`. Do not add
+ESP8266 as an ESP-IDF target in this workspace; modern ESP-IDF does not support
+it. The ESP8266 port uses ESP8266_RTOS_SDK v3.4, keeps the same EMWaver binary
+protocol, and exposes:
+
+- ESP8266: `board=esp8266`, `cap=wifi,serial`
+
+The serial capability is the USB-serial adapter present on common ESP8266 dev
+boards. It is a setup/recovery command lane for Wi-Fi provisioning and basic
+identity/status, not a native USB runtime transport. GPIO/ADC/SPI/PWM runtime
+control is accepted over Wi-Fi after the board joins the user's LAN. When no
+station credentials are stored, the firmware also starts an `EMWaver-8266-XXXX`
+SoftAP with the same WebSocket endpoint for fallback provisioning.
 
 ## ESP32-S2 support
 

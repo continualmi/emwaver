@@ -1,0 +1,32 @@
+menu "EMWaver ESP8266"
+
+config EMWAVER_ESP8266_AP_PASSWORD
+    string "SoftAP provisioning password"
+    default ""
+    help
+        Optional WPA2 password for the fallback provisioning SoftAP.
+        Leave empty for an open setup network during internal bring-up.
+
+config EMWAVER_ESP8266_DEFAULT_LED_GPIO
+    int "Startup LED GPIO"
+    default 2
+    range 0 16
+    help
+        GPIO toggled during startup. NodeMCU-style boards commonly use GPIO2.
+
+config EMWAVER_ESP8266_SPI_MISO_GPIO
+    int "Default HSPI MISO GPIO"
+    default 12
+    range 0 16
+
+config EMWAVER_ESP8266_SPI_MOSI_GPIO
+    int "Default HSPI MOSI GPIO"
+    default 13
+    range 0 16
+
+config EMWAVER_ESP8266_SPI_SCK_GPIO
+    int "Default HSPI SCK GPIO"
+    default 14
+    range 0 16
+
+endmenu
