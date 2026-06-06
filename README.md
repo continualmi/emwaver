@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="https://continualmi.com/emwaver/banner.jpeg" alt="EMWaver platform banner for iOS, Android, macOS, Windows, Linux, and supported boards" width="860">
+  <img src="web/public/banner.jpeg" alt="EMWaver platform banner for iOS, Android, macOS, Windows, Linux, and supported boards" width="860">
 </p>
 
 EMWaver turns supported MCU boards into a scriptable hardware lab. Write JavaScript, press run, and talk to real electronics from native apps without rebuilding firmware for every experiment.
