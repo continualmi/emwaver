@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SiteHeader } from "@/components/emwaver/SiteHeader";
@@ -12,6 +11,13 @@ import {
 
 export function generateStaticParams() {
   return getHardwareCatalog().map((device) => ({ slug: device.slug }));
+}
+
+function formatDesignDate(value: string | null): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
 function ExternalLink({
@@ -123,6 +129,17 @@ export default async function BuildDevicePage({
 
   const hasAnyBuildAsset = device.buildAssets.some((asset) => asset.available);
   const mcuLabel = getMcuLabel(device);
+  const designDate = formatDesignDate(device.designDate);
+
+  const specs: { label: string; value: string }[] = [];
+  if (mcuLabel) specs.push({ label: "MCU", value: mcuLabel });
+  if (designDate) specs.push({ label: "Design date", value: designDate });
+  if (device.reproductionCost) {
+    specs.push({
+      label: "Reproduction cost",
+      value: `${device.reproductionCost.currency === "USD" ? "$" : ""}${device.reproductionCost.amount} / ${device.reproductionCost.units} units`,
+    });
+  }
 
   return (
     <div className="min-h-dvh">
@@ -206,41 +223,25 @@ export default async function BuildDevicePage({
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3">
-              {mcuLabel && (
-                <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-4">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--ink-dim)]">
-                    MCU
+            {specs.length > 0 && (
+              <dl className="divide-y divide-[color:var(--line)] border-y border-[color:var(--line)]">
+                {specs.map((spec) => (
+                  <div
+                    key={spec.label}
+                    className="flex items-baseline justify-between gap-4 py-3"
+                  >
+                    <dt className="text-sm text-[color:var(--ink-dim)]">
+                      {spec.label}
+                    </dt>
+                    <dd className="text-sm font-medium text-[color:var(--ink)]">
+                      {spec.value}
+                    </dd>
                   </div>
-                  <div className="pt-1 text-sm font-semibold text-[color:var(--ink)]">
-                    {mcuLabel}
-                  </div>
-                </div>
-              )}
-              {device.designDate && (
-                <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-4">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--ink-dim)]">
-                    Design date
-                  </div>
-                  <div className="pt-1 text-sm font-semibold text-[color:var(--ink)]">
-                    {device.designDate}
-                  </div>
-                </div>
-              )}
-              {device.reproductionCost && (
-                <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-4">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--ink-dim)]">
-                    Reproduction cost
-                  </div>
-                  <div className="pt-1 text-sm font-semibold text-[color:var(--ink)]">
-                    {device.reproductionCost.currency === "USD" ? "$" : ""}
-                    {device.reproductionCost.amount} / {device.reproductionCost.units} units
-                  </div>
-                </div>
-              )}
-            </div>
+                ))}
+              </dl>
+            )}
 
-            <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-5">
+            <div>
               <div className="text-sm font-semibold text-[color:var(--ink)]">
                 Build files
               </div>
@@ -261,31 +262,7 @@ export default async function BuildDevicePage({
                   This device does not expose build resources yet.
                 </p>
               )}
-            </section>
-
-            {device.casingImage && (
-              <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-5">
-                <div className="text-sm font-semibold text-[color:var(--ink)]">
-                  Device preview
-                </div>
-                <p className="pt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-                  Historical enclosure and device imagery kept with this hardware
-                  entry.
-                </p>
-
-                <div className="mt-4 overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)]">
-                  <div className="relative aspect-[4/3] w-full">
-                    <Image
-                      src={device.casingImage}
-                      alt={`${device.title} preview`}
-                      fill
-                      unoptimized
-                      className="object-cover"
-                    />
-                  </div>
-                </div>
-              </section>
-            )}
+            </div>
           </div>
         </div>
 

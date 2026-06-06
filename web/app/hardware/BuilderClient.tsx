@@ -100,7 +100,7 @@ function formatCurrency(amount: number): string {
   return `$${amount}`;
 }
 
-function FeatureToggle({
+function ToggleRow({
   checked,
   label,
   detail,
@@ -114,15 +114,34 @@ function FeatureToggle({
   return (
     <button
       type="button"
+      role="switch"
+      aria-checked={checked}
       onClick={onChange}
-      className={`rounded-2xl border px-4 py-3 text-left transition ${
-        checked
-          ? "border-[color:var(--aqua)] bg-[color:var(--aqua-tint-2)]"
-          : "border-[color:var(--line)] bg-[color:var(--surface)] hover:bg-[color:var(--surface-2)]"
-      }`}
+      className="group flex w-full items-center justify-between gap-4 py-3.5 text-left"
     >
-      <div className="text-sm font-semibold text-[color:var(--ink)]">{label}</div>
-      <div className="pt-1 text-xs text-[color:var(--ink-dim)]">{detail}</div>
+      <div>
+        <div
+          className={`text-sm font-medium transition ${
+            checked ? "text-[color:var(--ink)]" : "text-[color:var(--ink-dim)]"
+          }`}
+        >
+          {label}
+        </div>
+        <div className="pt-0.5 text-xs text-[color:var(--ink-dim)]">{detail}</div>
+      </div>
+      <span
+        className={`relative h-6 w-10 shrink-0 rounded-full transition ${
+          checked
+            ? "bg-[color:var(--aqua)]"
+            : "bg-[color:var(--surface-2)] group-hover:bg-[color:var(--surface)]"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 h-5 w-5 rounded-full bg-[color:var(--paper)] transition-all ${
+            checked ? "left-[18px]" : "left-0.5"
+          }`}
+        />
+      </span>
     </button>
   );
 }
@@ -291,130 +310,81 @@ export function BuilderClient() {
   const allOn = gpio && cc1101 && ir && usbMale && usbFemale;
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-      {/* Board preview */}
-      <div className="self-start overflow-hidden rounded-3xl border border-[color:var(--line)] bg-[color:var(--surface-3)] shadow-[0_30px_80px_var(--shadow)]">
-        <div className="p-5">
-          <div className="overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)]">
-            <div className="relative h-[320px] w-full md:h-[420px]">
-              <Image src={pickImage()} alt="EMWaver board preview" fill unoptimized className="object-cover" />
-            </div>
+    <section className="grid gap-10 lg:grid-cols-[1.05fr_0.95fr]">
+      {/* ── Live preview (sticky on desktop) ── */}
+      <div className="lg:sticky lg:top-24 lg:self-start">
+        <div className="overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)]">
+          <div className="relative h-[320px] w-full md:h-[440px]">
+            <Image src={pickImage()} alt="EMWaver board preview" fill unoptimized className="object-contain p-4" />
           </div>
         </div>
-
-        <div className="flex items-center justify-between border-t border-[color:var(--line)] px-5 py-3">
-          <div className="text-xs text-[color:var(--ink-dim)]">
+        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[color:var(--ink-dim)]">
+          <span>
             {bomLoaded ? `${filteredRows.length} BOM rows` : bomError ? "BOM unavailable" : "Loading BOM…"}
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 py-1 text-xs text-[color:var(--ink-dim)]">
-              ~{formatCurrency(estimate.two)} / 2 pcs
-            </div>
-            <div className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 py-1 text-xs text-[color:var(--ink-dim)]">
-              ~{formatCurrency(estimate.five)} / 5 pcs
-            </div>
-          </div>
+          </span>
+          <span className="text-[color:var(--line)]">•</span>
+          <span>~{formatCurrency(estimate.two)} for 2 pcs</span>
+          <span className="text-[color:var(--line)]">•</span>
+          <span>~{formatCurrency(estimate.five)} for 5 pcs</span>
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="space-y-5 rounded-3xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-5">
+      {/* ── Configuration ── */}
+      <div className="space-y-8">
+        {/* Sections */}
         <div>
-          <div className="text-sm font-semibold text-[color:var(--ink)]">Assembly sections</div>
-          <div className="pt-1 text-xs text-[color:var(--ink-dim)]">Toggle sections on or off to customize the board. At least one core feature and one USB connector must stay selected.</div>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <FeatureToggle checked={gpio} label="GPIO headers" detail="Board headers for module expansion." onChange={() => toggleFeature("gpio", !gpio)} />
-          <FeatureToggle checked={cc1101} label="CC1101 radio" detail="Sub-GHz radio section and antenna path." onChange={() => toggleFeature("cc1101", !cc1101)} />
-          <FeatureToggle checked={ir} label="Infrared RX/TX" detail="IR receiver, LEDs, and driver parts." onChange={() => toggleFeature("ir", !ir)} />
-          <FeatureToggle checked={usbMale} label="USB-C male" detail="Direct plug-in for phone-first use." onChange={() => toggleFeature("usbMale", !usbMale)} />
-          <FeatureToggle checked={usbFemale} label="USB-C female" detail="Cable-based desktop and bench use." onChange={() => toggleFeature("usbFemale", !usbFemale)} />
-        </div>
-
-        {!allOn && (
-          <button
-            type="button"
-            onClick={() => { setGpio(true); setCc1101(true); setIr(true); setUsbMale(true); setUsbFemale(true); }}
-            className="text-xs font-semibold text-[color:var(--aqua)] hover:underline"
-          >
-            Reset to full board
-          </button>
-        )}
-
-        <div className="grid gap-3 sm:grid-cols-2">
-          <a href={GERBER_URL} className="rounded-2xl bg-[color:var(--sky)] px-4 py-3 text-center text-sm font-semibold text-[color:var(--paper)] transition hover:opacity-90">
-            Gerbers
-          </a>
-          <button type="button" onClick={downloadFilteredBom} className="rounded-2xl bg-[color:var(--aqua)] px-4 py-3 text-sm font-semibold text-[color:var(--paper)] transition hover:opacity-90">
-            BOM{!allOn ? " (filtered)" : ""}
-          </button>
-          <a href={CPL_URL} className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-3 text-center text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface-2)]">
-            CPL
-          </a>
-          <a href={STL_URL} className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-3 text-center text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface-2)]">
-            Case STL
-          </a>
-        </div>
-
-        <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-[color:var(--ink)]">
-                Cost estimate
-              </div>
-              <div className="pt-1 text-xs text-[color:var(--ink-dim)]">
-                Rough historical JLCPCB estimate based on BOM row count after
-                filtering disabled sections.
-              </div>
-            </div>
-            <div className="rounded-full border border-[color:var(--line)] px-3 py-1 text-xs font-semibold text-[color:var(--ink-dim)]">
-              {bomLoaded ? `${estimate.rows} BOM rows` : bomError ? "BOM unavailable" : "Loading BOM..."}
-            </div>
+          <div className="flex items-baseline justify-between gap-3">
+            <div className="text-sm font-semibold text-[color:var(--ink)]">Sections</div>
+            {!allOn && (
+              <button
+                type="button"
+                onClick={() => { setGpio(true); setCc1101(true); setIr(true); setUsbMale(true); setUsbFemale(true); }}
+                className="text-xs font-semibold text-[color:var(--aqua)] hover:underline"
+              >
+                Reset to full board
+              </button>
+            )}
           </div>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-4">
-              <div className="text-xs font-semibold tracking-[0.14em] text-[color:var(--ink-dim)]">
-                2 units
-              </div>
-              <div className="pt-2 text-2xl font-semibold text-[color:var(--ink)]">
-                {formatCurrency(estimate.two)}
-              </div>
-              <div className="pt-1 text-xs text-[color:var(--ink-dim)]">
-                {formatCurrency(Number((estimate.two / 2).toFixed(2)))} each
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-4">
-              <div className="text-xs font-semibold tracking-[0.14em] text-[color:var(--ink-dim)]">
-                5 units
-              </div>
-              <div className="pt-2 text-2xl font-semibold text-[color:var(--ink)]">
-                {formatCurrency(estimate.five)}
-              </div>
-              <div className="pt-1 text-xs text-[color:var(--ink-dim)]">
-                {formatCurrency(Number((estimate.five / 5).toFixed(2)))} each
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-3 text-xs leading-6 text-[color:var(--ink-dim)]">
-            Mostly driven by per-part setup fees, calibrated from the historical
-            builder flow at about {formatCurrency(COST_MODEL.dollarsPerRow)} per
-            BOM row over the base configuration.
+          <p className="pt-1 text-xs text-[color:var(--ink-dim)]">
+            Toggle sections to customize the board. Keep at least one core feature
+            and one USB connector.
+          </p>
+          <div className="mt-2 divide-y divide-[color:var(--line)] border-y border-[color:var(--line)]">
+            <ToggleRow checked={gpio} label="GPIO headers" detail="Board headers for module expansion." onChange={() => toggleFeature("gpio", !gpio)} />
+            <ToggleRow checked={cc1101} label="CC1101 radio" detail="Sub-GHz radio section and antenna path." onChange={() => toggleFeature("cc1101", !cc1101)} />
+            <ToggleRow checked={ir} label="Infrared RX/TX" detail="IR receiver, LEDs, and driver parts." onChange={() => toggleFeature("ir", !ir)} />
+            <ToggleRow checked={usbMale} label="USB-C male" detail="Direct plug-in for phone-first use." onChange={() => toggleFeature("usbMale", !usbMale)} />
+            <ToggleRow checked={usbFemale} label="USB-C female" detail="Cable-based desktop and bench use." onChange={() => toggleFeature("usbFemale", !usbFemale)} />
           </div>
         </div>
 
-        {bomError && <div className="text-xs text-[color:var(--danger)]">{bomError}</div>}
-
-        <div className="flex flex-wrap gap-3 text-sm">
-          <a href="https://jlcpcb.com/quote" target="_blank" rel="noreferrer" className="text-[color:var(--sky)] hover:underline">
-            JLCPCB quote
-          </a>
-          <a href="https://jlc3dp.com/" target="_blank" rel="noreferrer" className="text-[color:var(--sky)] hover:underline">
-            JLC3DP
-          </a>
+        {/* Downloads */}
+        <div>
+          <div className="text-sm font-semibold text-[color:var(--ink)]">Fabrication files</div>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <a href={GERBER_URL} className="rounded-xl bg-[color:var(--sky)] px-4 py-3 text-center text-sm font-semibold text-[color:var(--paper)] transition hover:opacity-90">
+              Gerbers
+            </a>
+            <button type="button" onClick={downloadFilteredBom} className="rounded-xl bg-[color:var(--aqua)] px-4 py-3 text-sm font-semibold text-[color:var(--paper)] transition hover:opacity-90">
+              BOM{!allOn ? " (filtered)" : ""}
+            </button>
+            <a href={CPL_URL} className="rounded-xl border border-[color:var(--line)] px-4 py-3 text-center text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface)]">
+              CPL
+            </a>
+            <a href={STL_URL} className="rounded-xl border border-[color:var(--line)] px-4 py-3 text-center text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface)]">
+              Case STL
+            </a>
+          </div>
+          <p className="pt-3 text-xs leading-6 text-[color:var(--ink-dim)]">
+            Rough JLCPCB estimate: ~{formatCurrency(estimate.two)} for 2 pcs,
+            ~{formatCurrency(estimate.five)} for 5 pcs — mostly per-part setup fees,
+            about {formatCurrency(COST_MODEL.dollarsPerRow)} per BOM row over the
+            base config. Quote on{" "}
+            <a href="https://jlcpcb.com/quote" target="_blank" rel="noreferrer" className="text-[color:var(--sky)] hover:underline">JLCPCB</a>
+            {" "}or{" "}
+            <a href="https://jlc3dp.com/" target="_blank" rel="noreferrer" className="text-[color:var(--sky)] hover:underline">JLC3DP</a>.
+          </p>
+          {bomError && <div className="pt-2 text-xs text-[color:var(--danger)]">{bomError}</div>}
         </div>
       </div>
     </section>

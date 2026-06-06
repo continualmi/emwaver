@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { SiteHeader } from "@/components/emwaver/SiteHeader";
 import { CatalogImage } from "@/components/emwaver/CatalogImage";
@@ -9,40 +8,30 @@ import {
 } from "@/lib/emwaver/hardwareCatalog";
 import { BuilderClient } from "@/app/hardware/BuilderClient";
 
-const LANDING_IMAGES = [
-  {
-    src: "/landing1.jpeg",
-    alt: "EMWaver plugged into a smartphone",
-    label: "Mobile setup",
-  },
-  {
-    src: "/landing2.png",
-    alt: "EMWaver device close-up",
-    label: "Device close-up",
-  },
-  {
-    src: "/landing3.png",
-    alt: "EMWaver connected to laptop with modules",
-    label: "Laptop setup",
-  },
-];
-
 const SUPPORTED_MCUS = [
   {
     name: "ESP32 family",
     description:
       "ESP32, ESP32-S2, and ESP32-S3 MCU families used for EMWaver wireless-capable targets and DIY builds. ESP32-S3 is the best fit when you want USB, BLE, and Wi-Fi on the same device. ESP32-S2 supports USB and Wi-Fi. Classic ESP32 supports Wi-Fi and BLE.",
-    tags: ["MCU", "Wi-Fi", "BLE", "USB"],
+    tags: ["Wi-Fi", "BLE", "USB"],
   },
   {
     name: "STM32F042",
     description:
       "The STM32 MCU behind the classic host-backed EMWaver boards. Used for compact USB-first designs such as GPIO, IR, ISM, and related module-driven variants.",
-    tags: ["MCU", "USB", "STM32", "Host-backed"],
+    tags: ["USB", "STM32"],
   },
 ];
 
+function formatDesignDate(value: string | null): string | null {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}
+
 function DeviceCard({ device }: { device: HardwareDevice }) {
+  const designDate = formatDesignDate(device.designDate);
   return (
     <div className="group relative overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] transition hover:bg-[color:var(--surface-2)]">
       <Link
@@ -58,8 +47,15 @@ function DeviceCard({ device }: { device: HardwareDevice }) {
         />
       </div>
       <div className="relative z-10 pointer-events-none p-4">
-        <div className="text-sm font-semibold text-[color:var(--ink)]">
-          {device.title}
+        <div className="flex items-baseline justify-between gap-3">
+          <div className="text-sm font-semibold text-[color:var(--ink)]">
+            {device.title}
+          </div>
+          {designDate && (
+            <div className="shrink-0 text-[11px] tabular-nums text-[color:var(--ink-dim)]">
+              {designDate}
+            </div>
+          )}
         </div>
         <div className="line-clamp-2 pt-1 text-xs text-[color:var(--ink-dim)]">
           {device.description}
@@ -109,33 +105,6 @@ function GithubIcon() {
   );
 }
 
-function DeviceSection({
-  title,
-  subtitle,
-  devices,
-}: {
-  title: string;
-  subtitle?: string;
-  devices: HardwareDevice[];
-}) {
-  if (!devices.length) return null;
-  return (
-    <section className="pb-12">
-      <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--ink)]">
-        {title}
-      </h2>
-      {subtitle && (
-        <p className="pt-2 text-sm text-[color:var(--ink-dim)]">{subtitle}</p>
-      )}
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {devices.map((device) => (
-          <DeviceCard key={device.slug} device={device} />
-        ))}
-      </div>
-    </section>
-  );
-}
-
 export default function BuildPage() {
   const currentBoards = getCurrentBoards();
   const archive = getArchiveDevices();
@@ -145,90 +114,59 @@ export default function BuildPage() {
       <SiteHeader />
 
       <main className="mx-auto max-w-6xl px-5 py-10">
-        {/* ─── HERO ─── */}
+        {/* ─── EMWAVER LINEUP (lead) ─── */}
         <section className="pb-14">
-          <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-[color:var(--ink)] md:text-5xl">
-            Your board. Our platform.
+          <h1 className="text-4xl font-semibold tracking-tight text-[color:var(--ink)] md:text-5xl">
+            EMWaver lineup
           </h1>
           <p className="max-w-2xl pt-4 text-[16px] leading-8 text-[color:var(--ink-dim)]">
-            EMWaver turns supported dev boards into a full electronics lab — no
-            firmware toolchains, no build-flash loops. Start with an ESP32-family
-            board (ESP32, ESP32-S2, or ESP32-S3) and the EMWaver app, then explore
-            hardware directly. If you want to go
-            further, the hardware catalog below includes fabrication files for
-            custom EMWaver boards.
+            The EMWaver devices we actively build and use today. Pick a board to
+            see its details, or configure your own further down.
           </p>
-        </section>
-
-        {/* ─── LANDING IMAGES GALLERY ─── */}
-        <section className="pb-14">
-          <div className="grid gap-4 sm:grid-cols-3">
-            {LANDING_IMAGES.map((img) => (
-              <div
-                key={img.src}
-                className="group overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)]"
-              >
-                <div className="relative aspect-[4/3] w-full overflow-hidden">
-                  <Image
-                    src={img.src}
-                    alt={img.alt}
-                    fill
-                    unoptimized
-                    className="object-cover"
-                  />
-                </div>
-                <div className="px-4 py-3">
-                  <div className="text-xs font-semibold text-[color:var(--ink-dim)]">
-                    {img.label}
-                  </div>
-                </div>
-              </div>
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {currentBoards.map((device) => (
+              <DeviceCard key={device.slug} device={device} />
             ))}
           </div>
         </section>
 
-        {/* ─── SUPPORTED MCUS (text-only callout) ─── */}
-        <section className="pb-14">
+        {/* ─── SUPPORTED MCUS (editorial rows) ─── */}
+        <section className="pb-16">
           <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--aqua)]">
             Supported MCUs
           </h2>
-          <p className="pt-2 text-sm text-[color:var(--ink-dim)]">
+          <p className="max-w-2xl pt-2 text-sm text-[color:var(--ink-dim)]">
             EMWaver targets a small set of MCU families and modules, then exposes
             concrete boards and builds on top of them in the catalog below.
           </p>
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
+          <div className="mt-6 divide-y divide-[color:var(--line)] border-y border-[color:var(--line)]">
             {SUPPORTED_MCUS.map((board) => (
               <div
                 key={board.name}
-                className="rounded-2xl border border-[color:var(--aqua-tint-2)] bg-[color:var(--aqua-tint)] p-5"
+                className="grid gap-3 py-5 md:grid-cols-[220px_1fr] md:gap-10"
               >
-                <div className="text-base font-semibold text-[color:var(--ink)]">
-                  {board.name}
+                <div>
+                  <div className="text-base font-semibold text-[color:var(--ink)]">
+                    {board.name}
+                  </div>
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {board.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="rounded-full border border-[color:var(--line)] px-2.5 py-0.5 text-[11px] text-[color:var(--aqua)]"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-                <div className="pt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
+                <p className="text-sm leading-7 text-[color:var(--ink-dim)]">
                   {board.description}
-                </div>
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {board.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-full border border-[color:var(--line)] bg-[color:var(--aqua-tint)] px-2.5 py-0.5 text-[11px] text-[color:var(--aqua)]"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
+                </p>
               </div>
             ))}
           </div>
         </section>
-
-        {/* ─── EMWAVER LINEUP (with images) ─── */}
-        <DeviceSection
-          title="EMWaver lineup"
-          subtitle="The EMWaver devices we actively build and use today."
-          devices={currentBoards}
-        />
 
         {/* ─── BOARD BUILDER ─── */}
         <section className="pb-12">
