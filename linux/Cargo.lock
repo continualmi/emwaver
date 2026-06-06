@@ -518,9 +518,11 @@ dependencies = [
  "emwaver-linux-transport",
  "gtk4",
  "libadwaita",
+ "serde",
  "serde_json",
  "sourceview5",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

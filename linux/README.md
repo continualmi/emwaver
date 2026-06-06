@@ -112,7 +112,7 @@ The first native slice is M0/M1:
 - the GTK shell is now script-workspace first, loads the shared `assets/default-scripts` bundle, groups scripts as Examples/Libraries/Kernel/Custom Scripts, keeps bundled scripts read-only, defaults the main content to runtime preview, supports local New/Save/Make Copy behavior, and exposes row-level Run/Edit/Stop controls with inline running state aligned with the macOS script workspace direction;
 - the GTK script workspace uses GtkSourceView for JavaScript editing with line numbers, syntax highlighting, find, go-to-line, line wrap, script search, and a runtime output switch that renders captured script UI trees with native GTK widgets for common layout/control nodes;
 - script UI rendering now uses a macOS-style live session boundary: GTK keeps widgets on the main thread, a worker owns the Boa runtime and script action invocation, and the packet bridge keeps the selected local transport connected for action-driven device I/O;
-- the GTK shell no longer contains the legacy Agent drawer or MGPT client path; desktop MCP work should add a new local tool surface in the running app;
+- the GTK shell no longer contains the legacy Agent drawer or MGPT client path; the running app owns the local desktop MCP tool surface;
 - the GTK device sheet now follows the macOS device workflow more closely with selected-device status, grouped local transports, transport badges, board/firmware/UID metadata, manual Wi-Fi target validation, firmware action context, and udev permission guidance;
 - the GTK firmware sheet is board-aware, validates bundled STM32 and ESP32-S3 firmware image plans, probes STM32 DFU presence, shows image offsets/paths, routes STM32 flashing through the local Rust DFU backend, and routes ESP32-S3 serial flashing through the bundled esptool-compatible helper with BOOT/RESET guidance and progress logs;
 - the firmware crate can plan bundled STM32 and ESP32-S3 images, validate required bundled assets, flash STM32 DFU through the existing Rust DFU backend, and orchestrate ESP32-S3 serial flashing with fixed offsets through the local helper;
@@ -158,4 +158,12 @@ cargo build --manifest-path linux/Cargo.toml --release -p emwaver-linux-app
 EMWAVER_LINUX_VERSION=$(cat ../VERSION) linux/scripts/package-linux.sh
 ```
 
-Do not add a separate daemon or browser relay to make the app run. Hardware transports belong in-process behind `emwaver-linux-transport`, and the future MCP server should be part of the running native app.
+Do not add a separate daemon or browser relay to make the app run. Hardware transports belong in-process behind `emwaver-linux-transport`, and the MCP server is part of the running native app.
+
+Current MCP implementation:
+
+- Settings exposes a `Desktop MCP` section with an enable switch, loopback endpoint, and generated bearer token.
+- When enabled, the running app serves Streamable-HTTP-style JSON-RPC at `http://127.0.0.1:3923/mcp`.
+- The initial tool slice is read/status-only: `list_scripts`, `read_script`, and `device_state`.
+- The server uses the same `ScriptRepository` roots as the GTK script list and a refreshed app-model device snapshot.
+- Local validation on macOS is blocked by missing GTK4/libadwaita system packages; run app-level checks on a Linux host with `gtk4`, `libadwaita`, `gdk-pixbuf-2.0`, and `graphene-gobject-1.0` development packages installed.

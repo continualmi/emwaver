@@ -18,8 +18,8 @@ This is the working checklist for the native Linux GTK4 port against the macOS a
 
 3. MCP tool parity
    - Desktop MCP should expose local tools for listing/reading/writing/running scripts, stopping scripts, device status, and hardware primitives.
-   - Linux still needs the MCP surface after the legacy in-app Agent client is removed.
-   - Needed: persistent local conversations, tool call rendering/results, script list/read/patch/run/stop tools, and hardware primitive execution through the selected Linux transport.
+   - Linux now has the first in-app MCP source slice: Settings enablement/token, loopback `POST /mcp`, and `list_scripts`/`read_script`/`device_state`.
+   - Needed: validate the Linux app slice on a GTK4/libadwaita host, then add write/run/stop tools and hardware primitive execution through the selected Linux transport.
 
 4. Device sheet behavior
    - macOS groups transports by hardware UID, supports transport switching, manual Wi-Fi, ESP32 Wi-Fi provisioning/clear/status, and shows UID probe freshness.
@@ -52,4 +52,4 @@ This is the working checklist for the native Linux GTK4 port against the macOS a
 - Linux editor uses GtkSourceView with syntax highlighting, line numbers, find, go-to-line, and line wrap.
 - Linux has USB MIDI, Wi-Fi WebSocket/mDNS, and BlueZ BLE GATT transport paths behind the shared transport trait.
 - Linux firmware flow can plan bundled STM32 and ESP32-S3 images and call the local flashing backends.
-- Linux no longer carries in-app Agent/MGPT credentials; desktop MCP settings are still pending.
+- Linux no longer carries in-app Agent/MGPT credentials; desktop MCP settings and the first read/status MCP tools are present in the GTK app source.

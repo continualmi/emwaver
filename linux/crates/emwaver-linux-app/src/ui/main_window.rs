@@ -1,3 +1,5 @@
+use super::mcp_server;
+
 use adw::prelude::*;
 use emwaver_linux_core::{
     default_script_template, AppModel, DeviceRecord, ScriptListItem, ScriptRepository,
@@ -28,10 +30,8 @@ use sourceview5::prelude::*;
 use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::env;
-use std::fs;
-use std::path::PathBuf;
 use std::rc::Rc;
-use std::sync::mpsc;
+use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -60,6 +60,26 @@ enum ScriptUiSessionEvent {
 pub fn build_main_window(app: &adw::Application) {
     let model = Rc::new(RefCell::new(AppModel::default()));
     let script_repository = Rc::new(ScriptRepository::default());
+    let mcp_snapshot = Arc::new(Mutex::new(mcp_server::McpDeviceSnapshot::from_model(
+        &model.borrow(),
+    )));
+    let mcp_server_handle = Rc::new(RefCell::new(None::<mcp_server::McpServerHandle>));
+    let mcp_last_error = Rc::new(RefCell::new(None::<String>));
+    if let Err(error) =
+        mcp_server::sync_from_settings(&mcp_server_handle, &script_repository, &mcp_snapshot)
+    {
+        *mcp_last_error.borrow_mut() = Some(error);
+    }
+    {
+        let model = model.clone();
+        let mcp_snapshot = mcp_snapshot.clone();
+        glib::timeout_add_local(Duration::from_millis(500), move || {
+            if let Ok(mut snapshot) = mcp_snapshot.lock() {
+                *snapshot = mcp_server::McpDeviceSnapshot::from_model(&model.borrow());
+            }
+            ControlFlow::Continue
+        });
+    }
     let script_items = Rc::new(RefCell::new(Vec::<ScriptListItem>::new()));
     let script_row_indices = Rc::new(RefCell::new(Vec::<Option<usize>>::new()));
     let selected_script = Rc::new(RefCell::new(None::<ScriptListItem>));
@@ -214,9 +234,9 @@ pub fn build_main_window(app: &adw::Application) {
         .right_margin(10)
         .build();
     log_view.add_css_class("monospace");
-    log_view
-        .buffer()
-        .set_text("Local scripts run immediately. Select a local device to run hardware scripts.\n");
+    log_view.buffer().set_text(
+        "Local scripts run immediately. Select a local device to run hardware scripts.\n",
+    );
     let run_log_visible = load_run_log_visible();
     let log_scroll = gtk::ScrolledWindow::builder()
         .hexpand(true)
@@ -753,8 +773,19 @@ pub fn build_main_window(app: &adw::Application) {
     {
         let window = window.clone();
         let run_log_expander = run_log_expander.clone();
+        let script_repository = script_repository.clone();
+        let mcp_snapshot = mcp_snapshot.clone();
+        let mcp_server_handle = mcp_server_handle.clone();
+        let mcp_last_error = mcp_last_error.clone();
         settings_button.connect_clicked(move |_| {
-            present_settings_dialog(&window, &run_log_expander);
+            present_settings_dialog(
+                &window,
+                &run_log_expander,
+                &script_repository,
+                &mcp_snapshot,
+                &mcp_server_handle,
+                &mcp_last_error,
+            );
         });
     }
     add_shortcuts(app, &window);
@@ -2289,49 +2320,27 @@ fn selected_device_title(device: &Option<DeviceRecord>) -> String {
 }
 
 fn load_run_log_visible() -> bool {
-    let Ok(body) = fs::read_to_string(app_settings_path()) else {
-        return true;
-    };
-    serde_json::from_str::<serde_json::Value>(&body)
-        .ok()
-        .and_then(|value| {
-            value
-                .get("runLogVisible")
-                .and_then(serde_json::Value::as_bool)
-        })
-        .unwrap_or(true)
+    mcp_server::read_run_log_visible()
 }
 
 fn save_run_log_visible(visible: bool) -> std::io::Result<()> {
-    let path = app_settings_path();
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    let body = serde_json::json!({
-        "runLogVisible": visible,
-    });
-    fs::write(path, serde_json::to_string_pretty(&body)?)
+    mcp_server::write_run_log_visible(visible)
 }
 
-fn app_settings_path() -> PathBuf {
-    if let Some(config_home) = env::var_os("XDG_CONFIG_HOME").filter(|value| !value.is_empty()) {
-        return PathBuf::from(config_home).join("emwaver").join("app.json");
-    }
-    env::var_os("HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join(".config")
-        .join("emwaver")
-        .join("app.json")
-}
-
-fn present_settings_dialog(parent: &adw::ApplicationWindow, run_log_expander: &gtk::Expander) {
+fn present_settings_dialog(
+    parent: &adw::ApplicationWindow,
+    run_log_expander: &gtk::Expander,
+    script_repository: &Rc<ScriptRepository>,
+    mcp_snapshot: &Arc<Mutex<mcp_server::McpDeviceSnapshot>>,
+    mcp_server_handle: &Rc<RefCell<Option<mcp_server::McpServerHandle>>>,
+    mcp_last_error: &Rc<RefCell<Option<String>>>,
+) {
     let dialog = gtk::Dialog::builder()
         .transient_for(parent)
         .modal(true)
         .title("Settings")
         .default_width(620)
-        .default_height(420)
+        .default_height(620)
         .build();
     dialog.add_button("Close", gtk::ResponseType::Close);
 
@@ -2378,6 +2387,47 @@ fn present_settings_dialog(parent: &adw::ApplicationWindow, run_log_expander: &g
     );
     root.append(&gtk::Frame::builder().child(&device_card).build());
 
+    let mcp_card = gtk::Box::new(Orientation::Vertical, 8);
+    mcp_card.set_margin_top(12);
+    mcp_card.set_margin_bottom(12);
+    mcp_card.set_margin_start(12);
+    mcp_card.set_margin_end(12);
+    mcp_card.append(&section_label("Desktop MCP"));
+    let enable_mcp = gtk::CheckButton::builder()
+        .label("Enable local MCP server")
+        .active(mcp_server::mcp_enabled())
+        .build();
+    mcp_card.append(&enable_mcp);
+
+    let mcp_status_label = gtk::Label::builder()
+        .label(mcp_server::status_text(
+            mcp_server_handle,
+            mcp_last_error.borrow().as_deref(),
+        ))
+        .xalign(0.0)
+        .css_classes(vec!["dim-label"])
+        .build();
+    mcp_card.append(&settings_row("Status", &mcp_status_label));
+
+    let endpoint_entry = gtk::Entry::builder()
+        .text(mcp_server::endpoint_url())
+        .editable(false)
+        .hexpand(true)
+        .build();
+    mcp_card.append(&settings_row("Endpoint", &endpoint_entry));
+
+    let token_entry = gtk::Entry::builder()
+        .text(mcp_server::mcp_token())
+        .editable(false)
+        .hexpand(true)
+        .build();
+    let reset_token = gtk::Button::builder().label("Reset").build();
+    let token_box = gtk::Box::new(Orientation::Horizontal, 8);
+    token_box.append(&token_entry);
+    token_box.append(&reset_token);
+    mcp_card.append(&settings_row("Token", &token_box));
+    root.append(&gtk::Frame::builder().child(&mcp_card).build());
+
     {
         let run_log_expander = run_log_expander.clone();
         show_run_log.connect_toggled(move |button| {
@@ -2385,6 +2435,37 @@ fn present_settings_dialog(parent: &adw::ApplicationWindow, run_log_expander: &g
             run_log_expander.set_visible(visible);
             run_log_expander.set_expanded(visible);
             let _ = save_run_log_visible(visible);
+        });
+    }
+
+    {
+        let script_repository = script_repository.clone();
+        let mcp_snapshot = mcp_snapshot.clone();
+        let mcp_server_handle = mcp_server_handle.clone();
+        let mcp_last_error = mcp_last_error.clone();
+        let mcp_status_label = mcp_status_label.clone();
+        enable_mcp.connect_toggled(move |button| {
+            let enabled = button.is_active();
+            let _ = mcp_server::set_mcp_enabled(enabled);
+            let result = mcp_server::sync_from_settings(
+                &mcp_server_handle,
+                &script_repository,
+                &mcp_snapshot,
+            );
+            *mcp_last_error.borrow_mut() = result.err();
+            mcp_status_label.set_label(&mcp_server::status_text(
+                &mcp_server_handle,
+                mcp_last_error.borrow().as_deref(),
+            ));
+        });
+    }
+
+    {
+        let token_entry = token_entry.clone();
+        reset_token.connect_clicked(move |_| {
+            if let Ok(token) = mcp_server::reset_mcp_token() {
+                token_entry.set_text(&token);
+            }
         });
     }
 
