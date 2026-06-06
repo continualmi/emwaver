@@ -165,7 +165,7 @@ render(<App />);`}</code>
       <h2>Plot</h2>
       <p>
         <code>Plot</code> can render inline data or a named/buffer-backed source. The sampler UI uses
-        <code> source="samplerBits"</code> with viewport callbacks for pan/zoom.
+        <code> source=&quot;samplerBits&quot;</code> with viewport callbacks for pan/zoom.
       </p>
       <pre>
         <code className="language-javascript">{`<Plot

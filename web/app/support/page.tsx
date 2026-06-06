@@ -73,7 +73,7 @@ export default function SupportPage() {
             {[
               {
                 q: "Do I need to create an account?",
-                a: "No. EMWaver is local-first and open-source. Core hardware control — plugging in a board, running scripts, and exploring signals — does not require an account, cloud activation, or a subscription. The optional Agent API uses a paid API key, but that is separate from local hardware access.",
+                a: "No. EMWaver is local-first and open-source. Core hardware control — plugging in a board, running scripts, and exploring signals — does not require an account, cloud activation, or a subscription. External Agent help is separate from local hardware access.",
               },
               {
                 q: "What boards are supported?",
@@ -110,9 +110,9 @@ export default function SupportPage() {
                 a: (
                   <>
                     The Agent assists with writing, debugging, explaining, and improving local
-                    JavaScript scripts. It can also help configure hardware peripherals and
-                    troubleshoot signal issues. Agent usage is optional and metered
-                    through the paid Continual MI API. See{" "}
+                    JavaScript scripts. On desktop, external agents can use the local MCP bridge
+                    you enable in the app to inspect device state, run scripts, and call hardware
+                    tools such as SPI, GPIO, and analog reads. See{" "}
                     <Link href="/docs/scripts" className="text-[color:var(--sky)] underline decoration-[color:var(--link-underline)] hover:decoration-[color:var(--link-underline-hover)]">
                       scripting docs
                     </Link>{" "}

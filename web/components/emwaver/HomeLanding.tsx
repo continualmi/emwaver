@@ -84,10 +84,10 @@ const PILLARS: Pillar[] = [
   {
     id: "agent",
     index: "04",
-    eyebrow: "Agent-assisted",
-    title: "An agent with hardware tools.",
-    headline: "Not just chat — it drives the pins.",
-    body: "The optional Agent calls named hardware primitives like spi_transfer, gpio_read, and analog_read, probes devices directly, then turns working flows into reusable local .js scripts with UI controls and live plots.",
+    eyebrow: "Desktop MCP",
+    title: "Agent tools without app chat.",
+    headline: "Expose local tools only when you enable them.",
+    body: "Desktop EMWaver apps can expose a local MCP bridge with named tools like spi_transfer, gpio_read, analog_read, run_script, and device_state. External agents use those tools to turn working flows into reusable local .js scripts with UI controls and live plots.",
     href: "/docs",
     cta: "Read the docs",
     visual: "agent",
@@ -99,7 +99,7 @@ const PILLARS: Pillar[] = [
 const comparisonRows = [
   ["Interface", "Full host screen", "128x64 monochrome", "External serial monitor or add-on display"],
   ["Storage", "Local host filesystem", "SD card", "Limited board flash unless you add storage"],
-  ["AI workflow", "Optional Agent-assisted scripts", "None built in", "External tools only"],
+  ["AI workflow", "Optional desktop MCP tools", "None built in", "External tools only"],
   ["Development", "Instant local JavaScript scripts", "Firmware build/flash for deeper changes", "Sketch compile/upload loop"],
   ["Hardware model", "Multiple supported boards", "Single handheld device", "Many boards, fragmented workflows"],
   ["Core access", "Account-free local control", "Device-local", "Account-free local control"],
@@ -229,7 +229,7 @@ function Hero() {
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Agent tool-loop console — EMWaver's signature scroll-gated visual
+   MCP tool-loop console — EMWaver's signature scroll-gated visual
    ────────────────────────────────────────────────────────────── */
 
 const AGENT_LINES: {
@@ -254,7 +254,7 @@ function AgentConsole() {
         <span className="h-2.5 w-2.5 rounded-full bg-[color:var(--ink-dim)]/40" />
         <span className="h-2.5 w-2.5 rounded-full bg-[color:var(--ink-dim)]/40" />
         <span className="ml-2 font-mono text-[11px] uppercase tracking-[0.2em] text-[color:var(--ink-dim)]">
-          agent · tool loop
+          desktop mcp · tool loop
         </span>
       </div>
 
@@ -289,14 +289,14 @@ function AgentConsole() {
             )}
             {line.kind === "agent" && (
               <>
-                <span className="text-[color:var(--copper)]">agent ›</span>
+                <span className="text-[color:var(--copper)]">external agent ›</span>
                 <span className="text-[color:var(--ink)]">{line.text}</span>
               </>
             )}
           </motion.div>
         ))}
         <div className="flex items-center gap-2 pt-1">
-          <span className="text-[color:var(--copper)]">agent ›</span>
+          <span className="text-[color:var(--copper)]">external agent ›</span>
           <motion.span
             animate={{ opacity: [1, 0.15, 1] }}
             transition={{ duration: 1.1, repeat: Infinity, ease: "easeInOut" }}

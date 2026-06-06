@@ -20,15 +20,15 @@ export default function DocsIndex() {
           ESP32-S2, or ESP32-S3) or open the EMWaver hardware lineup and build files.
         </li>
         <li>
-          <strong>Install the app</strong> — use the native app where it fits: iOS, Android, or macOS.
+          <strong>Install the app</strong> — use the native app where it fits: iOS, Android, macOS, Windows, or Linux preview.
         </li>
         <li>
           <strong>Flash fixed firmware</strong> — use the bundled EMWaver firmware image for your
           board class (ESP32, ESP32-S2, ESP32-S3, or STM32F042). No user build loop.
         </li>
         <li>
-          <strong>Run or generate a script</strong> — use built-in examples, write your own
-          JSX-based <code>.js</code> script, or let the Agent assemble the flow.
+          <strong>Run a script</strong> — use built-in examples, write your own
+          JSX-based <code>.js</code> script, or enable desktop MCP so an external agent can assemble the flow.
         </li>
       </ol>
 
@@ -47,8 +47,8 @@ export default function DocsIndex() {
           RFID modules without leaving the same scripting model or app surface.
         </li>
         <li>
-          <strong>Agent-assisted flows</strong> — ask the Agent to generate scripts, build control
-          panels, run on real hardware, and iterate on the result from the same workspace.
+          <strong>Desktop MCP flows</strong> — when you enable the desktop MCP bridge, an external
+          agent can list scripts, run them on real hardware, inspect device state, and call SPI/GPIO/analog tools.
         </li>
       </ul>
 
@@ -74,7 +74,7 @@ export default function DocsIndex() {
         </li>
         <li>
           <strong>Install the app</strong> through the{" "}
-          <Link href="/docs/install">App Store, Google Play internal test, Android APK, macOS DMG, or Windows download</Link>.
+          <Link href="/docs/install">App Store, Google Play internal test, Android APK, macOS DMG, Windows download, or Linux DEB</Link>.
         </li>
         <li>
           <strong>Flash the fixed EMWaver firmware</strong> if your board is not already pre-flashed. Use the bundled target image for your board class (ESP32, ESP32-S2, ESP32-S3, or STM32F042) rather than building firmware manually.
@@ -84,7 +84,7 @@ export default function DocsIndex() {
         </li>
         <li>
           <strong>Open a script</strong> such as <code>sampler.js</code>, <code>cc1101.js</code>, or <code>rfid.js</code>,
-          then adapt it or generate a new one.
+          then adapt it or create a new one.
         </li>
       </ol>
 
@@ -94,7 +94,7 @@ export default function DocsIndex() {
         <li><strong>Android</strong> through the Google Play internal test or direct APK download</li>
         <li><strong>macOS</strong> direct DMG download for development and advanced use</li>
         <li><strong>Windows</strong> EXE installer and ZIP downloads</li>
-        <li><strong>Linux</strong> native app in progress</li>
+        <li><strong>Linux</strong> native preview app for Ubuntu-style systems</li>
       </ul>
 
       <h2>What to read next</h2>

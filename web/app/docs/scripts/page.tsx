@@ -6,7 +6,7 @@ export default function ScriptsDocPage() {
       <h1>Scripting guide</h1>
       <p>
         EMWaver scripts are local JavaScript programs. Scripts use <code>.js</code> files and can include
-        JSX-style UI syntax for native panels, extensionless imports such as <code>"emw-ui"</code>, and
+        JSX-style UI syntax for native panels, extensionless imports such as <code>&quot;emw-ui&quot;</code>, and
         hardware modules such as <code>emw-gpio</code>, <code>emw-spi</code>, and <code>emw-sampler</code>.
       </p>
       <h2>How scripts run</h2>
@@ -177,8 +177,8 @@ const timer = every(1000, () => {
 timer.stop();`}</code>
       </pre>
       <p>
-        Use rendered panels for user interaction. Agent hardware automation should use named hardware
-        primitives such as SPI transfers, GPIO reads/writes, analog reads, and module probes rather than
+        Use rendered panels for user interaction. Desktop MCP hardware automation should use named
+        tools such as SPI transfers, GPIO reads/writes, analog reads, and module probes rather than
         screen-scraping UI state.
       </p>
 
