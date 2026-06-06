@@ -15,6 +15,7 @@ struct ContentView: View {
     @ObservedObject var hostSessions: HostSessionManager
     @ObservedObject var scriptSessions: MacScriptSessionManager
     @ObservedObject var appUpdater: MacAppUpdateController
+    @ObservedObject var mcpServer: MacMcpServer
     @EnvironmentObject private var appRouter: AppRouter
 
     let previewManager: ScriptPreviewManager
@@ -171,7 +172,7 @@ struct ContentView: View {
             FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
         }
         .sheet(isPresented: $showingSettings) {
-            SettingsView(device: device, appUpdater: appUpdater)
+            SettingsView(device: device, appUpdater: appUpdater, mcpServer: mcpServer)
         }
         .task {
             scriptSessions.attach(device: device)
@@ -338,6 +339,7 @@ struct ContentView: View {
         hostSessions: HostSessionManager(),
         scriptSessions: MacScriptSessionManager(),
         appUpdater: MacAppUpdateController(),
+        mcpServer: MacMcpServer(),
         previewManager: ScriptPreviewManager()
     )
     .environmentObject(AppRouter())

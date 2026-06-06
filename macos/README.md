@@ -121,9 +121,11 @@ Script sessions:
 - Each local session owns its own `ScriptPreviewManager` and targets the selected local device id through the existing macOS transport bridge.
 
 Desktop MCP direction on macOS:
-- the macOS app should expose a local, user-enabled MCP server over loopback Streamable HTTP,
-- MCP tools route into the existing script engine, console capture, script storage, and device transports,
-- the planned tool surface includes `list_scripts`, `read_script`, `run_script`, `write_script`, `device_state`, `spi_transfer`, `gpio_read`, `gpio_write`, and `analog_read`,
+- Settings exposes a `Desktop MCP` section with an enable switch, loopback endpoint, and generated bearer token,
+- when enabled, the running app serves Streamable-HTTP-style JSON-RPC at `http://127.0.0.1:3923/mcp`,
+- the initial tool slice is read/status-only: `list_scripts`, `read_script`, and `device_state`,
+- future tool work adds `run_script`, `write_script`, `stop_script`, `spi_transfer`, `gpio_read`, `gpio_write`, and `analog_read`,
+- the server is in-process; do not add a sidecar, daemon, or CLI control plane for this path,
 - production model prompts, provider routing, and metering do not belong in the macOS app.
 
 ## 3) Firmware update, optional account setup, and tooling

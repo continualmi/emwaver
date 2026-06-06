@@ -26,13 +26,16 @@ struct EMWaverApp: App {
     @StateObject private var scriptSessions = MacScriptSessionManager()
     @StateObject private var appRouter = AppRouter()
     @StateObject private var appUpdater = MacAppUpdateController()
+    @StateObject private var mcpServer = MacMcpServer()
 
     var body: some Scene {
         WindowGroup {
-            ContentView(device: device, firmwareUpdater: firmwareUpdater, hostSessions: hostSessions, scriptSessions: scriptSessions, appUpdater: appUpdater, previewManager: previewManager)
+            ContentView(device: device, firmwareUpdater: firmwareUpdater, hostSessions: hostSessions, scriptSessions: scriptSessions, appUpdater: appUpdater, mcpServer: mcpServer, previewManager: previewManager)
                 .environmentObject(appRouter)
                 .onAppear {
                     activateAppIfNeeded()
+                    mcpServer.attach(device: device)
+                    mcpServer.syncWithSettings()
                 }
         }
         .commands {

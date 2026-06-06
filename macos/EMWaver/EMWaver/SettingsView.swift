@@ -4,10 +4,26 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var device: MacUSBManager
     @ObservedObject var appUpdater: MacAppUpdateController
+    @ObservedObject var mcpServer: MacMcpServer
     @Environment(\.dismiss) private var dismiss
     @AppStorage(MacUSBManager.transportDebugLoggingEnabledDefaultsKey) private var transportDebugLoggingEnabled = true
+    @AppStorage(MacMcpSettings.enabledKey) private var mcpServerEnabled = false
+    @AppStorage(MacMcpSettings.tokenKey) private var mcpServerToken = MacMcpSettings.token
 
     private let updateFeedURL = URL(string: "https://emwaver.ai/updates/macos/appcast.xml")!
+
+    private var mcpStatusText: String {
+        if !mcpServerEnabled {
+            return "Disabled"
+        }
+        if mcpServer.isRunning {
+            return "Enabled on loopback"
+        }
+        if let error = mcpServer.lastErrorText, !error.isEmpty {
+            return "Start failed: \(error)"
+        }
+        return "Starting"
+    }
 
     var body: some View {
         NavigationStack {
@@ -16,6 +32,26 @@ struct SettingsView: View {
                     Text("Local scripts and hardware control work immediately.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+
+                Section("Desktop MCP") {
+                    Toggle("Enable local MCP server", isOn: $mcpServerEnabled)
+                    LabeledContent("Status", value: mcpStatusText)
+                    LabeledContent("Endpoint") {
+                        Text(mcpServer.endpointURL)
+                            .textSelection(.enabled)
+                    }
+                    LabeledContent("Token") {
+                        HStack {
+                            Text(mcpServerToken)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                                .textSelection(.enabled)
+                            Button("Reset") {
+                                mcpServerToken = MacMcpSettings.resetToken()
+                            }
+                        }
+                    }
                 }
 
                 Section("App") {
@@ -50,8 +86,11 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
-            .onChange(of: transportDebugLoggingEnabled) { _ in
+            .onChange(of: transportDebugLoggingEnabled) {
                 device.applyTransportDebugPreference()
+            }
+            .onChange(of: mcpServerEnabled) {
+                mcpServer.syncWithSettings()
             }
             .frame(minWidth: 720, minHeight: 520)
         }
@@ -59,5 +98,5 @@ struct SettingsView: View {
 }
 
 #Preview {
-    SettingsView(device: MacUSBManager(), appUpdater: MacAppUpdateController())
+    SettingsView(device: MacUSBManager(), appUpdater: MacAppUpdateController(), mcpServer: MacMcpServer())
 }

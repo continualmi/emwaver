@@ -7,12 +7,21 @@
       "parity": "documented_exceptions",
       "platforms": {
         "macos": {
-          "status": "planned",
-          "reason": "macOS should host an in-app local MCP server backed by the existing script engine and transports.",
+          "status": "required",
           "evidence": [
             {
-              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
-              "contains": "macOS</td><td><span class=\"s go\">KEEP</span></td><td><span class=\"s no\">removed</span></td><td>live folder</td><td>in-process"
+              "file": "macos/EMWaver/EMWaver/MacMcpServer.swift",
+              "contains": [
+                "POST",
+                "/mcp",
+                "Bearer ",
+                "tools/list",
+                "tools/call"
+              ]
+            },
+            {
+              "file": "macos/EMWaver/EMWaver/SettingsView.swift",
+              "contains": "Desktop MCP"
             }
           ]
         },
@@ -63,17 +72,12 @@
       "parity": "documented_exceptions",
       "platforms": {
         "macos": {
-          "status": "planned",
-          "reason": "macOS has the desktop runtime and should host the first in-app MCP bridge.",
+          "status": "required",
           "evidence": [
             {
-              "file": "docs/AGENT_TO_MCP_MIGRATION.html",
+              "file": "macos/EMWaver/EMWaver/MacMcpServer.swift",
               "contains": [
                 "list_scripts",
-                "run_script",
-                "spi_transfer",
-                "gpio_read",
-                "analog_read",
                 "device_state"
               ]
             }
