@@ -4,7 +4,7 @@ This folder is the canonical source for bundled EMWaver scripts:
 
 - macOS now bundles the `.js` scripts and visible `emw-*` libraries from this folder.
 - Android still needs a matching runtime migration; the canonical default assets are no longer `.emw`.
-- Native tooling and the Gateway both load from this folder path in repo workflows.
+- Native apps load from this folder path in repo workflows.
 
 The target public source format is JavaScript. Keep new macOS examples and
 libraries as `.js` files with extensionless imports such as `import { pin, gpio }
@@ -12,7 +12,7 @@ from "emw-gpio";`.
 
 ## Script runtime styles
 
-Use this to reason about CLI behavior when UI is not visible.
+Use this to reason about script behavior when UI is not visible.
 
 ### One-shot / command-response scripts
 
@@ -55,5 +55,5 @@ Contract:
   - enough detail for a person to understand the next step.
 
 Use `console.log`, `console.warn`, and `console.error` for diagnostic output,
-Agent probe loops, and short-lived script-run observations. Console output is
+external tool runs, and short-lived script-run observations. Console output is
 not a replacement for JSX UI; it is the script terminal channel.

@@ -2,13 +2,20 @@ import Foundation
 import Security
 
 enum KeychainStore {
-    static func setString(_ value: String, account: String, service: String = Bundle.main.bundleIdentifier ?? "com.emwaver") throws {
-        let data = value.data(using: .utf8) ?? Data()
+    static let service = "com.emwaver.macos.local"
 
-        // Delete existing.
-        delete(account: account, service: service)
+    static func setString(_ value: String, account: String) throws {
+        let data = Data(value.utf8)
 
+        // Delete existing item (if any)
         let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+        SecItemDelete(query as CFDictionary)
+
+        let add: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
@@ -16,13 +23,13 @@ enum KeychainStore {
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
         ]
 
-        let status = SecItemAdd(query as CFDictionary, nil)
+        let status = SecItemAdd(add as CFDictionary, nil)
         guard status == errSecSuccess else {
-            throw AuthError.failed("Keychain set failed (\(status))")
+            throw KeychainStoreError.failed("Keychain write failed (status: \(status))")
         }
     }
 
-    static func getString(account: String, service: String = Bundle.main.bundleIdentifier ?? "com.emwaver") throws -> String? {
+    static func getString(account: String) throws -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -37,19 +44,32 @@ enum KeychainStore {
             return nil
         }
         guard status == errSecSuccess else {
-            throw AuthError.failed("Keychain get failed (\(status))")
+            throw KeychainStoreError.failed("Keychain read failed (status: \(status))")
         }
 
-        guard let data = item as? Data else { return nil }
+        guard let data = item as? Data else {
+            return nil
+        }
         return String(data: data, encoding: .utf8)
     }
 
-    static func delete(account: String, service: String = Bundle.main.bundleIdentifier ?? "com.emwaver") {
+    static func delete(account: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
         ]
         SecItemDelete(query as CFDictionary)
+    }
+}
+
+enum KeychainStoreError: LocalizedError {
+    case failed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .failed(let message):
+            return message
+        }
     }
 }

@@ -31,15 +31,13 @@ Entry points:
 
 ## 2) Main code areas
 
-## 2.1 Agent removal and MCP migration
+## 2.1 MCP migration
 
-`macos/EMWaver/EMWaver/Auth/`:
-- legacy Agent API-key manager + model,
-- keychain store,
-- legacy Agent API-key entry UI targeted for removal.
+The legacy Agent API-key manager, MGPT endpoint plumbing, and in-app Agent
+entry UI have been removed from the macOS app. `KeychainStore.swift` remains as
+local utility storage for app-owned credentials such as Wi-Fi setup details.
 
 Migration rule:
-- remove the in-app Agent API-key UI/runtime and MGPT endpoint plumbing,
 - keep supported boards entering local script/update workflows without a manual claim button or hosted registration step,
 - route external-agent access through the future local in-app MCP server instead of app-level Agent chat,
 - local scripts, flashing, and device control must not depend on any key.
@@ -191,7 +189,7 @@ macOS folder should hold platform-specific host/UI integrations and desktop-spec
 
 Open the macOS Xcode project and run the `EMWaver` scheme.
 
-As with other app folders, avoid relying on Linux agent environment for native app compilation validation.
+As with other app folders, avoid relying on this automation environment for native app compilation validation.
 
 ---
 

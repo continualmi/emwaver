@@ -5,7 +5,6 @@ using System.Runtime.CompilerServices;
 using System.Windows.Input;
 using EMWaver.Models;
 using EMWaver.Services;
-using EMWaver.Services.Agent;
 
 namespace EMWaver.ViewModels;
 
@@ -13,20 +12,17 @@ public class MainViewModel : INotifyPropertyChanged
 {
     private readonly WindowsDeviceManager _device;
     private readonly FirmwareUpdateManager _firmwareUpdater;
-    private readonly AgentApiKeyStore _agentKeys;
     private readonly ScriptRepository _scripts;
     private readonly AppSettings _settings;
 
     public MainViewModel(
         WindowsDeviceManager device,
         FirmwareUpdateManager firmwareUpdater,
-        AgentApiKeyStore agentKeys,
         ScriptRepository scripts,
         AppSettings settings)
     {
         _device = device;
         _firmwareUpdater = firmwareUpdater;
-        _agentKeys = agentKeys;
         _scripts = scripts;
         _settings = settings;
 
@@ -77,15 +73,6 @@ public class MainViewModel : INotifyPropertyChanged
         }
     }
 
-    // --- Agent key state ---
-
-    private bool _hasAgentKey;
-    public bool HasAgentKey
-    {
-        get => _hasAgentKey;
-        set { _hasAgentKey = value; OnPropertyChanged(); }
-    }
-
     // --- Script state ---
 
     private bool _isScriptRunning;
@@ -106,13 +93,11 @@ public class MainViewModel : INotifyPropertyChanged
 
     public ICommand OpenDeviceOptionsCommand => new RelayCommand(_ => OpenDeviceOptionsRequested?.Invoke());
     public ICommand OpenSettingsCommand => new RelayCommand(_ => OpenSettingsRequested?.Invoke());
-    public ICommand OpenAgentKeyCommand => new RelayCommand(_ => OpenAgentKeyRequested?.Invoke());
     public ICommand RefreshPortsCommand => new RelayCommand(async _ => await _device.RefreshPortsAsync());
     public ICommand DisconnectCommand => new RelayCommand(_ => _device.Disconnect());
 
     public event Action? OpenDeviceOptionsRequested;
     public event Action? OpenSettingsRequested;
-    public event Action? OpenAgentKeyRequested;
 
     // --- Private ---
 
@@ -146,8 +131,6 @@ public class MainViewModel : INotifyPropertyChanged
             ? $"{(device.ConnectedBoardType ?? device.LastDetectedBoardType ?? "device")} | EMWaver {device.DeviceEmwaverVersion}"
             : "";
 
-        // Agent key state
-        HasAgentKey = _agentKeys.HasAgentKey;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

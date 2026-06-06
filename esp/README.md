@@ -336,12 +336,12 @@ The app should not bundle:
 
 ### Session model recommendation
 
-The local gateway/daemon/app paths should treat host-backed boards and autonomous ESP32 Wi-Fi boards as separate local transport shapes.
+The native app paths should treat host-backed boards and autonomous ESP32 Wi-Fi boards as separate local transport shapes.
 
 Recommended session model:
-- keep host-backed board control routed through the local daemon/native app and localhost gateway,
+- keep host-backed board control routed through the native app,
 - add a new **device session role** for autonomous ESP32 boards,
-- let local gateway/app surfaces attach to either a host session or a direct device session depending on board class.
+- let native app surfaces attach to either a host session or a direct device session depending on board class.
 
 That keeps the platform coherent:
 - STM32/USB host-backed boards continue to use host ownership where that model fits,
@@ -389,7 +389,7 @@ Near-term steps:
 - implement USB first with STM32-compatible EMWaver protocol behavior on ESP32-S3,
 - replace or complement current USB HID logic with an EMWaver runtime/control path appropriate for ESP32-S3,
 - convert BLE from ASCII-command-only plumbing into the same SysEx packet protocol,
-- extend the local gateway/daemon/app paths with LAN-trust device-direct Wi-Fi sessions,
+- extend the native app paths with LAN-trust device-direct Wi-Fi sessions,
 - define provisioning flows that let BLE/USB bootstrap Wi-Fi credentials cleanly.
 
 ## Features

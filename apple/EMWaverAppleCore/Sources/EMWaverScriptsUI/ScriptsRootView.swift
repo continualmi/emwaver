@@ -67,9 +67,7 @@ public struct ScriptsRootView: View {
 
     @StateObject private var viewModel = ScriptsViewModel()
     @StateObject private var previewManager: ScriptPreviewManager
-    @StateObject private var agentViewModel: AgentChatViewModel
 
-    private let agentEndpointProvider: (() -> (baseURL: URL, accessToken: String)?)?
     private let onRunScript: ((ScriptRunRequest) async -> ScriptRunResult?)?
     private let activePreviewManagerProvider: (() -> ScriptPreviewManager?)?
     private let onStopActiveScript: (() -> Void)?
@@ -80,12 +78,8 @@ public struct ScriptsRootView: View {
     private let device: (any ScriptDevice)?
     private let hostStatusSink: ((Bool, String?) -> Void)?
 
-    // Pro gating (caller-controlled).
-    private let agentEnabled: Bool
-    private let onRequestAgentUpgrade: (() -> Void)?
     private let onRequestOpenSettings: (() -> Void)?
     private let leadingHeaderItem: AnyView?
-    private let agentLeadingToolbarItem: AnyView?
     private let navigationTitleAccessoryText: String?
 
     @State private var showingEditor = false
@@ -114,9 +108,7 @@ public struct ScriptsRootView: View {
     @State private var pendingScriptPreviewId: String?
     @State private var showingSwitchScriptConfirmation = false
 
-    @State private var showingAgentPanel = false
     #if os(macOS)
-    @State private var agentPanelWidth: CGFloat = 380
     @State private var showingScriptConsole = false
     @State private var scriptConsoleHeight: CGFloat = 180
     #endif
@@ -125,13 +117,9 @@ public struct ScriptsRootView: View {
     public init(
         previewManager: ScriptPreviewManager,
         device: (any ScriptDevice)? = nil,
-        agentEndpointProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
         hostStatusSink: ((Bool, String?) -> Void)? = nil,
-        agentEnabled: Bool = true,
-        onRequestAgentUpgrade: (() -> Void)? = nil,
         onRequestOpenSettings: (() -> Void)? = nil,
         leadingHeaderItem: AnyView? = nil,
-        agentLeadingToolbarItem: AnyView? = nil,
         navigationTitleAccessoryText: String? = nil,
         onRunScript: ((ScriptRunRequest) async -> ScriptRunResult?)? = nil,
         activePreviewManagerProvider: (() -> ScriptPreviewManager?)? = nil,
@@ -142,13 +130,9 @@ public struct ScriptsRootView: View {
     ) {
         self.device = device
         self.hostStatusSink = hostStatusSink
-        self.agentEnabled = agentEnabled
-        self.onRequestAgentUpgrade = onRequestAgentUpgrade
         self.onRequestOpenSettings = onRequestOpenSettings
         self.leadingHeaderItem = leadingHeaderItem
-        self.agentLeadingToolbarItem = agentLeadingToolbarItem
         self.navigationTitleAccessoryText = navigationTitleAccessoryText
-        self.agentEndpointProvider = agentEndpointProvider
         self.onRunScript = onRunScript
         self.activePreviewManagerProvider = activePreviewManagerProvider
         self.onStopActiveScript = onStopActiveScript
@@ -156,21 +140,14 @@ public struct ScriptsRootView: View {
         self.onSelectExternalScriptSession = onSelectExternalScriptSession
         self.onStopExternalScriptSession = onStopExternalScriptSession
         self._previewManager = StateObject(wrappedValue: previewManager)
-        _agentViewModel = StateObject(
-            wrappedValue: AgentChatViewModel(endpointProvider: agentEndpointProvider)
-        )
     }
 
     @MainActor
     public init(
         device: (any ScriptDevice)? = nil,
-        agentEndpointProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
         hostStatusSink: ((Bool, String?) -> Void)? = nil,
-        agentEnabled: Bool = true,
-        onRequestAgentUpgrade: (() -> Void)? = nil,
         onRequestOpenSettings: (() -> Void)? = nil,
         leadingHeaderItem: AnyView? = nil,
-        agentLeadingToolbarItem: AnyView? = nil,
         navigationTitleAccessoryText: String? = nil,
         onRunScript: ((ScriptRunRequest) async -> ScriptRunResult?)? = nil,
         activePreviewManagerProvider: (() -> ScriptPreviewManager?)? = nil,
@@ -182,13 +159,9 @@ public struct ScriptsRootView: View {
         self.init(
             previewManager: ScriptPreviewManager(),
             device: device,
-            agentEndpointProvider: agentEndpointProvider,
             hostStatusSink: hostStatusSink,
-            agentEnabled: agentEnabled,
-            onRequestAgentUpgrade: onRequestAgentUpgrade,
             onRequestOpenSettings: onRequestOpenSettings,
             leadingHeaderItem: leadingHeaderItem,
-            agentLeadingToolbarItem: agentLeadingToolbarItem,
             navigationTitleAccessoryText: navigationTitleAccessoryText,
             onRunScript: onRunScript,
             activePreviewManagerProvider: activePreviewManagerProvider,
@@ -212,16 +185,6 @@ public struct ScriptsRootView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-                if showingAgentPanel {
-                    AgentPanelResizeHandle(panelWidth: $agentPanelWidth)
-                    AgentChatPanelView(
-                        viewModel: agentViewModel,
-                        agentEnabled: agentEnabled,
-                        onRequestUpgrade: onRequestAgentUpgrade
-                    )
-                    .frame(width: agentPanelWidth)
-                    .transition(.move(edge: .trailing))
-                }
             }
             #else
             primaryContent
@@ -281,40 +244,6 @@ public struct ScriptsRootView: View {
         .sheet(item: $namePrompt) { prompt in
             NamePromptSheet(prompt: prompt)
         }
-        #if !os(macOS)
-        .sheet(isPresented: $showingAgentPanel) {
-            NavigationStack {
-                AgentChatPanelView(
-                    viewModel: agentViewModel,
-                    agentEnabled: agentEnabled,
-                    onRequestUpgrade: onRequestAgentUpgrade
-                )
-                .navigationTitle("Agent")
-                #if canImport(UIKit)
-                .navigationBarTitleDisplayMode(.inline)
-                #endif
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Close") {
-                            showingAgentPanel = false
-                        }
-                    }
-
-                    ToolbarItem(placement: .primaryAction) {
-                        Menu {
-                            agentConversationMenuItems
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
-                        }
-                    }
-                }
-            }
-            #if canImport(UIKit)
-            .presentationDetents([.large])
-            .presentationDragIndicator(.visible)
-            #endif
-        }
-        #endif
         .sheet(item: $signalRenamePrompt) { prompt in
             NamePromptSheet(prompt: prompt)
         }
@@ -359,9 +288,6 @@ public struct ScriptsRootView: View {
         // Signals open in the same editor view (not a modal sheet).
         .onAppear {
             previewManager.attach(device: device)
-            #if os(macOS)
-            agentViewModel.configureToolRuntime(makeMacAgentToolRuntime())
-            #endif
             loadScripts()
             hostStatusSink?(previewManager.activeScriptName != nil, previewManager.activeScriptName)
         }
@@ -858,7 +784,7 @@ public struct ScriptsRootView: View {
 
     private func exitPreview() {
         // On macOS we want scripts to keep running in the background even if the user goes back
-        // to the main script list. That also lets the Agent keep observing console/status output.
+        // to the main script list while keeping console/status output visible.
         showingPreview = false
         // If launched from editor, go back to editor; otherwise go to main screen
         if previewLaunchedFromEditor {
@@ -1040,324 +966,6 @@ public struct ScriptsRootView: View {
         }
     }
 
-    #if os(macOS)
-    private func makeMacAgentToolRuntime() -> AgentToolRuntime {
-        AgentToolRuntime(
-            tools: { macAgentTools },
-            context: { macAgentToolContext() },
-            execute: { name, arguments in
-                await executeMacAgentTool(name: name, arguments: arguments)
-            }
-        )
-    }
-
-    private var macAgentTools: [AgentToolDefinition] {
-        let empty = schema([])
-        let scriptId = optionalStringProperty("scriptId", "Script id. Defaults to the current script.")
-        let source = ("source", AgentToolJSON.object(["type": .string("string"), "description": .string("Unsaved JavaScript/JSX source to run.")]))
-        let name = optionalStringProperty("name", "Display name for an unsaved ephemeral script.")
-        return [
-            AgentToolDefinition(name: "list_scripts", description: "Return bundled and custom EMWaver JavaScript scripts.", parameters: empty),
-            AgentToolDefinition(name: "read_script", description: "Return script source. Defaults to the current script.", parameters: schema([scriptId])),
-            AgentToolDefinition(name: "apply_patch_to_script", description: "Update an editable script draft. Asset scripts are read-only.", parameters: schema([
-                scriptId,
-                optionalStringProperty("patch", "Unified diff patch to apply."),
-                optionalStringProperty("content", "Full replacement script content."),
-            ])),
-            AgentToolDefinition(name: "run_script", description: "Start the script runtime for an existing bundled or custom script.", parameters: schema([scriptId])),
-            AgentToolDefinition(name: "run_ephemeral_script", description: "Run unsaved JavaScript/JSX source against the selected local device, like python -c. The source is not saved to the script library.", parameters: schema([
-                source,
-                name,
-            ], required: ["source"])),
-            AgentToolDefinition(name: "stop_script", description: "Stop the current script runtime.", parameters: empty),
-            AgentToolDefinition(name: "get_device_status", description: "Return connected/local device and runtime status known to the macOS app.", parameters: empty),
-            AgentToolDefinition(name: "get_script_status", description: "Return the active script status, latest error, render state, and recent console output.", parameters: empty),
-            AgentToolDefinition(name: "sleep", description: "Wait for a given number of milliseconds before continuing. Use after triggering async hardware operations to allow them time to complete.", parameters: schema([
-                ("ms", .object(["type": .string("number"), "description": .string("Milliseconds to wait (max 30000).")])),
-            ], required: ["ms"])),
-        ]
-    }
-
-    private func optionalStringProperty(_ name: String, _ description: String) -> (String, AgentToolJSON) {
-        (name, .object(["type": .string("string"), "description": .string(description)]))
-    }
-
-    private func schema(_ properties: [(String, AgentToolJSON)], required: [String] = []) -> AgentToolJSON {
-        var props: [String: AgentToolJSON] = [:]
-        for (name, value) in properties {
-            props[name] = value
-        }
-        return .object([
-            "type": .string("object"),
-            "properties": .object(props),
-            "required": .array(required.map { .string($0) }),
-            "additionalProperties": .bool(false),
-        ])
-    }
-
-    private func macAgentToolContext() -> String {
-        let selected = currentScriptId ?? viewModel.selectedScriptId ?? ""
-        let manager = activePreviewManager
-        let running = manager.activeScriptName ?? ""
-        let deviceState = device == nil ? "not attached" : "attached"
-        let boardType = agentReadDeviceTextCommand(AgentHardwareProtocol.boardGet) ?? "unknown"
-        return "selectedScriptId=\(selected); runningScript=\(running); device=\(deviceState); boardType=\(boardType)"
-    }
-
-    private func executeMacAgentTool(name: String, arguments: [String: AgentToolJSON]) async -> AgentToolResult {
-        do {
-            switch name {
-            case "list_scripts":
-                return agentToolListScripts()
-            case "read_script":
-                return try await agentToolReadScript(scriptId: arguments["scriptId"]?.stringValue)
-            case "apply_patch_to_script":
-                return try await agentToolApplyPatch(scriptId: arguments["scriptId"]?.stringValue, patch: arguments["patch"]?.stringValue, content: arguments["content"]?.stringValue)
-            case "run_script":
-                return try await agentToolPreviewScript(scriptId: arguments["scriptId"]?.stringValue, toolName: name)
-            case "run_ephemeral_script":
-                return try await agentToolRunEphemeralScript(source: arguments["source"]?.stringValue, name: arguments["name"]?.stringValue)
-            case "stop_script":
-                let status = agentScriptStatusObject(manager: activePreviewManager, extra: [
-                    "running": .bool(false),
-                    "stopped": .bool(true)
-                ])
-                if let onStopActiveScript {
-                    onStopActiveScript()
-                } else {
-                    previewManager.exitPreview()
-                }
-                hostStatusSink?(false, nil)
-                return AgentToolResult(id: nil, name: name, ok: true, result: .object(status))
-            case "get_device_status":
-                return agentToolDeviceStatus()
-            case "get_script_status":
-                return agentToolScriptStatus()
-            case "sleep":
-                let ms: Double
-                if case .number(let v) = arguments["ms"] { ms = v } else { ms = 0 }
-                let clamped = min(max(ms, 0), 30_000)
-                try await Task.sleep(nanoseconds: UInt64(clamped) * 1_000_000)
-                return AgentToolResult(id: nil, name: "sleep", ok: true, result: .object(["slept_ms": .number(clamped)]))
-            default:
-                return AgentToolResult(id: nil, name: name, ok: false, error: "Unknown EMWaver tool: \(name)")
-            }
-        } catch {
-            return AgentToolResult(id: nil, name: name, ok: false, error: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
-        }
-    }
-
-    private enum MacAgentToolError: LocalizedError {
-        case noScriptSelected
-        case scriptNotFound(String)
-        case readOnlyScript(String)
-        case missingArgument(String)
-
-        var errorDescription: String? {
-            switch self {
-            case .noScriptSelected: return "No script is selected."
-            case .scriptNotFound(let id): return "Script not found: \(id)"
-            case .readOnlyScript(let id): return "Script is read-only: \(id)"
-            case .missingArgument(let name): return "Missing required argument: \(name)"
-            }
-        }
-    }
-
-    private func currentAgentScriptId(_ requested: String? = nil) throws -> String {
-        if let requested, !requested.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return requested
-        }
-        if let currentScriptId, editorMode == .script {
-            return currentScriptId
-        }
-        if let selected = viewModel.selectedScriptId {
-            return selected
-        }
-        throw MacAgentToolError.noScriptSelected
-    }
-
-    private func agentToolListScripts() -> AgentToolResult {
-        func itemObject(_ item: ScriptsViewModel.ScriptListItem) -> AgentToolJSON {
-            .object([
-                "id": .string(item.id),
-                "name": .string(item.name),
-                "kind": .string(item.kind.rawValue),
-                "runnable": .bool(item.kind.isRunnable),
-                "isAsset": .bool(item.isAsset),
-                "isDirty": .bool(item.isDirty)
-            ])
-        }
-        let scripts = (viewModel.assetScripts + viewModel.customScripts).map(itemObject)
-        return AgentToolResult(id: nil, name: "list_scripts", ok: true, result: .object(["scripts": .array(scripts)]))
-    }
-
-    private func agentToolReadScript(scriptId: String?) async throws -> AgentToolResult {
-        let id = try currentAgentScriptId(scriptId)
-        await viewModel.ensureContent(for: id)
-        let source = (showingEditor && currentScriptId == id && editorMode == .script) ? editorContent : viewModel.scriptDraft(for: id)
-        if source.isEmpty && !viewModel.isExistingScript(id) {
-            throw MacAgentToolError.scriptNotFound(id)
-        }
-        return AgentToolResult(id: nil, name: "read_script", ok: true, result: .object(scriptObject(id: id, source: source)))
-    }
-
-    private func agentToolApplyPatch(scriptId: String?, patch: String?, content: String?) async throws -> AgentToolResult {
-        let id = try currentAgentScriptId(scriptId)
-        guard !viewModel.isAssetScript(id) else { throw MacAgentToolError.readOnlyScript(id) }
-        await viewModel.ensureContent(for: id)
-
-        let updated: String
-        if let content {
-            updated = content
-        } else if let patch, !patch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("emwaver-agent-\(UUID().uuidString)", isDirectory: true)
-            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-            defer { try? FileManager.default.removeItem(at: tempDir) }
-            let fileName = viewModel.scriptName(for: id)
-            let fileURL = tempDir.appendingPathComponent(fileName)
-            try viewModel.scriptDraft(for: id).write(to: fileURL, atomically: true, encoding: .utf8)
-            _ = try PatchApplier.apply(patchText: patch, baseDir: tempDir)
-            updated = try String(contentsOf: fileURL, encoding: .utf8)
-        } else {
-            throw MacAgentToolError.missingArgument("patch or content")
-        }
-
-        viewModel.updateDraft(for: id, content: updated)
-        if showingEditor && currentScriptId == id && editorMode == .script {
-            editorContent = updated
-        }
-        return AgentToolResult(id: nil, name: "apply_patch_to_script", ok: true, result: .object([
-            "scriptId": .string(id),
-            "name": .string(viewModel.scriptName(for: id)),
-            "bytes": .number(Double(updated.utf8.count)),
-            "saved": .bool(false)
-        ]))
-    }
-
-    private func agentToolPreviewScript(scriptId: String?, toolName: String) async throws -> AgentToolResult {
-        let id = try currentAgentScriptId(scriptId)
-        guard viewModel.isRunnableScript(id) else {
-            throw MacAgentToolError.scriptNotFound("Script is not runnable: \(id)")
-        }
-        if showingEditor, currentScriptId == id, editorMode == .script {
-            viewModel.updateDraft(for: id, content: editorContent)
-        }
-        viewModel.selectScript(id: id)
-        currentScriptId = id
-        await viewModel.ensureContent(for: id)
-        let script = viewModel.scriptDraft(for: id)
-        guard !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw MacAgentToolError.scriptNotFound(id)
-        }
-        showingPreview = true
-        showingEditor = false
-        let result = await runScriptRuntime(scriptId: id, script: script, name: viewModel.scriptName(for: id), moduleSources: viewModel.moduleSources())
-        let statusManager = result.running ? activePreviewManager : previewManager
-        let status = agentScriptStatusObject(manager: statusManager, extra: [
-            "scriptId": .string(id),
-            "name": .string(result.name),
-            "running": .bool(result.running),
-            "errorMessage": result.errorMessage.map { .string($0) } ?? .null
-        ])
-        return AgentToolResult(id: nil, name: toolName, ok: result.running, result: .object(status), error: result.running ? nil : result.errorMessage)
-    }
-
-    private func agentToolRunEphemeralScript(source: String?, name: String?) async throws -> AgentToolResult {
-        let trimmed = source?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        guard !trimmed.isEmpty else {
-            throw MacAgentToolError.missingArgument("source")
-        }
-
-        let displayName = name?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-            ? name!.trimmingCharacters(in: .whitespacesAndNewlines)
-            : "Ephemeral Script"
-        let ephemeralId = "ephemeral:\(UUID().uuidString)"
-        let result = await runScriptRuntime(scriptId: ephemeralId, script: trimmed, name: displayName, moduleSources: viewModel.moduleSources())
-        showingPreview = true
-        showingEditor = false
-        let statusManager = result.running ? activePreviewManager : previewManager
-        let status = agentScriptStatusObject(manager: statusManager, extra: [
-            "scriptId": .string(ephemeralId),
-            "name": .string(result.name),
-            "ephemeral": .bool(true),
-            "saved": .bool(false),
-            "running": .bool(result.running),
-            "errorMessage": result.errorMessage.map { .string($0) } ?? .null
-        ])
-        return AgentToolResult(id: nil, name: "run_ephemeral_script", ok: result.running, result: .object(status), error: result.running ? nil : result.errorMessage)
-    }
-
-    private func agentToolDeviceStatus() -> AgentToolResult {
-        let manager = activePreviewManager
-        let boardType = agentReadDeviceTextCommand(AgentHardwareProtocol.boardGet) ?? ""
-        let deviceName = agentReadDeviceTextCommand(AgentHardwareProtocol.nameGet) ?? ""
-        return AgentToolResult(id: nil, name: "get_device_status", ok: true, result: .object([
-            "connected": .bool(device != nil),
-            "boardType": .string(boardType),
-            "deviceName": .string(deviceName),
-            "runtimeOwner": .string("macos"),
-            "activeScriptName": .string(manager.activeScriptName ?? ""),
-            "activeScriptInstanceId": .string(manager.activeScriptInstanceId ?? ""),
-            "isRendering": .bool(manager.isRendering),
-            "lastScriptError": .string(manager.scriptError ?? ""),
-            "consoleTail": .array(consoleTailJSON(manager))
-        ]))
-    }
-
-    private func agentToolScriptStatus() -> AgentToolResult {
-        AgentToolResult(id: nil, name: "get_script_status", ok: true, result: .object(agentScriptStatusObject(manager: activePreviewManager)))
-    }
-
-    private func agentScriptStatusObject(manager: ScriptPreviewManager, extra: [String: AgentToolJSON] = [:]) -> [String: AgentToolJSON] {
-        var object: [String: AgentToolJSON] = [
-            "running": .bool(manager.activeScriptName != nil),
-            "activeScriptName": .string(manager.activeScriptName ?? ""),
-            "activeScriptInstanceId": .string(manager.activeScriptInstanceId ?? ""),
-            "isRendering": .bool(manager.isRendering),
-            "hasRenderedUI": .bool(manager.scriptTree != nil),
-            "lastScriptError": .string(manager.scriptError ?? ""),
-            "consoleTail": .array(consoleTailJSON(manager)),
-            "consoleText": .string(manager.consoleLines.suffix(80).joined(separator: "\n"))
-        ]
-        object.merge(extra) { _, new in new }
-        return object
-    }
-
-    private func consoleTailJSON(_ manager: ScriptPreviewManager) -> [AgentToolJSON] {
-        manager.consoleLines.suffix(80).map { .string($0) }
-    }
-
-    private enum AgentHardwareProtocol {
-        static let responseOK: UInt8 = 0x80
-
-        static let nameGet: UInt8 = 0x04
-        static let boardGet: UInt8 = 0x09
-    }
-
-    private func agentReadDeviceTextCommand(_ opcode: UInt8) -> String? {
-        guard let device else { return nil }
-        guard let response = device.sendCommand(Data([opcode]), timeout: 1500) else { return nil }
-        let bytes = [UInt8](response)
-        guard bytes.first == AgentHardwareProtocol.responseOK else { return nil }
-        return String(data: Data(bytes.dropFirst()), encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private func scriptObject(id: String, source: String) -> [String: AgentToolJSON] {
-        [
-            "id": .string(id),
-            "name": .string(viewModel.scriptName(for: id)),
-            "source": .string(source),
-            "kind": .string(viewModel.fileKind(for: id).rawValue),
-            "runnable": .bool(viewModel.isRunnableScript(id)),
-            "isAsset": .bool(viewModel.isAssetScript(id)),
-            "isDirty": .bool(viewModel.isScriptDirty(id)),
-            "readOnly": .bool(viewModel.isAssetScript(id))
-        ]
-    }
-
-    #endif
-
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {
         #if os(macOS)
@@ -1476,10 +1084,6 @@ public struct ScriptsRootView: View {
                         Button("Settings…") { openSettings() }
                     }
 
-                    if showingAgentPanel {
-                        Divider()
-                        agentConversationMenuItems
-                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -1508,56 +1112,12 @@ public struct ScriptsRootView: View {
                         }
                     }
 
-                    if showingAgentPanel {
-                        Divider()
-                        agentConversationMenuItems
-                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
             }
         }
     }
-
-    @ViewBuilder
-    private var agentConversationMenuItems: some View {
-        Button {
-            agentViewModel.newConversation()
-        } label: {
-            Label("New Agent Chat", systemImage: "plus.message")
-        }
-
-        if !agentViewModel.conversations.isEmpty {
-            ForEach(agentViewModel.conversations) { conv in
-                Button {
-                    agentViewModel.selectConversation(conv.id)
-                } label: {
-                    HStack {
-                        Text(conv.title)
-                        if agentViewModel.selectedConversationId == conv.id {
-                            Spacer()
-                            Image(systemName: "checkmark")
-                        }
-                    }
-                }
-            }
-
-            if let selected = agentViewModel.selectedConversationId {
-                Button(role: .destructive) {
-                    agentViewModel.deleteConversation(selected)
-                } label: {
-                    Label("Delete Agent Chat", systemImage: "trash")
-                }
-            }
-        }
-
-        Button {
-            agentViewModel.clear()
-        } label: {
-            Label("Clear Agent Messages", systemImage: "text.badge.xmark")
-        }
-    }
-
 
     private static var primaryBackground: Color {
         #if canImport(UIKit)
@@ -1635,39 +1195,6 @@ public struct ScriptsRootView: View {
 }
 
 #if os(macOS)
-private struct AgentPanelResizeHandle: View {
-    @Binding var panelWidth: CGFloat
-    private let minWidth: CGFloat = 240
-    private let maxWidth: CGFloat = 680
-    @State private var isHovering = false
-    @State private var dragStartWidth: CGFloat? = nil
-
-    var body: some View {
-        ZStack {
-            Color.clear
-                .frame(width: 8)
-                .contentShape(Rectangle())
-            Rectangle()
-                .fill(Color.primary.opacity(isHovering ? 0.20 : 0.10))
-                .frame(width: 1)
-        }
-        .frame(width: 8)
-        .gesture(
-            DragGesture(minimumDistance: 1, coordinateSpace: .global)
-                .onChanged { value in
-                    if dragStartWidth == nil { dragStartWidth = panelWidth }
-                    let proposed = (dragStartWidth ?? panelWidth) - value.translation.width
-                    panelWidth = max(minWidth, min(maxWidth, proposed))
-                }
-                .onEnded { _ in dragStartWidth = nil }
-        )
-        .onHover { hovering in
-            isHovering = hovering
-            if hovering { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-        }
-    }
-}
-
 private struct ScriptConsoleResizeHandle: View {
     @Binding var consoleHeight: CGFloat
     private let minHeight: CGFloat = 96

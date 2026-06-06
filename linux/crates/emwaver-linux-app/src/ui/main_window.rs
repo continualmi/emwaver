@@ -1,8 +1,4 @@
 use adw::prelude::*;
-use emwaver_linux_agent::{
-    clear_agent_api_key_secret_tool, load_agent_configuration, store_agent_api_key_secret_tool,
-    AgentClient, AgentCredentialSource, AgentRequest,
-};
 use emwaver_linux_core::{
     default_script_template, AppModel, DeviceRecord, ScriptListItem, ScriptRepository,
     TransportKind,
@@ -118,11 +114,6 @@ pub fn build_main_window(app: &adw::Application) {
         .icon_name("emblem-system-symbolic")
         .tooltip_text("Settings")
         .build();
-    let agent_toggle_button = gtk::ToggleButton::builder()
-        .icon_name("chat-message-new-symbolic")
-        .tooltip_text("Show Agent")
-        .build();
-    header.pack_end(&agent_toggle_button);
     header.pack_end(&settings_button);
     header.pack_end(&firmware_button);
 
@@ -223,9 +214,9 @@ pub fn build_main_window(app: &adw::Application) {
         .right_margin(10)
         .build();
     log_view.add_css_class("monospace");
-    log_view.buffer().set_text(
-        "Local scripts run without an Agent key. Select a local device to run hardware scripts.\n",
-    );
+    log_view
+        .buffer()
+        .set_text("Local scripts run immediately. Select a local device to run hardware scripts.\n");
     let run_log_visible = load_run_log_visible();
     let log_scroll = gtk::ScrolledWindow::builder()
         .hexpand(true)
@@ -242,47 +233,6 @@ pub fn build_main_window(app: &adw::Application) {
         .visible(run_log_visible)
         .child(&log_scroll)
         .build();
-
-    let agent_messages = gtk::Box::new(Orientation::Vertical, 8);
-    agent_messages.set_margin_top(8);
-    agent_messages.set_margin_bottom(8);
-    agent_messages.set_margin_start(8);
-    agent_messages.set_margin_end(8);
-    append_agent_message(
-        &agent_messages,
-        "Agent",
-        "Add an MGPT API key to enable Agent replies. Local scripts and hardware stay available without it.",
-    );
-    let agent_input = gtk::TextView::builder()
-        .wrap_mode(gtk::WrapMode::WordChar)
-        .top_margin(8)
-        .bottom_margin(8)
-        .left_margin(8)
-        .right_margin(8)
-        .height_request(72)
-        .build();
-    let agent_status_label = gtk::Label::builder()
-        .label(agent_status_text())
-        .wrap(true)
-        .xalign(0.0)
-        .css_classes(vec!["dim-label"])
-        .build();
-    let agent_send_button = gtk::Button::builder()
-        .label("Send")
-        .tooltip_text("Send message to Agent")
-        .build();
-    let agent_stop_button = gtk::Button::builder()
-        .label("Stop")
-        .tooltip_text("Stop Agent request")
-        .sensitive(false)
-        .build();
-    let agent_panel = build_agent_panel(
-        &agent_messages,
-        &agent_input,
-        &agent_status_label,
-        &agent_send_button,
-        &agent_stop_button,
-    );
 
     let script_list = gtk::ListBox::builder()
         .selection_mode(gtk::SelectionMode::Single)
@@ -356,15 +306,7 @@ pub fn build_main_window(app: &adw::Application) {
     main_stack.append(&editor_stack);
     main_stack.append(&run_log_expander);
 
-    let agent_workspace = gtk::Paned::new(Orientation::Horizontal);
-    agent_workspace.set_start_child(Some(&main_stack));
-    agent_workspace.set_resize_start_child(true);
-    agent_workspace.set_shrink_start_child(false);
-    agent_workspace.set_end_child(Some(&agent_panel));
-    agent_workspace.set_resize_end_child(false);
-    agent_workspace.set_shrink_end_child(false);
-    agent_panel.set_visible(false);
-    content.set_end_child(Some(&agent_workspace));
+    content.set_end_child(Some(&main_stack));
 
     let root = gtk::Box::new(Orientation::Vertical, 0);
     root.append(&header);
@@ -373,48 +315,6 @@ pub fn build_main_window(app: &adw::Application) {
 
     let active_session = Rc::new(RefCell::new(None));
     let active_script_id = Rc::new(RefCell::new(None::<String>));
-    {
-        let agent_panel = agent_panel.clone();
-        agent_toggle_button.connect_toggled(move |button| {
-            let active = button.is_active();
-            agent_panel.set_visible(active);
-            button.set_tooltip_text(Some(if active { "Hide Agent" } else { "Show Agent" }));
-        });
-    }
-    {
-        let agent_input = agent_input.clone();
-        let agent_messages = agent_messages.clone();
-        let agent_status_label = agent_status_label.clone();
-        let source_buffer = source_buffer.clone();
-        let model = Rc::clone(&model);
-        let log_view = log_view.clone();
-        agent_send_button.connect_clicked(move |_| {
-            let buffer = agent_input.buffer();
-            let message = buffer
-                .text(&buffer.start_iter(), &buffer.end_iter(), true)
-                .trim()
-                .to_string();
-            if message.is_empty() {
-                return;
-            }
-            buffer.set_text("");
-            append_agent_message(&agent_messages, "You", &message);
-            match send_agent_message(
-                &message,
-                &source_buffer,
-                &model.borrow().selected_device(),
-                &log_view,
-            ) {
-                Ok(reply) => append_agent_message(&agent_messages, "Agent", &reply),
-                Err(err) => append_agent_message(&agent_messages, "Agent", &err),
-            }
-            let status = agent_status_text();
-            agent_status_label.set_label(&status);
-        });
-    }
-    {
-        agent_stop_button.connect_clicked(|_| {});
-    }
     {
         let script_repository = Rc::clone(&script_repository);
         let script_items = Rc::clone(&script_items);
@@ -2123,262 +2023,6 @@ fn json_i32(value: Option<&serde_json::Value>) -> Option<i32> {
     })
 }
 
-fn build_agent_panel(
-    messages: &gtk::Box,
-    input: &gtk::TextView,
-    status: &gtk::Label,
-    send_button: &gtk::Button,
-    stop_button: &gtk::Button,
-) -> gtk::Frame {
-    let root = gtk::Box::new(Orientation::Vertical, 8);
-    root.set_size_request(340, -1);
-    root.set_margin_top(10);
-    root.set_margin_bottom(10);
-    root.set_margin_start(10);
-    root.set_margin_end(10);
-
-    let header = gtk::Box::new(Orientation::Horizontal, 8);
-    let title = gtk::Box::new(Orientation::Vertical, 2);
-    title.set_hexpand(true);
-    title.append(
-        &gtk::Label::builder()
-            .label("Agent")
-            .xalign(0.0)
-            .css_classes(vec!["heading"])
-            .build(),
-    );
-    title.append(
-        &gtk::Label::builder()
-            .label("MGPT · /api/mgpt/respond")
-            .xalign(0.0)
-            .css_classes(vec!["dim-label"])
-            .build(),
-    );
-    let key_button = gtk::Button::builder()
-        .label("API Key")
-        .tooltip_text("Configure Agent API key")
-        .build();
-    header.append(&title);
-    header.append(&key_button);
-    root.append(&header);
-
-    let conversation_row = gtk::Box::new(Orientation::Horizontal, 6);
-    let conversation = gtk::DropDown::from_strings(&["Chat"]);
-    conversation.set_hexpand(true);
-    let new_chat = gtk::Button::builder()
-        .icon_name("list-add-symbolic")
-        .tooltip_text("New Agent chat")
-        .build();
-    let rename_chat = gtk::Button::builder()
-        .icon_name("document-edit-symbolic")
-        .tooltip_text("Rename Agent chat")
-        .build();
-    let delete_chat = gtk::Button::builder()
-        .icon_name("user-trash-symbolic")
-        .tooltip_text("Delete Agent chat")
-        .build();
-    conversation_row.append(&conversation);
-    conversation_row.append(&new_chat);
-    conversation_row.append(&rename_chat);
-    conversation_row.append(&delete_chat);
-    root.append(&conversation_row);
-
-    let setup = gtk::Label::builder()
-        .label("Agent replies require a public /api/mgpt/... endpoint and API key in Settings or environment. Local scripts, devices, and firmware remain available without them.")
-        .wrap(true)
-        .xalign(0.0)
-        .css_classes(vec!["dim-label"])
-        .visible(!agent_configured())
-        .build();
-    root.append(&setup);
-
-    let suggestion_grid = gtk::Grid::builder()
-        .column_spacing(6)
-        .row_spacing(6)
-        .build();
-    let suggestions = [
-        (
-            "Connect over USB",
-            "How do I connect an EMWaver device over USB?",
-        ),
-        (
-            "Script a board",
-            "Help me write a script for a connected board.",
-        ),
-        ("Blink GPIO", "Help me write a script to blink a GPIO pin."),
-        ("IR capture", "How do I capture and replay an IR remote?"),
-    ];
-    for (index, (label, prompt)) in suggestions.iter().enumerate() {
-        let button = gtk::Button::builder().label(*label).build();
-        let input = input.clone();
-        let prompt = prompt.to_string();
-        button.connect_clicked(move |_| {
-            input.buffer().set_text(&prompt);
-            input.grab_focus();
-        });
-        suggestion_grid.attach(&button, (index % 2) as i32, (index / 2) as i32, 1, 1);
-    }
-    root.append(&suggestion_grid);
-
-    let messages_scroll = gtk::ScrolledWindow::builder()
-        .hexpand(true)
-        .vexpand(true)
-        .hscrollbar_policy(PolicyType::Never)
-        .vscrollbar_policy(PolicyType::Automatic)
-        .child(messages)
-        .build();
-    root.append(&messages_scroll);
-
-    let composer = gtk::Box::new(Orientation::Vertical, 6);
-    let status_row = gtk::Box::new(Orientation::Horizontal, 6);
-    status_row.append(status);
-    status_row.append(stop_button);
-    composer.append(&status_row);
-    let input_row = gtk::Box::new(Orientation::Horizontal, 6);
-    let input_scroll = gtk::ScrolledWindow::builder()
-        .hexpand(true)
-        .hscrollbar_policy(PolicyType::Never)
-        .vscrollbar_policy(PolicyType::Automatic)
-        .child(input)
-        .build();
-    input_row.append(&input_scroll);
-    input_row.append(send_button);
-    composer.append(&input_row);
-    root.append(&composer);
-
-    {
-        let setup = setup.clone();
-        key_button.connect_clicked(move |_| {
-            setup.set_label("Open Settings to store the Agent API key with Secret Service, or set EMWAVER_AGENT_ENDPOINT and EMWAVER_AGENT_API_KEY for development.");
-            setup.set_visible(true);
-        });
-    }
-    {
-        let messages = messages.clone();
-        new_chat.connect_clicked(move |_| {
-            while let Some(child) = messages.first_child() {
-                messages.remove(&child);
-            }
-            append_agent_message(
-                &messages,
-                "Agent",
-                "New local Agent chat. The current script and device context are sent with each request when an API key is configured.",
-            );
-        });
-    }
-    {
-        let messages = messages.clone();
-        rename_chat.connect_clicked(move |_| {
-            append_agent_message(
-                &messages,
-                "Agent",
-                "Rename chat UI is pending local chat persistence.",
-            );
-        });
-    }
-    {
-        let messages = messages.clone();
-        delete_chat.connect_clicked(move |_| {
-            while let Some(child) = messages.first_child() {
-                messages.remove(&child);
-            }
-            append_agent_message(&messages, "Agent", "Agent messages cleared.");
-        });
-    }
-
-    gtk::Frame::builder().child(&root).build()
-}
-
-fn append_agent_message(messages: &gtk::Box, role: &str, text: &str) {
-    let bubble = gtk::Box::new(Orientation::Vertical, 3);
-    bubble.set_margin_top(6);
-    bubble.set_margin_bottom(6);
-    bubble.set_margin_start(6);
-    bubble.set_margin_end(6);
-    bubble.append(
-        &gtk::Label::builder()
-            .label(role)
-            .xalign(0.0)
-            .css_classes(vec!["heading"])
-            .build(),
-    );
-    bubble.append(
-        &gtk::Label::builder()
-            .label(text)
-            .wrap(true)
-            .selectable(true)
-            .xalign(0.0)
-            .build(),
-    );
-    messages.append(&gtk::Frame::builder().child(&bubble).build());
-}
-
-fn agent_configured() -> bool {
-    let config = load_agent_configuration();
-    config
-        .api_key
-        .as_ref()
-        .is_some_and(|key| !key.trim().is_empty())
-        && config
-            .endpoint
-            .as_ref()
-            .is_some_and(|endpoint| endpoint.contains("/api/mgpt/"))
-}
-
-fn agent_status_text() -> String {
-    if agent_configured() {
-        "The Agent sees your message, selected script, selected device, and recent run log."
-            .to_string()
-    } else {
-        "Agent key missing. Local scripts and hardware stay available.".to_string()
-    }
-}
-
-fn send_agent_message(
-    message: &str,
-    source_buffer: &sourceview5::Buffer,
-    selected_device: &Option<DeviceRecord>,
-    log_view: &gtk::TextView,
-) -> Result<String, String> {
-    let config = load_agent_configuration();
-    let Some(api_key) = config.api_key.filter(|key| !key.trim().is_empty()) else {
-        return Err(
-            "Add an MGPT API key to enable Agent replies. Local scripts and hardware are still available."
-                .to_string(),
-        );
-    };
-    let endpoint = config
-        .endpoint
-        .ok_or_else(|| "Set the Agent endpoint to a public /api/mgpt/... route.".to_string())?;
-    let client = AgentClient::new(endpoint, Some(api_key)).map_err(|err| err.to_string())?;
-    let selected_script = source_buffer
-        .text(&source_buffer.start_iter(), &source_buffer.end_iter(), true)
-        .to_string();
-    let log_buffer = log_view.buffer();
-    let logs = log_buffer
-        .text(&log_buffer.start_iter(), &log_buffer.end_iter(), true)
-        .lines()
-        .rev()
-        .take(16)
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    let request = AgentRequest {
-        universe: None,
-        user_input: message.to_string(),
-        selected_script: Some(selected_script),
-        device_summary: Some(selected_device_title(selected_device)),
-        recent_logs: logs,
-    };
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|err| format!("Failed to create Agent runtime: {err}"))?;
-    runtime
-        .block_on(client.send(&request))
-        .map(|response| response.message)
-        .map_err(|err| err.to_string())
-}
-
 fn select_first_match(buffer: &sourceview5::Buffer, query: &str) {
     let query = query.trim();
     if query.is_empty() {
@@ -2682,7 +2326,6 @@ fn app_settings_path() -> PathBuf {
 }
 
 fn present_settings_dialog(parent: &adw::ApplicationWindow, run_log_expander: &gtk::Expander) {
-    let config = load_agent_configuration();
     let dialog = gtk::Dialog::builder()
         .transient_for(parent)
         .modal(true)
@@ -2691,54 +2334,12 @@ fn present_settings_dialog(parent: &adw::ApplicationWindow, run_log_expander: &g
         .default_height(420)
         .build();
     dialog.add_button("Close", gtk::ResponseType::Close);
-    dialog.add_button("Clear Agent Key", gtk::ResponseType::Other(1));
-    dialog.add_button("Store Agent Key", gtk::ResponseType::Accept);
 
     let root = gtk::Box::new(Orientation::Vertical, 16);
     root.set_margin_top(20);
     root.set_margin_bottom(20);
     root.set_margin_start(20);
     root.set_margin_end(20);
-
-    let agent_card = gtk::Box::new(Orientation::Vertical, 10);
-    agent_card.set_margin_top(12);
-    agent_card.set_margin_bottom(12);
-    agent_card.set_margin_start(12);
-    agent_card.set_margin_end(12);
-    agent_card.append(&section_label("Agent"));
-    agent_card.append(
-        &gtk::Label::builder()
-            .label("Add an MGPT API key to enable Agent replies. The public Agent endpoint is app-managed; local scripts and device control remain available without a key.")
-            .wrap(true)
-            .xalign(0.0)
-            .css_classes(vec!["dim-label"])
-            .build(),
-    );
-
-    let key_entry = gtk::Entry::builder()
-        .placeholder_text(match config.api_key_source {
-            AgentCredentialSource::Env => "Configured by environment",
-            AgentCredentialSource::SecretService => "Stored in Secret Service",
-            AgentCredentialSource::Missing => "Paste API key to store locally",
-        })
-        .visibility(false)
-        .hexpand(true)
-        .build();
-    agent_card.append(&settings_row("API Key", &key_entry));
-
-    let key_source = match config.api_key_source {
-        AgentCredentialSource::Env => "Current key source: environment variable. Storing a key here will not override the environment until it is unset.",
-        AgentCredentialSource::SecretService => "Current key source: Secret Service.",
-        AgentCredentialSource::Missing => "No Agent key is configured.",
-    };
-    let status = gtk::Label::builder()
-        .label(key_source)
-        .wrap(true)
-        .xalign(0.0)
-        .css_classes(vec!["dim-label"])
-        .build();
-    agent_card.append(&status);
-    root.append(&gtk::Frame::builder().child(&agent_card).build());
 
     let workspace_card = gtk::Box::new(Orientation::Vertical, 8);
     workspace_card.set_margin_top(12);
@@ -2769,7 +2370,7 @@ fn present_settings_dialog(parent: &adw::ApplicationWindow, run_log_expander: &g
     device_card.append(&section_label("Device Access"));
     device_card.append(
         &gtk::Label::builder()
-            .label("Local scripts and hardware control work immediately without an EMWaver account, cloud activation, subscription check, or Agent key.")
+            .label("Local scripts and hardware control work immediately without an EMWaver account, cloud activation, or subscription check.")
             .wrap(true)
             .xalign(0.0)
             .css_classes(vec!["dim-label"])
@@ -2789,26 +2390,7 @@ fn present_settings_dialog(parent: &adw::ApplicationWindow, run_log_expander: &g
 
     dialog.content_area().append(&root);
 
-    dialog.connect_response(move |dialog, response| match response {
-        gtk::ResponseType::Accept => {
-            let key = key_entry.text().to_string();
-            if key.trim().is_empty() {
-                status.set_label("Paste an Agent API key before storing it.");
-            } else {
-                match store_agent_api_key_secret_tool(&key) {
-                    Ok(()) => status.set_label("Stored Agent API key in Secret Service."),
-                    Err(err) => {
-                        status.set_label(&format!("Secret Service key storage failed: {err}"))
-                    }
-                }
-            }
-        }
-        gtk::ResponseType::Other(1) => match clear_agent_api_key_secret_tool() {
-            Ok(()) => status.set_label("Cleared Agent API key from Secret Service."),
-            Err(err) => status.set_label(&format!("Secret Service clear failed: {err}")),
-        },
-        _ => dialog.close(),
-    });
+    dialog.connect_response(move |dialog, _| dialog.close());
     dialog.present();
 }
 

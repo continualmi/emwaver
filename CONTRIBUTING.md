@@ -10,7 +10,7 @@ Before diving in, read these three things:
 2. **[README.md](README.md)** — the public overview: what EMWaver is, what works today, and the repository map.
 3. **[docs/CURRENT.md](docs/CURRENT.md)** — the contributor orientation doc: current architecture, supported platforms, and doc routing.
 
-The short version: EMWaver turns supported MCU boards into a scriptable hardware lab through native apps (iOS, Android, macOS, Windows, Linux). The core is open-source and local-first. Local hardware control must work without accounts, cloud activation, or subscription checks. The optional Agent features use a user-provided API key.
+The short version: EMWaver turns supported MCU boards into a scriptable hardware lab through native apps (iOS, Android, macOS, Windows, Linux). The core is open-source and local-first. Local hardware control must work without accounts, cloud activation, or subscription checks. Desktop external-agent access is moving to a local MCP server hosted by the running desktop app.
 
 ## Repo layout
 
@@ -39,11 +39,11 @@ When you change a subsystem, update its folder `README.md` in the same PR. Each 
 
 ### macOS app
 
-Open `macos/EMWaver/EMWaver.xcodeproj` in Xcode and run the `EMWaver` scheme. The macOS app supports USB, BLE, and Wi-Fi transports. Copy `.env.example` to `.env` and set `EMWAVER_AGENT_ENDPOINT` if you want to test Agent features locally.
+Open `macos/EMWaver/EMWaver.xcodeproj` in Xcode and run the `EMWaver` scheme. The macOS app supports USB, BLE, and Wi-Fi transports.
 
 ### iOS app
 
-Open `ios/EMWaver.xcodeproj` in Xcode and run the `EMWaver` scheme on a simulator or device. USB hardware testing requires a physical device. The Agent endpoint is configured through `Info.plist` or the `EMWAVER_AGENT_ENDPOINT` environment variable.
+Open `ios/EMWaver.xcodeproj` in Xcode and run the `EMWaver` scheme on a simulator or device. USB hardware testing requires a physical device.
 
 ### Android app
 
@@ -52,7 +52,7 @@ cd android
 ./gradlew assembleDebug
 ```
 
-Open in Android Studio for the full IDE experience. USB host and BLE testing require a physical Android device. Android reads `EMWAVER_AGENT_ENDPOINT` from the Gradle build config.
+Open in Android Studio for the full IDE experience. USB host and BLE testing require a physical Android device.
 
 ### Windows app
 
@@ -106,9 +106,9 @@ The ESP32 firmware workspace lives under `esp/`. Build it with ESP-IDF. After a 
 
 ## What we're not looking for right now
 
-- **Reintroducing the removed Gateway/CLI/browser architecture.** The Gateway was removed intentionally (see [docs/DROP_GATEWAY_AND_LINUX.md](docs/DROP_GATEWAY_AND_LINUX.md)). EMWaver is a native-app platform.
+- **Reintroducing a separate browser/daemon control plane.** EMWaver is a native-app platform; desktop MCP should live in the running desktop app.
 - **Cloud accounts, hosted relay, or cloud script storage.** EMWaver is local-first. Do not add account gates, cloud activation, or hosted storage to the core path.
-- **Product-specific prompts or metering logic in client code.** The Agent client should send context; prompts, provider routing, and metering belong server-side on MGPT.
+- **Product-specific prompts or metering logic in client code.** External model routing and metering belong outside the open-source local hardware-control path.
 
 ## Need help?
 

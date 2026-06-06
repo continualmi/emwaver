@@ -56,12 +56,6 @@
     <SolidColorBrush x:Key="ReadOnlyBannerBackgroundBrush" Color="#FFF3F4F6" />
     <SolidColorBrush x:Key="ReadOnlyBannerBorderBrush" Color="#FFD0D7DE" />
 
-    <!-- Agent chat bubbles -->
-    <SolidColorBrush x:Key="AgentUserBubbleBrush" Color="#1F0078D4" />
-    <SolidColorBrush x:Key="AgentAssistantBubbleBrush" Color="#14808080" />
-    <SolidColorBrush x:Key="AgentToolBubbleBrush" Color="#198C8C8C" />
-    <SolidColorBrush x:Key="AgentBubbleBorderBrush" Color="#1E6B7280" />
-
     <!-- Status colors -->
     <SolidColorBrush x:Key="AppErrorTextBrush" Color="#FFB42318" />
     <SolidColorBrush x:Key="StatusWarningBackgroundBrush" Color="#FFFFF4CE" />

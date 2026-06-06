@@ -120,7 +120,7 @@ Recommends: bluez, libsecret-tools
 Homepage: https://emwaver.ai
 Description: Local-first electronics scripting lab
  EMWaver turns supported MCU boards into a scriptable local hardware lab through
- native apps, managed firmware, JavaScript scripts, and optional Agent assistance.
+ native apps, managed firmware, and JavaScript scripts.
 CONTROL
 cat > "${deb_root}/${package_name}/DEBIAN/postinst" <<'POSTINST'
 #!/usr/bin/env sh

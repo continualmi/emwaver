@@ -51,13 +51,6 @@ public class ScriptsViewModel : INotifyPropertyChanged
 
     public bool IsCodeMode => !_isPreviewMode;
 
-    private bool _isAgentPanelOpen;
-    public bool IsAgentPanelOpen
-    {
-        get => _isAgentPanelOpen;
-        set { _isAgentPanelOpen = value; OnPropertyChanged(); }
-    }
-
     private string _errorMessage = "";
     public string ErrorMessage
     {
@@ -84,11 +77,6 @@ public class ScriptsViewModel : INotifyPropertyChanged
     {
         IsPreviewMode = !IsPreviewMode;
         if (IsPreviewMode) RunScriptRequested?.Invoke();
-    });
-
-    public ICommand ToggleAgentPanelCommand => new RelayCommand(_ =>
-    {
-        IsAgentPanelOpen = !IsAgentPanelOpen;
     });
 
     public ICommand RunScriptCommand => new RelayCommand(_ => RunScriptRequested?.Invoke());

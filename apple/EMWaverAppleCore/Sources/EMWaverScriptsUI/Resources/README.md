@@ -1,6 +1,6 @@
-Production Agent prompts and private `.emw` instructions do not live in this
-open-source client package.
+Production prompts, provider routing, and private model instructions do not
+live in this open-source client package.
 
-App-level Agent interfaces should collect local script, device, UI, and error
-context, then call the configured Continual MI/MGPT Agent endpoint with the
-user's Agent API key.
+Desktop external-agent access is moving to local MCP tools hosted by the
+running desktop app. Mobile script resources stay local/app-bundled and do not
+host an MCP endpoint.

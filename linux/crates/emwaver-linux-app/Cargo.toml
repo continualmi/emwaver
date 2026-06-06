@@ -7,7 +7,6 @@ repository.workspace = true
 
 [dependencies]
 adw = { package = "libadwaita", version = "0.7" }
-emwaver-linux-agent = { path = "../emwaver-linux-agent" }
 emwaver-linux-core = { path = "../emwaver-linux-core" }
 emwaver-linux-firmware = { path = "../emwaver-linux-firmware" }
 emwaver-linux-runtime = { path = "../emwaver-linux-runtime" }

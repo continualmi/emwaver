@@ -13,7 +13,7 @@ Target consumers:
 - macOS and iOS Swift runtime tests,
 - Windows C# runtime tests,
 - Android Kotlin runtime tests,
-- future Agent evals for generated `.emw` scripts.
+- future MCP/tool-facing evals for generated scripts.
 
 ## Architecture
 

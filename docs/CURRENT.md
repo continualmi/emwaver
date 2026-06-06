@@ -40,7 +40,7 @@ Mobile is the primary product surface. Desktop apps remain important for develop
 
 ## Superseded Architecture
 
-The active architecture is native apps plus the desktop MCP bridge. Superseded Gateway/CLI/browser and in-app Agent/MGPT plans belong in `docs/archive/` and should not be used as implementation guidance.
+The active architecture is native apps plus the desktop MCP bridge. Superseded browser/daemon control-plane and in-app Agent/MGPT plans belong in `docs/archive/` and should not be used as implementation guidance.
 
 ## Repo Layout
 
@@ -88,4 +88,4 @@ Key contributor docs:
 | `docs/LINUX_MACOS_PARITY_AUDIT.md` | Current macOS-vs-Linux native parity checklist |
 | `docs/SIMULATOR.md` | Shared simulator direction |
 | `docs/parity/` | Cross-platform parity contracts |
-| `docs/archive/` | Historical Gateway/CLI, Agent/MGPT, and rebirth-era docs |
+| `docs/archive/` | Historical browser/daemon control-plane, in-app Agent/MGPT, and rebirth-era docs |

@@ -184,7 +184,7 @@ Use the local README first when working in a folder:
 - `docs/RELEASES.md` — release workflows, signing expectations, and public preview assets
 - `docs/SIMULATOR.md` — shared device simulator for cross-platform testing
 - `docs/parity/` — cross-platform feature parity contracts (agent, transport, scripting, firmware, local-first)
-- `docs/archive/` — archived docs from superseded Gateway/CLI, Agent/MGPT, and script/UI planning passes
+- `docs/archive/` — archived docs from superseded browser/daemon, in-app Agent/MGPT, and script/UI planning passes
 - `videos/README.md` — video planning, direction, lightweight production rules, and writing guidance
 - `.agents/skills/` — canonical EMWaver Codex skills for repo-local product guidance
 - `.agents/skills/archive/` — archived skills for removed workflows

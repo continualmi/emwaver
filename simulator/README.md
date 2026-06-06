@@ -14,6 +14,6 @@ The fixture files are intended to be the cross-platform source of truth for dete
 - `i2c`: default read byte and optional address-specific replies.
 - `spi`: default read byte and optional transfer replies.
 
-Fixtures are not a replacement for real hardware tests. They exist so `.emw` runtimes, UI code, gateway flows, and Agent-generated script checks can run in CI without a physical board.
+Fixtures are not a replacement for real hardware tests. They exist so script runtimes, UI code, and MCP/tool-facing script checks can run in CI without a physical board.
 
 Virtual MIDI/USB transport is intentionally not the default simulator layer. See `VIRTUAL_TRANSPORT.md` for the OS support and CI feasibility decision.

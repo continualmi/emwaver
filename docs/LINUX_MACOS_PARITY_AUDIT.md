@@ -16,9 +16,9 @@ This is the working checklist for the native Linux GTK4 port against the macOS a
    - Linux executes the early command/gpio/device JavaScript API and now has local module loading, JSX transform, `__emwUI`/`__emwRender`, typed script tree capture, an initial GTK renderer for common node types, and live handler invocation for tap/change/submit controls through a persistent script UI runtime.
    - Needed: add plot/modal polish, continue broadening control-specific behavior, and validate GTK rendering/event handling on a Linux machine.
 
-3. Agent tool parity
-   - macOS Agent exposes local tools for listing/reading/patching/running scripts, stopping scripts, device status, and hardware primitives.
-   - Linux Agent can send context and has hardware primitive builders in the agent crate, but the GTK Agent drawer does not yet expose the full local tool runtime loop.
+3. MCP tool parity
+   - Desktop MCP should expose local tools for listing/reading/writing/running scripts, stopping scripts, device status, and hardware primitives.
+   - Linux still needs the MCP surface after the legacy in-app Agent client is removed.
    - Needed: persistent local conversations, tool call rendering/results, script list/read/patch/run/stop tools, and hardware primitive execution through the selected Linux transport.
 
 4. Device sheet behavior
@@ -37,8 +37,8 @@ This is the working checklist for the native Linux GTK4 port against the macOS a
    - Needed: automatic update-mode prompt parity, ESP serial candidate selection UX, and validation on a real Linux machine.
 
 7. Settings persistence
-   - macOS settings cover Agent key, endpoint, and transport debug preference with native persistence.
-   - Linux has Agent endpoint/key handling and a debug toggle surface, but discovery/debug preferences are not yet fully persisted.
+   - macOS settings cover local desktop preferences and transport debug preference with native persistence.
+   - Linux has the run log visibility surface, but discovery/debug preferences are not yet fully persisted.
    - Needed: XDG-backed discovery/debug settings and live application of those settings.
 
 ## Recently closed or improved
@@ -52,4 +52,4 @@ This is the working checklist for the native Linux GTK4 port against the macOS a
 - Linux editor uses GtkSourceView with syntax highlighting, line numbers, find, go-to-line, and line wrap.
 - Linux has USB MIDI, Wi-Fi WebSocket/mDNS, and BlueZ BLE GATT transport paths behind the shared transport trait.
 - Linux firmware flow can plan bundled STM32 and ESP32-S3 images and call the local flashing backends.
-- Linux Agent settings use local Secret Service/environment credentials and public `/api/mgpt/...` endpoint validation.
+- Linux no longer carries in-app Agent/MGPT credentials; desktop MCP settings are still pending.

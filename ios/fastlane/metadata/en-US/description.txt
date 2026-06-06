@@ -1,4 +1,4 @@
-EMWaver is a local-first electronics lab for iPhone and iPad. Connect a supported ESP32-S3 or STM32-based board, run JavaScript scripts, inspect device signals, manage bundled firmware, and use optional Agent assistance with your own API key.
+EMWaver is a local-first electronics lab for iPhone and iPad. Connect a supported ESP32-S3 or STM32-based board, run JavaScript scripts, inspect device signals, and manage bundled firmware.
 
 Local hardware control does not require an EMWaver account, cloud activation, hosted relay, subscription, or device ownership check. Scripts and core device workflows stay on your device by default.
 
@@ -8,6 +8,6 @@ Use EMWaver to:
 • Inspect device state and hardware signals from a mobile-first interface
 • Manage app-bundled firmware workflows for supported targets
 • Keep script-first hardware experiments out of the compile/flash/debug loop
-• Ask the optional Agent for script and troubleshooting help when you provide an API key
+• Keep script-first hardware experiments out of the compile/flash/debug loop
 
 EMWaver is open-source and built by Continual MI.

@@ -28,8 +28,6 @@ public class SettingsViewModel : INotifyPropertyChanged
         }
     }
 
-    public string MgptApiUrl => "https://mdl.continualmi.com/mgpt-api";
-
     public string AppVersion
     {
         get

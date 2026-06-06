@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 pub enum AppStatus {
     Idle,
     Running,
-    AgentUnavailable,
+    ToolUnavailable,
     FirmwareUpdating,
 }
 

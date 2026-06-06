@@ -13,8 +13,8 @@ public protocol ScriptDevice: AnyObject {
     func clearBuffer()
     func loadBuffer(data: Data)
     func bufferPacketSizeBytes() -> Int
-    func beginAgentHardwarePrimitiveSession() -> Bool
-    func endAgentHardwarePrimitiveSession()
+    func beginHardwarePrimitiveSession() -> Bool
+    func endHardwarePrimitiveSession()
     func deviceErrorDescription() -> String?
 
     func sendPacket(_ data: Data)
@@ -24,8 +24,8 @@ public protocol ScriptDevice: AnyObject {
 
 public extension ScriptDevice {
     func bufferPacketSizeBytes() -> Int { 18 }
-    func beginAgentHardwarePrimitiveSession() -> Bool { true }
-    func endAgentHardwarePrimitiveSession() {}
+    func beginHardwarePrimitiveSession() -> Bool { true }
+    func endHardwarePrimitiveSession() {}
     func deviceErrorDescription() -> String? { nil }
 }
 

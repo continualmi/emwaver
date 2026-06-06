@@ -36,7 +36,6 @@ WPF views:
 - `Views/DeviceConnectionWindow*`
 - `Views/SettingsWindow*`
 - `Views/FirmwareUpdateWindow*`
-- legacy `Views/AgentKeyWindow*` targeted for removal
 
 Core service layer:
 - `Services/UsbMidiSysex.cs` (shared SysEx/superframe transport codec)
@@ -120,9 +119,9 @@ Desktop app updates are local-first and account-free. Windows checks the EMWaver
 The Windows app intentionally ships a single stable light UI theme; the former dark theme option is disabled.
 
 The WPF Agent drawer, Agent API key storage, SQLite chat storage, and MGPT
-client path are legacy migration debt. Their hardware primitive model is being
-repackaged as the desktop MCP surface: external agents should use MCP tools
-such as `list_scripts`, `read_script`, `run_script`, `write_script`,
+client path have been removed. Their hardware primitive model is being
+repackaged as the desktop MCP surface: external agents should use future MCP
+tools such as `list_scripts`, `read_script`, `run_script`, `write_script`,
 `device_state`, `spi_transfer`, `gpio_write`, `gpio_read`, and `analog_read`.
 The WPF script editor uses AvalonEdit syntax highlighting plus visible Find and
 Go to Line controls.
@@ -135,7 +134,7 @@ What Windows already has:
 - USB run-mode transport,
 - ESP32 BLE run-mode transport,
 - STM32 DFU firmware flashing,
-- legacy Agent API-key auth targeted for removal.
+- the legacy Agent API-key auth path removed.
 
 Windows now includes:
 - board-aware device state (`board_type`, last detected board info),

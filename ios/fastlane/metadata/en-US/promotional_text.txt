@@ -1,1 +1,1 @@
-Turn supported ESP32-S3 and STM32 boards into a local-first electronics lab with scripts, firmware tools, and optional Agent help.
+Turn supported ESP32-S3 and STM32 boards into a local-first electronics lab with scripts and firmware tools.

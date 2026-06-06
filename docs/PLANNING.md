@@ -4,7 +4,7 @@ This is the durable working tracker for current EMWaver priorities. `SCHEDULE.md
 
 ## Current Focus
 
-- **Open-source readiness:** make the active native-app + desktop MCP architecture easy to understand, with superseded Gateway/CLI and Agent/MGPT plans archived.
+- **Open-source readiness:** make the active native-app + desktop MCP architecture easy to understand, with superseded browser/daemon and in-app Agent/MGPT plans archived.
 - **Mobile-first product:** iOS and Android are primary. The phone is the portable local hardware lab.
 - **Desktop apps:** macOS and Windows are active native apps for development, bench testing, firmware setup, long runs, advanced workflows, and the local MCP bridge.
 - **Linux native app:** Linux is being rebuilt as a native Rust + GTK4/libadwaita app and should get the same desktop MCP direction when the runtime is ready.
@@ -19,7 +19,7 @@ This is the durable working tracker for current EMWaver priorities. `SCHEDULE.md
 | --- | --- | --- | --- |
 | `P0` | Agent-to-MCP migration | `active` | Remove in-app Agent/MGPT, make desktop MCP + filesystem scripts canonical, and keep mobile as local script import/run. Plan: `docs/AGENT_TO_MCP_MIGRATION.html`; contract: `docs/MCP_CONTRACT.md`. |
 | `P0` | Cross-platform CC1101 validation | `done` | `cc1101.js` reads/writes registers across Windows, macOS, Android, and iOS (2026-05-24). |
-| `P0` | Documentation cleanup | `active` | Remove stale Agent/MGPT, old Gateway/CLI, Windows-deferred, and Linux-removed wording from active/public docs and platform READMEs. |
+| `P0` | Documentation cleanup | `active` | Remove stale Agent/MGPT, old browser/daemon control-plane, Windows-deferred, and Linux-removed wording from active/public docs and platform READMEs. |
 | `P0` | MCP hardware primitive tools | `planned` | Repackage `spi_transfer`, GPIO, analog, and module-probe flows as desktop MCP tools backed by the native app/device transport. |
 | `P0` | Script-defined native UI | `active` | JavaScript scripts can define instant native panels with JSX-style syntax. Keep docs clear that JSX is syntax inside JS, not a separate product surface. |
 | `P0` | Mobile UI polish | `active` | Improve iOS and Android script/device flows for phone use after Agent/MGPT removal. |
@@ -35,7 +35,7 @@ This is the durable working tracker for current EMWaver priorities. `SCHEDULE.md
 2. Clean the public website docs, especially script/UI docs and install/status pages.
 3. Archive old Agent/MGPT docs and replace references with the desktop MCP migration plan.
 4. Rebuild the hardware validation suite around native apps, real hardware scripts, MCP primitive tools, and simulator fixtures.
-5. Update platform READMEs where they still mention old Agent/MGPT configuration, old Gateway/CLI paths, Windows as deferred, or Linux as removed.
+5. Update platform READMEs where they still mention old Agent/MGPT configuration, old browser/daemon control-plane paths, Windows as deferred, or Linux as removed.
 6. Capture concise CC1101 validation evidence for iOS, Android, macOS, and Windows.
 7. Continue the Linux native app port and plan its desktop MCP surface with the runtime.
 

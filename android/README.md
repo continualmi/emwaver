@@ -113,8 +113,8 @@ Current Android board split:
 
 When changing Android transport, connection lifecycle, or firmware update UX behavior, update this README in the same PR.
 
-Android Agent-to-MCP direction:
-- Remove the Android Agent chat interface/runtime and MGPT API-key plumbing.
+Android MCP boundary:
+- The Android Agent chat interface/runtime and MGPT API-key plumbing have been removed.
 - Android does not host an MCP server; it keeps local script import/app-local storage and local script execution.
 - Do not require an EMWaver account, cloud sync, activated devices, hardware-UID registration, or device limits for local scripts/hardware.
 - Hosted cloud files, hosted host-session UI, Firebase sign-in, hosted remote control, and cloud/local backend switching remain out of the Android app.

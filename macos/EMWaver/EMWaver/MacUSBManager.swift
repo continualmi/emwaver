@@ -600,11 +600,11 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         return true
     }
 
-    func beginAgentHardwarePrimitiveSession() -> Bool {
+    func beginHardwarePrimitiveSession() -> Bool {
         beginScriptTransportSession(deviceID: nil)
     }
 
-    func endAgentHardwarePrimitiveSession() {
+    func endHardwarePrimitiveSession() {
         guard let (targetID, claim) = takeTransportSessionClaim(deviceID: nil) else {
             return
         }

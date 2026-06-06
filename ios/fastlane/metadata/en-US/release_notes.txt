@@ -1,1 +1,1 @@
-Improves local script, device connection, firmware asset, and optional Agent-key workflows for the iOS launch.
+Improves local script, device connection, and firmware asset workflows for the iOS launch.

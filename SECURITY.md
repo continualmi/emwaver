@@ -29,9 +29,8 @@ The following components are in scope:
 
 The following are out of scope:
 
-- The removed Gateway/CLI architecture (see `docs/DROP_GATEWAY_AND_LINUX.md`)
-- Third-party services the apps may connect to (e.g., the MGPT Agent backend,
-  which has its own security reporting path)
+- Historical architectures archived outside the active native-app path
+- Third-party services outside the EMWaver native app, firmware, and website codebase
 - Social engineering attacks
 - Denial of service against the public website
 
@@ -49,6 +48,6 @@ accounts, cloud activation, or hosted relay. Security reports about the
 local-first boundary (e.g., ways the app could be coerced into requiring
 network access for core hardware control) are particularly interesting to us.
 
-The Agent features use a user-provided API key over HTTPS. The key is stored
-locally (Keychain on Apple platforms, encrypted SharedPreferences on Android,
-DPAPI-protected on Windows, Secret Service on Linux where available).
+Desktop MCP access is planned as a user-enabled loopback-only local endpoint.
+Reports about local endpoint exposure, token handling, or unintended remote
+hardware access are in scope.

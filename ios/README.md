@@ -22,15 +22,10 @@ Key app entry:
 
 ## 2) Main code areas
 
-## 2.1 Agent removal
+## 2.1 MCP boundary
 
-`ios/EMWaver/Auth/`:
-- `AuthenticationManager.swift`
-- `KeychainStore.swift`
-- `SignInSheet.swift`
-
-Responsibilities:
-- remove legacy Agent API-key persistence and in-app Agent/MGPT reply flows.
+The legacy Agent API-key persistence, sign-in sheet, and in-app Agent/MGPT reply
+flows have been removed.
 
 Current guidance:
 - there is no EMWaver account, Google/Firebase sign-in, or hosted session restore path,
@@ -92,9 +87,9 @@ Interop/legacy native-buffer components exist; keep usage aligned with current p
 
 Open `ios/EMWaver.xcodeproj` in Xcode and run the `EMWaver` scheme on simulator/device.
 
-The legacy iOS Agent key sheet and MGPT endpoint plumbing are being removed. iOS keeps local script import/app-local storage and local device/script use without hosting an MCP endpoint.
+iOS keeps local script import/app-local storage and local device/script use without hosting an MCP endpoint.
 
-Do not assume CI/agent environment can run full iOS builds; validate on proper macOS/Xcode setup.
+Do not assume CI or automation environments can run full iOS builds; validate on proper macOS/Xcode setup.
 
 ## 6) App Store automation
 

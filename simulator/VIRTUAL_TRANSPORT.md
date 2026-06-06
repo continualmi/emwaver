@@ -6,7 +6,7 @@
 
 Do not make a virtual MIDI/USB transport part of the portable simulator baseline.
 
-The protocol-level simulator remains the default test layer for CI, cross-platform runtime tests, and Agent-generated script checks:
+The protocol-level simulator remains the default test layer for CI, cross-platform runtime tests, and MCP/tool-facing script checks:
 
 ```text
 .emw script/runtime
@@ -32,7 +32,7 @@ Protocol-level fixtures are portable across macOS, Linux, Windows, iOS, Android,
 If added, virtual transport should be a developer-only harness:
 
 ```text
-real app / CLI transport stack
+real app transport stack
   -> OS loopback MIDI/USB endpoint
   -> simulator transport adapter
   -> SimulatorCommandBridge / shared fixture state
@@ -60,9 +60,7 @@ Minimum requirements:
 
 Use these portable paths first:
 
-- Rust: `emwaver run <script.emw> --direct --sim-device`
+- Rust: protocol/runtime tests against shared simulator fixtures
 - Apple: `SimulatorScriptDevice`
 - Windows: `Scripting/SimulatorCommandBridge.cs`
 - Android: `SimulatorScriptDeviceBridge`
-- Gateway: browser/native WebSocket protocol tests with mock app/device responders
-

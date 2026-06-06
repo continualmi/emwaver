@@ -1,7 +1,6 @@
 [workspace]
 resolver = "2"
 members = [
-  "crates/emwaver-linux-agent",
   "crates/emwaver-linux-app",
   "crates/emwaver-linux-core",
   "crates/emwaver-linux-firmware",
