@@ -294,14 +294,17 @@ final class FirmwareUpdateManager: ObservableObject {
     }
 
     private func effectiveBoardType(for device: MacUSBManager) -> String {
+        if espBootloaderConnected || espBootloaderPort != nil {
+            if let boardType = Self.normalizedEspBoardType(espBootloaderBoardType) {
+                return boardType
+            }
+            if let boardType = Self.normalizedEspBoardType(device.connectedBoardType) {
+                return boardType
+            }
+            return "esp"
+        }
         if let boardType = Self.normalizedEspBoardType(presentedBoardType) {
             return boardType
-        }
-        if let boardType = Self.normalizedEspBoardType(espBootloaderBoardType) {
-            return boardType
-        }
-        if espBootloaderConnected || espBootloaderPort != nil {
-            return "esp"
         }
         return device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
     }
@@ -495,6 +498,7 @@ final class FirmwareUpdateManager: ObservableObject {
     private func resolveEspFlashPort() throws -> String {
         if let detected = try detectEspBootloaderTarget() {
             espBootloaderBoardType = detected.boardType
+            presentedBoardType = detected.boardType
             return detected.port
         }
 
@@ -554,10 +558,22 @@ final class FirmwareUpdateManager: ObservableObject {
         appendLog("ESP flashing uses the serial helper, not DFU.")
         if device.isConnected {
             appendLog("Run Mode remains separate from flashing; using serial port discovery.")
+            if device.connectedTransportKind == "USB Serial" {
+                appendLog("Releasing USB Serial runtime before flashing.")
+                device.disconnect()
+                Thread.sleep(forTimeInterval: 0.25)
+            }
         }
 
         let port = try resolveEspFlashPort()
         let boardType = effectiveBoardType(for: device)
+        if Self.normalizedEspBoardType(boardType) == nil {
+            throw NSError(
+                domain: "FirmwareUpdateManager",
+                code: 21,
+                userInfo: [NSLocalizedDescriptionKey: "Could not identify the ESP chip on the selected USB serial port. Reconnect the board, then retry."]
+            )
+        }
         appendLog("ESP board type: \(boardType)")
         appendLog("ESP flash port: \(port)")
         try runEspFlash(port: port, boardType: boardType)

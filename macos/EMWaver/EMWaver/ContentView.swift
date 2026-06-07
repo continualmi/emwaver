@@ -33,6 +33,9 @@ struct ContentView: View {
             if device.connectedTransportKind == "Wi-Fi" {
                 return ("wifi", currentBoardDisplayName)
             }
+            if device.connectedTransportKind == "USB Serial" {
+                return ("cable.connector", "\(currentBoardDisplayName) Serial")
+            }
             return ("cable.connector", currentBoardDisplayName)
         }
         if firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil {
@@ -48,6 +51,9 @@ struct ContentView: View {
     }
 
     private var currentBoardType: String {
+        if device.isConnected {
+            return device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
+        }
         if firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil {
             return firmwareUpdater.espBootloaderBoardType ?? "esp"
         }
@@ -325,10 +331,12 @@ struct ContentView: View {
         switch transport {
         case .usbMidi:
             return 0
-        case .ble:
+        case .usbSerial:
             return 1
-        case .wifi:
+        case .ble:
             return 2
+        case .wifi:
+            return 3
         }
     }
 
@@ -343,7 +351,7 @@ struct ContentView: View {
         switch transport {
         case .ble:
             return "antenna.radiowaves.left.and.right"
-        case .usbMidi:
+        case .usbMidi, .usbSerial:
             return "cable.connector"
         case .wifi:
             return "wifi"

@@ -55,11 +55,11 @@ Responsibilities:
 - firmware update tooling for first-party setup on macOS without gating local script execution on account ownership.
 
 Transport behavior:
-- `MacUSBManager.swift` currently coordinates CoreMIDI USB, CoreBluetooth BLE, and the app-facing `ScriptDevice` routing surface.
+- `MacUSBManager.swift` currently coordinates CoreMIDI USB, USB Serial, CoreBluetooth BLE, and the app-facing `ScriptDevice` routing surface.
 - `MacWiFiManager.swift` owns the first ESP32 Wi-Fi transport slice: local mDNS discovery, manual LAN/VPN hosts, WebSocket connection, binary packet send/receive, and disconnect handling.
-- USB MIDI remains the preferred wired path when present.
-- The device sheet now exposes a unified local device list for discovered USB MIDI, ESP32-S3 BLE candidates, and discovered Wi-Fi devices, so multi-board bench work can start with explicit user selection.
-- Wi-Fi devices use the same EMWaver SysEx/superframe payload as USB MIDI and BLE once connected. The Wi-Fi edge is a WebSocket transport adapter, not a separate hardware-control protocol.
+- USB MIDI remains the preferred wired path when present; ESP8266 boards use USB Serial as their wired runtime path.
+- The device sheet now exposes a unified local device list for discovered USB MIDI, USB Serial, ESP32-S3 BLE candidates, and discovered Wi-Fi devices, so multi-board bench work can start with explicit user selection.
+- USB Serial and Wi-Fi devices use the same EMWaver SysEx/superframe payload as USB MIDI and BLE once connected. The Wi-Fi edge is a WebSocket transport adapter, not a separate hardware-control protocol.
 - macOS sends and receives the existing 48-byte EMWaver SysEx payload directly over the WebSocket. There is no Wi-Fi-specific envelope or sequence layer.
 - macOS only sends Wi-Fi command frames after WebSocket connection has completed and the selected Wi-Fi record is marked connected.
 - If no matching Wi-Fi command response arrives before the caller timeout, macOS reports `Wi-Fi command timed out`.
@@ -75,7 +75,7 @@ Transport behavior:
 - Manual Wi-Fi connection also requires the host field to be a bare hostname or IP address, with scheme/path/embedded-port input rejected so the separate validated port remains authoritative.
 - Manual Wi-Fi connection supports bare IPv6 literals for routed LAN/VPN paths and brackets them only when constructing the WebSocket URL.
 - The local device selector is the preferred transport for the next script run only, and it only lists transports after a real hardware UID has been read. Discovery and UID checks continue across transports; automatic script-target selection ranks USB, then BLE, then Wi-Fi unless the user explicitly selects a transport.
-- ESP32 script runs claim the selected USB/BLE/Wi-Fi transport before script control starts, keep that claim alive with a **transport session heartbeat** (opcode `0x0B` sub-opcode `0x03`, sent every 2 seconds, echoed by firmware), and release it when the script stops. Discovery and UID/status probes may continue on other transports, but control traffic stays locked to the selected transport during the script session. Because the protocol is a single serial bus, heartbeats interleave naturally with commands and responses without contention.
+- ESP script runs claim the selected USB MIDI/USB Serial/BLE/Wi-Fi transport before script control starts, keep that claim alive with a **transport session heartbeat** (opcode `0x0B` sub-opcode `0x03`, sent every 2 seconds, echoed by firmware), and release it when the script stops. Discovery and UID/status probes may continue on other transports, but control traffic stays locked to the selected transport during the script session. Because the protocol is a single serial bus, heartbeats interleave naturally with commands and responses without contention.
 - If a script is already running for a hardware UID, macOS rejects another local script run or active transport switch for that same device until the running script stops.
 - The ESP32 firmware owns the default local hostname and advertises it through mDNS.
 - The device sheet can provision ESP32-S2 or ESP32-S3 Wi-Fi while the board is connected over USB MIDI, BLE, or Wi-Fi. It sends SSID and password over the shared binary command lane before the board joins station-mode Wi-Fi and advertises on the LAN.
@@ -89,8 +89,8 @@ Transport behavior:
 - If auto-connect is enabled and no wired EMWaver runtime is connected, macOS tries advertised Wi-Fi endpoints, then scans for the ESP32-S3 EMWaver BLE GATT service.
 - BLE scanning may continue while a device is connected so additional ESP32-S3 boards can be discovered for the multi-device bench path.
 - The first multi-device implementation can keep multiple ESP32-S3 BLE peripherals connected and lets the user select the active board for the in-app runtime.
-- The app queries `EMW_OP_HARDWARE_UID_GET` after USB/BLE connection, refreshes connected USB/BLE UID checks during the regular 5-second connection poll, and uses that local hardware UID to merge the same physical device across transports when known. Wi-Fi uses fresh UID probe responses every 5 seconds as its live connection metric, not a cached UID. This UID is only for local labels/diagnostics/device-list deduplication.
-- BLE carries the same EMWaver SysEx/superframe payload as USB MIDI; opcodes and command behavior must stay shared in firmware and scripts.
+- The app queries `EMW_OP_HARDWARE_UID_GET` after USB MIDI/USB Serial/BLE connection, refreshes connected USB/BLE/serial UID checks during the regular 5-second connection poll, and uses that local hardware UID to merge the same physical device across transports when known. Wi-Fi uses fresh UID probe responses every 5 seconds as its live connection metric, not a cached UID. This UID is only for local labels/diagnostics/device-list deduplication.
+- BLE and USB Serial carry the same EMWaver SysEx/superframe payload as USB MIDI; opcodes and command behavior must stay shared in firmware and scripts.
 
 Runtime boundary:
 - The macOS app is self-contained and owns its native script UI, local transport managers, MCP bridge surface, and firmware/update flows.

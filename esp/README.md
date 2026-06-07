@@ -11,8 +11,8 @@ Primary ESP-IDF targets: ESP32-S3, ESP32-S2, and classic ESP32 running on ESP-ID
 ESP8266 support lives in the separate `esp/esp8266/` subworkspace because
 ESP8266 is supported by Espressif's official ESP8266_RTOS_SDK rather than modern
 ESP-IDF. That port reuses the EMWaver SysEx/superframe protocol, exposes
-`board=esp8266` with `cap=wifi,serial`, uses USB-serial for setup/recovery, and
-uses Wi-Fi WebSocket as the runtime transport.
+`board=esp8266` with `cap=wifi,serial`, uses USB-serial as the wired runtime/setup
+transport, and also exposes the Wi-Fi WebSocket runtime transport.
 
 This workspace was restored from git history as the starting point for bringing ESP32 support back to EMWaver.
 
@@ -205,11 +205,11 @@ protocol, and exposes:
 - ESP8266: `board=esp8266`, `cap=wifi,serial`
 
 The serial capability is the USB-serial adapter present on common ESP8266 dev
-boards. It is a setup/recovery command lane for Wi-Fi provisioning and basic
-identity/status, not a native USB runtime transport. GPIO/ADC/SPI/PWM runtime
-control is accepted over Wi-Fi after the board joins the user's LAN. When no
-station credentials are stored, the firmware also starts an `EMWaver-8266-XXXX`
-SoftAP with the same WebSocket endpoint for fallback provisioning.
+boards. It carries the same 48-byte EMWaver SysEx/superframe packet as Wi-Fi, so
+macOS can use it as a wired runtime transport for identity, provisioning, and
+GPIO/ADC/SPI/PWM commands. When no station credentials are stored, the firmware
+also starts an `EMWaver-8266-XXXX` SoftAP with the same WebSocket endpoint for
+fallback provisioning.
 
 ## ESP32-S2 support
 

@@ -5,7 +5,10 @@ struct FirmwareUpdateSheet: View {
     @ObservedObject var updater: FirmwareUpdateManager
 
     private var boardType: String {
-        updater.presentedBoardType ?? updater.espBootloaderBoardType ?? device.connectedBoardType ?? device.lastDetectedBoardType ?? (updater.espBootloaderPort == nil ? "stm32f042" : "esp")
+        if updater.espBootloaderConnected || updater.espBootloaderPort != nil {
+            return updater.espBootloaderBoardType ?? device.connectedBoardType ?? "esp"
+        }
+        return updater.presentedBoardType ?? updater.espBootloaderBoardType ?? device.connectedBoardType ?? device.lastDetectedBoardType ?? (updater.espBootloaderPort == nil ? "stm32f042" : "esp")
     }
 
     private var boardDisplayName: String {

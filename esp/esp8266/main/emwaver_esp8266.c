@@ -819,20 +819,7 @@ static bool serial_allows_opcode(const command_t *cmd)
     if (!cmd || cmd->length != EMW_LANE_SIZE) {
         return false;
     }
-    switch (cmd->data[0]) {
-        case EMW_OP_VERSION:
-        case EMW_OP_RESET:
-        case EMW_OP_HELP:
-        case EMW_OP_NAME_GET:
-        case EMW_OP_NAME_SET:
-        case EMW_OP_HARDWARE_UID_GET:
-        case EMW_OP_BOARD_GET:
-        case EMW_OP_WIFI_CONFIG:
-        case EMW_OP_TRANSPORT_SESSION:
-            return true;
-        default:
-            return false;
-    }
+    return true;
 }
 
 static bool validate_gpio_pin(uint8_t pin, gpio_num_t *out_gpio)

@@ -169,10 +169,12 @@ final class MacScriptSessionManager: ObservableObject {
         switch transport {
         case .usbMidi:
             return 0
-        case .ble:
+        case .usbSerial:
             return 1
-        case .wifi:
+        case .ble:
             return 2
+        case .wifi:
+            return 3
         }
     }
 

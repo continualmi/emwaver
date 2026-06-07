@@ -57,6 +57,9 @@ struct DeviceConnectionSheet: View {
             if device.connectedTransportKind == "Wi-Fi" {
                 return ("Connected over Wi-Fi", "wifi")
             }
+            if device.connectedTransportKind == "USB Serial" {
+                return ("Connected over USB Serial", "cable.connector")
+            }
             return ("Connected", "cable.connector")
         }
         if espBootloaderAvailable {
@@ -547,7 +550,7 @@ struct DeviceConnectionSheet: View {
         switch transport {
         case .ble:
             return "antenna.radiowaves.left.and.right"
-        case .usbMidi:
+        case .usbMidi, .usbSerial:
             return "cable.connector"
         case .wifi:
             return "wifi"
@@ -568,6 +571,9 @@ struct DeviceConnectionSheet: View {
     }
 
     private func groupTitleCandidate(for item: LocalDeviceDescriptor) -> String {
+        if item.transport == .usbSerial {
+            return item.displayName.isEmpty ? LocalDeviceLabelFormatter.boardDisplayName(item.boardType) : item.displayName
+        }
         if let module = item.moduleLabel, !module.isEmpty, item.transport == .wifi {
             return item.displayName
         }
@@ -594,10 +600,12 @@ struct DeviceConnectionSheet: View {
         switch transport {
         case .usbMidi:
             return 0
-        case .ble:
+        case .usbSerial:
             return 1
-        case .wifi:
+        case .ble:
             return 2
+        case .wifi:
+            return 3
         }
     }
 

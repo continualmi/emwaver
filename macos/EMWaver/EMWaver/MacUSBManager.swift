@@ -7,6 +7,7 @@
 import Combine
 import CoreBluetooth
 import CoreMIDI
+import Darwin
 import Foundation
 
 import EMWaverScriptRuntime
@@ -16,6 +17,7 @@ struct LocalDeviceDescriptor: Identifiable, Equatable {
     enum TransportKind: String {
         case ble = "BLE"
         case usbMidi = "USB"
+        case usbSerial = "USB Serial"
         case wifi = "Wi-Fi"
     }
 
@@ -300,6 +302,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private enum ActiveTransport {
         case none
         case usbMidi
+        case usbSerial
         case ble
         case wifi
     }
@@ -331,6 +334,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
     private var connectedSource: MIDIEndpointRef = 0
     private var connectedDestination: MIDIEndpointRef = 0
+    private var serialFileDescriptor: Int32 = -1
+    private var serialReadSource: DispatchSourceRead?
+    private var serialDevicePaths: [String] = []
+    private var connectedSerialPath: String?
     private var activeTransport: ActiveTransport = .none
 
     private var portCandidatesByDisplayName: [String: PortCandidate] = [:]
@@ -430,6 +437,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             switch activeTransport {
             case .usbMidi:
                 return connectedSource != 0 && connectedDestination != 0
+            case .usbSerial:
+                return serialFileDescriptor >= 0 && connectedSerialPath != nil
             case .ble:
                 guard let peripheral = blePeripheral else { return false }
                 return peripheral.state == .connected && bleCommandCharacteristicsByID[peripheral.identifier] != nil
@@ -449,6 +458,9 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         if targetID.hasPrefix("midi:") {
             return connectedSource != 0 && connectedDestination != 0 && activeDeviceID == targetID
         }
+        if targetID.hasPrefix("serial:") {
+            return serialFileDescriptor >= 0 && activeDeviceID == targetID
+        }
         if targetID.hasPrefix("ble:"),
            let uuid = UUID(uuidString: String(targetID.dropFirst("ble:".count))),
            let peripheral = bleConnectedPeripheralsByID[uuid] {
@@ -462,6 +474,9 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
     private func inferBoardType(portName: String?) -> String {
         let name = (portName ?? "").lowercased()
+        if name.contains("esp8266") || name.contains("8266") {
+            return "esp8266"
+        }
         if name.contains("esp32-s2") || name.contains("esp32s2") {
             return "esp32s2"
         }
@@ -481,7 +496,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
     private func isWiFiProvisionableBoardType(_ boardType: String) -> Bool {
         switch boardType.lowercased() {
-        case "esp32", "esp32s2", "esp32s3":
+        case "esp8266", "esp32", "esp32s2", "esp32s3":
             return true
         default:
             return false
@@ -490,7 +505,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
     private func activeTransportAllowsWiFiSetup() -> Bool {
         switch activeTransport {
-        case .usbMidi, .ble, .wifi:
+        case .usbMidi, .usbSerial, .ble, .wifi:
             return true
         case .none:
             return false
@@ -807,6 +822,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             self.connectInternal(portName: displayName)
             return
         }
+        if targetID.hasPrefix("serial:"), let path = self.serialPathFromDeviceID(targetID) {
+            self.connectSerialInternal(path: path, makeActive: true)
+            return
+        }
         if targetID.hasPrefix("ble:"),
            let uuid = UUID(uuidString: String(targetID.dropFirst("ble:".count))),
            let peripheral = self.bleDiscoveredPeripheralsByID[uuid] {
@@ -869,6 +888,9 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
         if !isTransportConnectedInternal() {
             connectToFirstPortInternal()
+        }
+        if !isTransportConnectedInternal() {
+            connectToFirstSerialPortInternal()
         }
         _ = connectToFirstAdvertisedWiFiInternal()
     }
@@ -1192,7 +1214,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func requiresTransportSessionInternal(deviceID: String) -> Bool {
-        if deviceID.hasPrefix("ble:") || deviceID.hasPrefix("wifi:") {
+        if deviceID.hasPrefix("serial:") || deviceID.hasPrefix("ble:") || deviceID.hasPrefix("wifi:") {
             return true
         }
         return boardTypeForDeviceIDInternal(deviceID)?
@@ -1218,6 +1240,9 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         if targetID.hasPrefix("midi:") {
             return displayNameFromDeviceID(targetID).map { inferBoardType(portName: $0) }
         }
+        if targetID.hasPrefix("serial:") {
+            return boardTypeByDeviceID[targetID] ?? "esp8266"
+        }
         return nil
     }
 
@@ -1237,6 +1262,9 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private func transportSessionSource(for deviceID: String) -> UInt8? {
         let targetID = resolvedTransportID(for: deviceID) ?? deviceID
         if targetID.hasPrefix("midi:") {
+            return EmwOpcode.transportSourceUSB
+        }
+        if targetID.hasPrefix("serial:") {
             return EmwOpcode.transportSourceUSB
         }
         if targetID.hasPrefix("ble:") {
@@ -1420,6 +1448,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
 
         self.portCandidatesByDisplayName = map
+        self.serialDevicePaths = listSerialRuntimeCandidatesInternal()
         publishDiscoveredDevices(ports: ports)
         DispatchQueue.main.async {
             self.availablePorts = ports
@@ -1442,6 +1471,23 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 identifierText: hardwareUIDByDeviceID[id].map { "UID \($0)" },
                 connectionState: isActive ? .connected : .discovered,
                 lastErrorText: nil,
+                isActive: isActive
+            ))
+        }
+
+        for path in serialDevicePaths.sorted() {
+            let id = "serial:\(path)"
+            let isActive = activeTransport == .usbSerial && connectedSerialPath == path && isTransportConnectedInternal()
+            let hardwareUID = hardwareUIDByDeviceID[id]
+            devices.append(LocalDeviceDescriptor(
+                id: id,
+                displayName: URL(fileURLWithPath: path).lastPathComponent,
+                transport: .usbSerial,
+                boardType: boardTypeByDeviceID[id] ?? "esp8266",
+                moduleLabel: path,
+                identifierText: hardwareUID.map { "UID \($0)" },
+                connectionState: isActive ? .connected : .discovered,
+                lastErrorText: isActive || hardwareUID != nil ? nil : "Waiting for EMWaver serial probe",
                 isActive: isActive
             ))
         }
@@ -1526,6 +1572,12 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         return portCandidatesByDisplayName.keys.first(where: { $0 == raw })
     }
 
+    private func serialPathFromDeviceID(_ id: String) -> String? {
+        guard id.hasPrefix("serial:") else { return nil }
+        let path = String(id.dropFirst("serial:".count))
+        return serialDevicePaths.contains(path) || FileManager.default.fileExists(atPath: path) ? path : nil
+    }
+
     private func resolvedTransportID(for deviceID: String?) -> String? {
         guard let deviceID, !deviceID.isEmpty else { return nil }
         if deviceID.hasPrefix("uid:") {
@@ -1569,6 +1621,12 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
         let display = portCandidatesByDisplayName.first(where: { $0.value.source == chosen.source && $0.value.destination == chosen.destination })?.key
         connectInternal(candidate: chosen, displayName: display)
+    }
+
+    private func connectToFirstSerialPortInternal() {
+        let paths = serialDevicePaths.isEmpty ? listSerialRuntimeCandidatesInternal() : serialDevicePaths
+        guard let path = paths.first else { return }
+        connectSerialInternal(path: path, makeActive: true)
     }
 
     private func connectToFirstAdvertisedWiFiInternal() -> Bool {
@@ -1630,6 +1688,21 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             }
             if disconnected {
                 disconnectMidiOnlyInternal()
+                activeTransport = .none
+                activeDeviceID = nil
+                DispatchQueue.main.async {
+                    self.isConnected = false
+                    self.connectedPortName = nil
+                    self.deviceEmwaverVersion = nil
+                    self.connectedHardwareUID = nil
+                    self.connectedBoardType = nil
+                    self.connectedTransportKind = nil
+                }
+            }
+        case .usbSerial:
+            let disconnected = serialFileDescriptor < 0 || connectedSerialPath == nil
+            if disconnected {
+                disconnectSerialOnlyInternal()
                 activeTransport = .none
                 activeDeviceID = nil
                 DispatchQueue.main.async {
@@ -1720,6 +1793,12 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
            activeDeviceID.hasPrefix("midi:") {
             deviceIDs.append(activeDeviceID)
         }
+        if activeTransport == .usbSerial,
+           serialFileDescriptor >= 0,
+           let activeDeviceID,
+           activeDeviceID.hasPrefix("serial:") {
+            deviceIDs.append(activeDeviceID)
+        }
 
         for (uuid, peripheral) in bleConnectedPeripheralsByID where peripheral.state == .connected {
             guard bleCommandCharacteristicsByID[uuid] != nil else { continue }
@@ -1777,6 +1856,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             return
         }
         disconnectMidiOnlyInternal()
+        disconnectSerialOnlyInternal()
 
         connectedSource = candidate.source
         connectedDestination = candidate.destination
@@ -1827,6 +1907,108 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
     }
 
+    private func connectSerialInternal(path: String, makeActive: Bool) {
+        let deviceID = "serial:\(path)"
+        boardTypeByDeviceID[deviceID] = boardTypeByDeviceID[deviceID] ?? "esp8266"
+        guard canActivateTransportInternal(deviceID) else {
+            return
+        }
+        disconnectMidiOnlyInternal()
+        disconnectSerialOnlyInternal()
+
+        let fd = open(path, O_RDWR | O_NOCTTY | O_NONBLOCK)
+        guard fd >= 0 else {
+            setError("USB serial open failed: \(path)")
+            publishDiscoveredDevices()
+            return
+        }
+        guard configureSerialFileDescriptor(fd) else {
+            close(fd)
+            setError("USB serial configuration failed: \(path)")
+            publishDiscoveredDevices()
+            return
+        }
+
+        serialFileDescriptor = fd
+        connectedSerialPath = path
+        if makeActive {
+            activeTransport = .usbSerial
+            activeDeviceID = deviceID
+        }
+        ensureDeviceSessionInternal(deviceID: deviceID).resetParserAndBuffers()
+
+        let source = DispatchSource.makeReadSource(fileDescriptor: fd, queue: midiQueue)
+        source.setEventHandler { [weak self] in
+            self?.readSerialAvailableBytes(deviceID: deviceID)
+        }
+        source.setCancelHandler {
+            close(fd)
+        }
+        serialReadSource = source
+        source.resume()
+
+        DispatchQueue.main.async {
+            if makeActive {
+                self.connectedPortName = path
+                self.isConnected = true
+                self.connectedTransportKind = "USB Serial"
+                self.connectedBoardType = self.boardTypeByDeviceID[deviceID] ?? "esp8266"
+                self.lastDetectedBoardType = self.connectedBoardType
+                self.deviceEmwaverVersion = nil
+                self.connectedHardwareUID = nil
+            }
+            self.lastErrorText = nil
+        }
+        publishDiscoveredDevices()
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            var version = self.queryDeviceVersion(timeoutMs: 1500, deviceID: deviceID)
+            if version == nil {
+                Thread.sleep(forTimeInterval: 0.25)
+                version = self.queryDeviceVersion(timeoutMs: 1500, deviceID: deviceID)
+            }
+            let uid = self.queryHardwareUID(timeoutMs: 1500, deviceID: deviceID)
+            let reportedBoardType = self.queryBoardType(timeoutMs: 1500, deviceID: deviceID)
+            let boardType = reportedBoardType ?? "esp8266"
+
+            self.midiQueue.async {
+                guard self.connectedSerialPath == path else { return }
+                if version == nil && uid == nil && reportedBoardType == nil {
+                    self.disconnectSerialOnlyInternal()
+                    if self.activeDeviceID == deviceID {
+                        self.activeTransport = .none
+                        self.activeDeviceID = nil
+                    }
+                    DispatchQueue.main.async {
+                        if self.connectedPortName == path {
+                            self.isConnected = false
+                            self.connectedPortName = nil
+                            self.deviceEmwaverVersion = nil
+                            self.connectedHardwareUID = nil
+                            self.connectedBoardType = nil
+                            self.connectedTransportKind = nil
+                        }
+                    }
+                    self.publishDiscoveredDevices()
+                    return
+                }
+                if let uid { self.hardwareUIDByDeviceID[deviceID] = uid }
+                self.boardTypeByDeviceID[deviceID] = boardType
+                DispatchQueue.main.async {
+                    if self.activeDeviceID == deviceID {
+                        self.deviceEmwaverVersion = version
+                        self.connectedHardwareUID = uid
+                        self.connectedBoardType = boardType
+                        self.lastDetectedBoardType = boardType
+                        self.isConnected = true
+                        self.connectedTransportKind = "USB Serial"
+                    }
+                }
+                self.publishDiscoveredDevices()
+            }
+        }
+    }
+
     private func disconnectInternal() {
         clearTransportSessionClaimsInternal(sendDisconnect: true)
         if connectedSource != 0 {
@@ -1834,6 +2016,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
         connectedSource = 0
         connectedDestination = 0
+        disconnectSerialOnlyInternal()
         activeTransport = .none
         activeDeviceID = nil
 
@@ -2046,6 +2229,14 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             return
         }
 
+        if targetID?.hasPrefix("serial:") == true || (targetID == nil && activeTransport == .usbSerial) {
+            guard writeSerialBytes(sysex) else {
+                setError("USB serial write failed")
+                return
+            }
+            return
+        }
+
         let st = sendSysex(sysex, to: connectedDestination)
         if st != noErr {
             setError("MIDISend failed: \(st)")
@@ -2188,6 +2379,122 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
         connectedSource = 0
         connectedDestination = 0
+    }
+
+    private func disconnectSerialOnlyInternal() {
+        let source = serialReadSource
+        serialReadSource = nil
+        serialFileDescriptor = -1
+        connectedSerialPath = nil
+        source?.setEventHandler {}
+        source?.cancel()
+    }
+
+    private func listSerialRuntimeCandidatesInternal() -> [String] {
+        let devURL = URL(fileURLWithPath: "/dev", isDirectory: true)
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: devURL.path) else {
+            return []
+        }
+        return names
+            .filter { $0.hasPrefix("cu.") }
+            .map { devURL.appendingPathComponent($0).path }
+            .filter { Self.isSupportedSerialRuntimePath($0) }
+            .sorted()
+    }
+
+    private static func isSupportedSerialRuntimePath(_ path: String) -> Bool {
+        let lowercased = path.lowercased()
+        return lowercased.contains("usbserial") ||
+            lowercased.contains("usbmodem") ||
+            lowercased.contains("slab_usbtouart") ||
+            lowercased.contains("wchusbserial")
+    }
+
+    private func configureSerialFileDescriptor(_ fd: Int32) -> Bool {
+        var options = termios()
+        guard tcgetattr(fd, &options) == 0 else { return false }
+        cfmakeraw(&options)
+        guard cfsetspeed(&options, speed_t(B115200)) == 0 else { return false }
+        options.c_cflag |= tcflag_t(CLOCAL | CREAD)
+        options.c_cflag &= ~tcflag_t(PARENB | CSTOPB | CSIZE)
+        options.c_cflag |= tcflag_t(CS8)
+        #if os(macOS)
+        options.c_cflag &= ~tcflag_t(CRTSCTS)
+        #endif
+        withUnsafeMutableBytes(of: &options.c_cc) { cc in
+            cc[Int(VMIN)] = 0
+            cc[Int(VTIME)] = 1
+        }
+        guard tcsetattr(fd, TCSANOW, &options) == 0 else { return false }
+        tcflush(fd, TCIOFLUSH)
+        return true
+    }
+
+    private func readSerialAvailableBytes(deviceID: String) {
+        let fd = serialFileDescriptor
+        guard fd >= 0 else { return }
+        var buffer = [UInt8](repeating: 0, count: 512)
+        let bufferCount = buffer.count
+        while serialFileDescriptor == fd {
+            let count = buffer.withUnsafeMutableBytes { rawBuffer in
+                Darwin.read(fd, rawBuffer.baseAddress, bufferCount)
+            }
+            if count > 0 {
+                handleMidiBytes(Data(buffer.prefix(count)), deviceID: deviceID)
+                continue
+            }
+            if count == 0 {
+                return
+            }
+            if errno == EAGAIN || errno == EWOULDBLOCK {
+                return
+            }
+            setError("USB serial read failed")
+            disconnectSerialOnlyInternal()
+            if activeDeviceID == deviceID {
+                activeTransport = .none
+                activeDeviceID = nil
+                DispatchQueue.main.async {
+                    self.isConnected = false
+                    self.connectedPortName = nil
+                    self.deviceEmwaverVersion = nil
+                    self.connectedHardwareUID = nil
+                    self.connectedBoardType = nil
+                    self.connectedTransportKind = nil
+                }
+            }
+            publishDiscoveredDevices()
+            return
+        }
+    }
+
+    private func writeSerialBytes(_ data: Data) -> Bool {
+        let fd = serialFileDescriptor
+        guard fd >= 0 else { return false }
+        var offset = 0
+        return data.withUnsafeBytes { rawBuffer in
+            guard let base = rawBuffer.baseAddress else { return false }
+            while offset < data.count {
+                let written = Darwin.write(
+                    fd,
+                    base.advanced(by: offset),
+                    data.count - offset
+                )
+                if written > 0 {
+                    offset += written
+                    continue
+                }
+                if written == 0 {
+                    return false
+                }
+                if errno == EAGAIN || errno == EWOULDBLOCK {
+                    usleep(1000)
+                    continue
+                }
+                return false
+            }
+            return true
+        }
     }
 
     private func connectBleInternal(_ peripheral: CBPeripheral, name: String?, makeActive: Bool = true) {
