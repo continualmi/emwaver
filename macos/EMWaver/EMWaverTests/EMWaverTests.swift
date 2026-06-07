@@ -190,7 +190,37 @@ struct EMWaverTests {
         #expect(LocalDeviceLabelFormatter.boardDisplayName("esp32") == "ESP32")
         #expect(LocalDeviceLabelFormatter.boardDisplayName(" ESP32-S2 ") == "ESP32-S2")
         #expect(LocalDeviceLabelFormatter.boardDisplayName("esp32s3") == "ESP32-S3")
+        #expect(LocalDeviceLabelFormatter.boardDisplayName("arduino") == "Arduino")
+        #expect(LocalDeviceLabelFormatter.boardDisplayName("arduino_avr") == "Arduino AVR")
+        #expect(LocalDeviceLabelFormatter.boardDisplayName("serial") == "USB Serial")
         #expect(LocalDeviceLabelFormatter.boardDisplayName(nil) == "Device")
+    }
+
+    @Test func macSerialBoardInferenceCoversEspArduinoAndGenericAdapters() {
+        #expect(MacUSBManager.inferSerialBoardType(path: "/dev/cu.usbserial-8266") == "esp8266")
+        #expect(MacUSBManager.inferSerialBoardType(path: "/dev/cu.SLAB_USBtoUART-ESP32S3") == "esp32s3")
+        #expect(MacUSBManager.inferSerialBoardType(path: "/dev/cu.ArduinoUno") == "arduino")
+        #expect(MacUSBManager.inferSerialBoardType(path: "/dev/cu.usbmodem1101") == "serial")
+        #expect(MacUSBManager.inferSerialBoardType(path: "/dev/cu.wchusbserial1420") == "serial")
+    }
+
+    @Test func macSerialRuntimeCandidateDetectionCoversCommonAdapters() {
+        #expect(MacUSBManager.isSupportedSerialRuntimePath("/dev/cu.usbmodem1101"))
+        #expect(MacUSBManager.isSupportedSerialRuntimePath("/dev/cu.usbserial-1420"))
+        #expect(MacUSBManager.isSupportedSerialRuntimePath("/dev/cu.SLAB_USBtoUART"))
+        #expect(MacUSBManager.isSupportedSerialRuntimePath("/dev/cu.wchusbserial1420"))
+        #expect(MacUSBManager.isSupportedSerialRuntimePath("/dev/cu.CH340"))
+        #expect(MacUSBManager.isSupportedSerialRuntimePath("/dev/cu.CP2102"))
+        #expect(!MacUSBManager.isSupportedSerialRuntimePath("/dev/cu.Bluetooth-Incoming-Port"))
+    }
+
+    @Test func macTransportSessionRequirementIsBoardAwareForSerialFamilies() {
+        #expect(MacUSBManager.boardTypeRequiresTransportSession("esp8266"))
+        #expect(MacUSBManager.boardTypeRequiresTransportSession("ESP32-S3"))
+        #expect(MacUSBManager.boardTypeRequiresTransportSession("arduino"))
+        #expect(MacUSBManager.boardTypeRequiresTransportSession("arduino_avr"))
+        #expect(!MacUSBManager.boardTypeRequiresTransportSession("serial"))
+        #expect(!MacUSBManager.boardTypeRequiresTransportSession("stm32f042"))
     }
 
     @MainActor

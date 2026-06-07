@@ -319,6 +319,13 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         let requiresSession: Bool
     }
 
+    private struct WiFiSetupSessionRequest {
+        let targetID: String
+        let source: UInt8?
+        let requiresSession: Bool
+        let alreadyClaimed: Bool
+    }
+
     private static let bleServiceUUID = CBUUID(string: "45C7158E-0C3B-4E90-A847-452A15B14191")
     private static let bleCommandUUID = CBUUID(string: "46C7158E-0C3B-4E90-A847-452A15B14191")
     private static let bleNotifyUUID = CBUUID(string: "47C7158E-0C3B-4E90-A847-452A15B14191")
@@ -472,7 +479,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         return false
     }
 
-    private func inferBoardType(portName: String?) -> String {
+    static func inferBoardType(portName: String?) -> String {
         let name = (portName ?? "").lowercased()
         if name.contains("esp8266") || name.contains("8266") {
             return "esp8266"
@@ -486,11 +493,66 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         if name.contains("esp32") || name.contains("emwaver esp") {
             return "esp32"
         }
+        if name.contains("arduino") ||
+            name.contains("genuino") ||
+            name.contains("uno") ||
+            name.contains("nano") ||
+            name.contains("mega") ||
+            name.contains("leonardo") ||
+            name.contains("micro") ||
+            name.contains("mkr") ||
+            name.contains("portenta") {
+            return "arduino"
+        }
         return "stm32f042"
     }
 
+    static func inferSerialBoardType(path: String?) -> String {
+        let name = (path ?? "").lowercased()
+        if name.contains("esp8266") || name.contains("8266") {
+            return "esp8266"
+        }
+        if name.contains("esp32-s2") || name.contains("esp32s2") {
+            return "esp32s2"
+        }
+        if name.contains("esp32-s3") || name.contains("esp32s3") {
+            return "esp32s3"
+        }
+        if name.contains("esp32") || name.contains("espressif") {
+            return "esp32"
+        }
+        if name.contains("arduino") ||
+            name.contains("genuino") ||
+            name.contains("uno") ||
+            name.contains("nano") ||
+            name.contains("mega") ||
+            name.contains("leonardo") ||
+            name.contains("micro") ||
+            name.contains("mkr") ||
+            name.contains("portenta") {
+            return "arduino"
+        }
+        return "serial"
+    }
+
+    static func boardTypeRequiresTransportSession(_ boardType: String?) -> Bool {
+        let normalized = (boardType ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalized == "esp" || normalized == "esp8266" || normalized == "esp8266ex" {
+            return true
+        }
+        if normalized.hasPrefix("esp32") {
+            return true
+        }
+        if normalized == "arduino" ||
+            normalized.hasPrefix("arduino-") ||
+            normalized.hasPrefix("arduino_") {
+            return true
+        }
+        return false
+    }
+
     private func inferBleBoardType(name: String?) -> String {
-        let inferred = inferBoardType(portName: name)
+        let inferred = Self.inferBoardType(portName: name)
         return inferred == "stm32f042" ? "esp32" : inferred
     }
 
@@ -674,14 +736,14 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         DispatchQueue.global(qos: .userInitiated).async {
             let canProvision = self.midiQueue.sync { self.activeTransportAllowsWiFiSetup() }
             guard canProvision else {
-                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board before provisioning Wi-Fi.", isError: true)
+                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP board before provisioning Wi-Fi.", isError: true)
                 return
             }
             let boardType = self.midiQueue.sync {
                 self.connectedBoardType ?? self.lastDetectedBoardType ?? ""
             }
             guard self.isWiFiProvisionableBoardType(boardType) else {
-                self.finishWiFiProvisioning(message: "Wi-Fi setup is available for Wi-Fi-capable ESP32 devices.", isError: true)
+                self.finishWiFiProvisioning(message: "Wi-Fi setup is available for Wi-Fi-capable ESP devices.", isError: true)
                 return
             }
 
@@ -696,31 +758,37 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 return
             }
 
-            guard self.sendWiFiConfigCommand([EmwOpcode.wifiConfig, EmwOpcode.wifiBegin]) else {
-                self.finishWiFiProvisioning(message: "Wi-Fi setup failed to start.", isError: true)
-                return
-            }
-
-            for (field, bytes, _) in fields where !bytes.isEmpty {
-                var offset = 0
-                while offset < bytes.count {
-                    let count = min(13, bytes.count - offset)
-                    var command = Data([EmwOpcode.wifiConfig, EmwOpcode.wifiField, field, UInt8(offset), UInt8(count)])
-                    command.append(contentsOf: bytes[offset..<(offset + count)])
-                    guard self.sendWiFiConfigCommand(command) else {
-                        self.finishWiFiProvisioning(message: "Wi-Fi setup failed while sending credentials.", isError: true)
-                        return
-                    }
-                    offset += count
+            guard self.withWiFiSetupTransportSession({ targetID in
+                guard self.sendWiFiConfigCommand([EmwOpcode.wifiConfig, EmwOpcode.wifiBegin], deviceID: targetID) else {
+                    self.finishWiFiProvisioning(message: "Wi-Fi setup failed to start.", isError: true)
+                    return false
                 }
-            }
 
-            guard self.sendWiFiConfigCommand([EmwOpcode.wifiConfig, EmwOpcode.wifiApply]) else {
-                self.finishWiFiProvisioning(message: "Wi-Fi setup was rejected by the device.", isError: true)
+                for (field, bytes, _) in fields where !bytes.isEmpty {
+                    var offset = 0
+                    while offset < bytes.count {
+                        let count = min(13, bytes.count - offset)
+                        var command = Data([EmwOpcode.wifiConfig, EmwOpcode.wifiField, field, UInt8(offset), UInt8(count)])
+                        command.append(contentsOf: bytes[offset..<(offset + count)])
+                        guard self.sendWiFiConfigCommand(command, deviceID: targetID) else {
+                            self.finishWiFiProvisioning(message: "Wi-Fi setup failed while sending credentials.", isError: true)
+                            return false
+                        }
+                        offset += count
+                    }
+                }
+
+                guard self.sendWiFiConfigCommand([EmwOpcode.wifiConfig, EmwOpcode.wifiApply], deviceID: targetID) else {
+                    self.finishWiFiProvisioning(message: "Wi-Fi setup was rejected by the device.", isError: true)
+                    return false
+                }
+
+                return true
+            }) else {
                 return
             }
 
-            self.finishWiFiProvisioning(message: "Wi-Fi setup sent. The ESP32 board will join the network and advertise itself with mDNS.", isError: false)
+            self.finishWiFiProvisioning(message: "Wi-Fi setup sent. The ESP board will join the network and advertise itself with mDNS.", isError: false)
         }
     }
 
@@ -734,21 +802,26 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         DispatchQueue.global(qos: .userInitiated).async {
             let canProvision = self.midiQueue.sync { self.activeTransportAllowsWiFiSetup() }
             guard canProvision else {
-                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board before clearing Wi-Fi setup.", isError: true)
+                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP board before clearing Wi-Fi setup.", isError: true)
                 return
             }
             let boardType = self.midiQueue.sync {
                 self.connectedBoardType ?? self.lastDetectedBoardType ?? ""
             }
             guard self.isWiFiProvisionableBoardType(boardType) else {
-                self.finishWiFiProvisioning(message: "Wi-Fi setup recovery is available for Wi-Fi-capable ESP32 devices.", isError: true)
+                self.finishWiFiProvisioning(message: "Wi-Fi setup recovery is available for Wi-Fi-capable ESP devices.", isError: true)
                 return
             }
-            guard self.sendWiFiConfigCommand([EmwOpcode.wifiConfig, EmwOpcode.wifiClear]) else {
-                self.finishWiFiProvisioning(message: "Wi-Fi setup clear was rejected by the device.", isError: true)
+            guard self.withWiFiSetupTransportSession({ targetID in
+                guard self.sendWiFiConfigCommand([EmwOpcode.wifiConfig, EmwOpcode.wifiClear], deviceID: targetID) else {
+                    self.finishWiFiProvisioning(message: "Wi-Fi setup clear was rejected by the device.", isError: true)
+                    return false
+                }
+                return true
+            }) else {
                 return
             }
-            self.finishWiFiProvisioning(message: "Wi-Fi setup cleared. Provision the ESP32 board again before using Wi-Fi control.", isError: false)
+            self.finishWiFiProvisioning(message: "Wi-Fi setup cleared. Provision the ESP board again before using Wi-Fi control.", isError: false)
         }
     }
 
@@ -762,17 +835,18 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         DispatchQueue.global(qos: .userInitiated).async {
             let canQuery = self.midiQueue.sync { self.activeTransportAllowsWiFiSetup() }
             guard canQuery else {
-                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board before checking Wi-Fi status.", isError: true)
+                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP board before checking Wi-Fi status.", isError: true)
                 return
             }
             let boardType = self.midiQueue.sync {
                 self.connectedBoardType ?? self.lastDetectedBoardType ?? ""
             }
             guard self.isWiFiProvisionableBoardType(boardType) else {
-                self.finishWiFiProvisioning(message: "Wi-Fi status is available for Wi-Fi-capable ESP32 devices.", isError: true)
+                self.finishWiFiProvisioning(message: "Wi-Fi status is available for Wi-Fi-capable ESP devices.", isError: true)
                 return
             }
-            guard let response = self.sendWiFiConfigRequest([EmwOpcode.wifiConfig, EmwOpcode.wifiStatus]),
+            guard let targetID = self.midiQueue.sync(execute: { self.activeDeviceID }),
+                  let response = self.sendWiFiConfigRequest([EmwOpcode.wifiConfig, EmwOpcode.wifiStatus], deviceID: targetID),
                   response.count >= 3,
                   response.first == 0x80 else {
                 self.finishWiFiProvisioning(message: "Wi-Fi status request was rejected by the device.", isError: true)
@@ -1037,22 +1111,111 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         sendWiFiConfigCommand(Data(bytes))
     }
 
+    private func sendWiFiConfigCommand(_ bytes: [UInt8], deviceID: String?) -> Bool {
+        sendWiFiConfigCommand(Data(bytes), deviceID: deviceID)
+    }
+
     private func sendWiFiConfigCommand(_ data: Data) -> Bool {
-        sendWiFiConfigRequest(data)?.first == 0x80
+        sendWiFiConfigCommand(data, deviceID: nil)
+    }
+
+    private func sendWiFiConfigCommand(_ data: Data, deviceID: String?) -> Bool {
+        sendWiFiConfigRequest(data, deviceID: deviceID)?.first == 0x80
     }
 
     private func sendWiFiConfigRequest(_ bytes: [UInt8]) -> Data? {
         sendWiFiConfigRequest(Data(bytes))
     }
 
+    private func sendWiFiConfigRequest(_ bytes: [UInt8], deviceID: String?) -> Data? {
+        sendWiFiConfigRequest(Data(bytes), deviceID: deviceID)
+    }
+
     private func sendWiFiConfigRequest(_ data: Data) -> Data? {
+        sendWiFiConfigRequest(data, deviceID: nil)
+    }
+
+    private func sendWiFiConfigRequest(_ data: Data, deviceID: String?) -> Data? {
         sendCommandInternal(
             data,
             timeout: 2000,
             responsePredicate: { lane in
                 lane.first == Self.responseOK || lane.first == Self.responseErr
-            }
+            },
+            deviceID: deviceID
         )
+    }
+
+    private func withWiFiSetupTransportSession(_ operation: (String) -> Bool) -> Bool {
+        let request = midiQueue.sync {
+            self.prepareWiFiSetupTransportSessionInternal()
+        }
+        guard let request else { return false }
+        guard request.requiresSession else {
+            return operation(request.targetID)
+        }
+        guard let source = request.source else {
+            finishWiFiProvisioning(message: "Wi-Fi setup is not available on the selected transport.", isError: true)
+            return false
+        }
+
+        if !request.alreadyClaimed {
+            guard sendTransportSessionCommandInternal(
+                subcommand: EmwOpcode.transportSessionConnect,
+                source: source,
+                deviceID: request.targetID,
+                timeoutMs: 1500,
+                reportErrors: false
+            ) else {
+                finishWiFiProvisioning(message: "The ESP board did not accept the local transport session.", isError: true)
+                return false
+            }
+        }
+
+        defer {
+            if !request.alreadyClaimed,
+               isTransportConnectedInternal(deviceID: request.targetID) {
+                _ = sendTransportSessionCommandInternal(
+                    subcommand: EmwOpcode.transportSessionDisconnect,
+                    source: source,
+                    deviceID: request.targetID,
+                    timeoutMs: 1000,
+                    reportErrors: false
+                )
+            }
+        }
+
+        return operation(request.targetID)
+    }
+
+    private func prepareWiFiSetupTransportSessionInternal() -> WiFiSetupSessionRequest? {
+        guard let targetID = activeDeviceID else {
+            setError("Cannot configure Wi-Fi: No selected device")
+            finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP board before configuring Wi-Fi.", isError: true)
+            return nil
+        }
+        guard isTransportConnectedInternal(deviceID: targetID) else {
+            setError("Cannot configure Wi-Fi: Selected device is not connected")
+            finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP board before configuring Wi-Fi.", isError: true)
+            return nil
+        }
+        guard requiresTransportSessionInternal(deviceID: targetID) else {
+            return WiFiSetupSessionRequest(targetID: targetID, source: nil, requiresSession: false, alreadyClaimed: false)
+        }
+        guard let source = transportSessionSource(for: targetID) else {
+            setError("Cannot configure Wi-Fi: Unsupported transport")
+            finishWiFiProvisioning(message: "Wi-Fi setup is not available on the selected transport.", isError: true)
+            return nil
+        }
+        if let claim = transportSessionClaimsByDeviceID[targetID] {
+            guard claim.source == source else {
+                setError("Device is busy with another transport session")
+                finishWiFiProvisioning(message: "The ESP board is busy with another transport session.", isError: true)
+                return nil
+            }
+            return WiFiSetupSessionRequest(targetID: targetID, source: source, requiresSession: true, alreadyClaimed: true)
+        }
+        return WiFiSetupSessionRequest(targetID: targetID, source: source, requiresSession: true, alreadyClaimed: false)
     }
 
     private func prepareBeginScriptTransportSessionInternal(deviceID: String?) -> TransportSessionBeginRequest? {
@@ -1214,12 +1377,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func requiresTransportSessionInternal(deviceID: String) -> Bool {
-        if deviceID.hasPrefix("serial:") || deviceID.hasPrefix("ble:") || deviceID.hasPrefix("wifi:") {
+        if deviceID.hasPrefix("ble:") || deviceID.hasPrefix("wifi:") {
             return true
         }
-        return boardTypeForDeviceIDInternal(deviceID)?
-            .lowercased()
-            .hasPrefix("esp32") == true
+        return Self.boardTypeRequiresTransportSession(boardTypeForDeviceIDInternal(deviceID))
     }
 
     private func boardTypeForDeviceIDInternal(_ deviceID: String) -> String? {
@@ -1238,10 +1399,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             return "esp32"
         }
         if targetID.hasPrefix("midi:") {
-            return displayNameFromDeviceID(targetID).map { inferBoardType(portName: $0) }
+            return displayNameFromDeviceID(targetID).map { Self.inferBoardType(portName: $0) }
         }
         if targetID.hasPrefix("serial:") {
-            return boardTypeByDeviceID[targetID] ?? "esp8266"
+            return boardTypeByDeviceID[targetID] ?? Self.inferSerialBoardType(path: serialPathFromDeviceID(targetID))
         }
         return nil
     }
@@ -1466,7 +1627,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 id: id,
                 displayName: port,
                 transport: .usbMidi,
-                boardType: boardTypeByDeviceID[id] ?? inferBoardType(portName: port),
+                boardType: boardTypeByDeviceID[id] ?? Self.inferBoardType(portName: port),
                 moduleLabel: nil,
                 identifierText: hardwareUIDByDeviceID[id].map { "UID \($0)" },
                 connectionState: isActive ? .connected : .discovered,
@@ -1483,7 +1644,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 id: id,
                 displayName: URL(fileURLWithPath: path).lastPathComponent,
                 transport: .usbSerial,
-                boardType: boardTypeByDeviceID[id] ?? "esp8266",
+                boardType: boardTypeByDeviceID[id] ?? Self.inferSerialBoardType(path: path),
                 moduleLabel: path,
                 identifierText: hardwareUID.map { "UID \($0)" },
                 connectionState: isActive ? .connected : .discovered,
@@ -1891,7 +2052,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             }
             let uid = self.queryHardwareUID(timeoutMs: 1500, deviceID: deviceID)
             let reportedBoardType = self.queryBoardType(timeoutMs: 1500, deviceID: deviceID)
-            let boardType = reportedBoardType ?? self.inferBoardType(portName: displayName ?? candidate.name)
+            let boardType = reportedBoardType ?? Self.inferBoardType(portName: displayName ?? candidate.name)
 
             DispatchQueue.main.async {
                 self.deviceEmwaverVersion = v
@@ -1909,7 +2070,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
     private func connectSerialInternal(path: String, makeActive: Bool) {
         let deviceID = "serial:\(path)"
-        boardTypeByDeviceID[deviceID] = boardTypeByDeviceID[deviceID] ?? "esp8266"
+        boardTypeByDeviceID[deviceID] = boardTypeByDeviceID[deviceID] ?? Self.inferSerialBoardType(path: path)
         guard canActivateTransportInternal(deviceID) else {
             return
         }
@@ -1952,7 +2113,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 self.connectedPortName = path
                 self.isConnected = true
                 self.connectedTransportKind = "USB Serial"
-                self.connectedBoardType = self.boardTypeByDeviceID[deviceID] ?? "esp8266"
+                self.connectedBoardType = self.boardTypeByDeviceID[deviceID] ?? Self.inferSerialBoardType(path: path)
                 self.lastDetectedBoardType = self.connectedBoardType
                 self.deviceEmwaverVersion = nil
                 self.connectedHardwareUID = nil
@@ -1969,7 +2130,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             }
             let uid = self.queryHardwareUID(timeoutMs: 1500, deviceID: deviceID)
             let reportedBoardType = self.queryBoardType(timeoutMs: 1500, deviceID: deviceID)
-            let boardType = reportedBoardType ?? "esp8266"
+            let boardType = reportedBoardType ?? self.boardTypeByDeviceID[deviceID] ?? Self.inferSerialBoardType(path: path)
 
             self.midiQueue.async {
                 guard self.connectedSerialPath == path else { return }
@@ -2402,12 +2563,17 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             .sorted()
     }
 
-    private static func isSupportedSerialRuntimePath(_ path: String) -> Bool {
+    static func isSupportedSerialRuntimePath(_ path: String) -> Bool {
         let lowercased = path.lowercased()
         return lowercased.contains("usbserial") ||
             lowercased.contains("usbmodem") ||
             lowercased.contains("slab_usbtouart") ||
-            lowercased.contains("wchusbserial")
+            lowercased.contains("wchusbserial") ||
+            lowercased.contains("ch340") ||
+            lowercased.contains("ch341") ||
+            lowercased.contains("ch343") ||
+            lowercased.contains("ch910") ||
+            lowercased.contains("cp210")
     }
 
     private func configureSerialFileDescriptor(_ fd: Int32) -> Bool {

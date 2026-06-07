@@ -188,6 +188,7 @@ Use the local README first when working in a folder:
 - `.agents/skills/archive/` — archived skills for removed workflows
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
 - `esp/README.md` — ESP32 firmware workspace, transport/runtime direction, and internal build notes
+- `arduino/README.md` — Arduino-compatible USB Serial firmware targets and Arduino CLI build/upload notes
 - `../society/README.md` — Continual MI static site; EMWaver public pages live under `/emwaver`
 - `hardware/README.md` — imported hardware design monorepo index and policy
 - `windows/README.md` — Windows app pages/services/runtime map
@@ -240,6 +241,7 @@ components (`Picker`, `Button`, `Card`, `Tile`, `Grid`, `Scroll`,
 - `apple/` — shared Swift package (cross-platform Apple modules).
 - `stm/` — STM32 firmware and firmware-related tooling.
 - `esp/` — ESP32 firmware workspace for autonomous and multi-transport board targets.
+- `arduino/` — Arduino-compatible USB Serial firmware sketches for non-ESP Arduino boards.
 - `firmware/` — bundled firmware payloads consumed by apps (per-board binaries).
 - `crates/` — Rust crates (`emwaver-dfu`, `emwaver-dfu-helper`) for firmware flashing.
 - `simulator/` — shared device simulator fixtures and protocol adapters for cross-platform testing.

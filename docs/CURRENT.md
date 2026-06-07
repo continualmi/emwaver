@@ -35,7 +35,7 @@ Mobile is the primary product surface. Desktop apps remain important for develop
 - USB is first-class for direct board control.
 - BLE supports cable-free mobile sessions where supported by the board.
 - Wi-Fi supports LAN/VPN-style network control for boards designed around it.
-- STM32 and ESP32-family firmware targets are both part of the platform direction.
+- STM32, ESP32-family, and Arduino-compatible firmware targets are part of the platform direction.
 - Hardware designs live under `hardware/` and are indexed by `hardware/README.md`.
 
 ## Architecture Boundaries
@@ -54,6 +54,7 @@ emwaver/
 ├── apple/            Shared Swift package used by iOS and macOS
 ├── stm/              STM32 firmware workspace
 ├── esp/              ESP32 firmware workspace
+├── arduino/          Arduino-compatible USB Serial firmware sketches
 ├── firmware/         Bundled firmware payloads per board
 ├── hardware/         Open hardware designs
 ├── assets/           Default scripts and shared JS libraries
