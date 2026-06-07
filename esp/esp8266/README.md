@@ -4,20 +4,20 @@ This workspace is the official-SDK ESP8266 port of EMWaver firmware.
 
 ESP8266 is intentionally kept as a separate subworkspace under `esp/` because
 it is not a target in modern ESP-IDF. It builds with Espressif's
-`ESP8266_RTOS_SDK` v3.4 and exposes a Wi-Fi-only EMWaver board class:
+`ESP8266_RTOS_SDK` v3.4 and exposes an EMWaver board class with Wi-Fi plus a USB-serial adapter path:
 
 - `board=esp8266`
 - `cap=wifi,serial`
 - WebSocket runtime on port `3922`, path `/v1/ws`
 - `_emwaver._tcp` mDNS advertisement when station mode is online
 - the same 48-byte EMWaver SysEx/superframe payload used by ESP32 Wi-Fi
-- a limited USB-serial setup/recovery transport on UART0 at 115200 baud
+- a USB-serial EMWaver transport on UART0 at 115200 baud for local setup, recovery, and direct runtime commands
 
-This target is for low-cost Wi-Fi control after setup. The serial path exists
-because most ESP8266 dev boards expose a USB-serial adapter and Wi-Fi
-credentials need a local setup/recovery path. It is not a native USB device
-runtime and it has no BLE fallback, so it is not a direct parity target for
-ESP32-S3.
+This target is for low-cost Wi-Fi control after setup, while still allowing
+local USB-serial control when the board is cabled to a desktop. The serial path
+exists because most ESP8266 dev boards expose a USB-serial adapter. It is not a
+native USB device and it has no BLE fallback, so it is not a direct parity target
+for ESP32-S3.
 
 ## Internal Developer Setup
 
@@ -53,17 +53,14 @@ like `COM7`; on Linux it will usually look like `/dev/ttyUSB0`.
 
 Preferred setup uses the USB-serial bridge exposed by common ESP8266 dev boards.
 Open the serial port at 115200 baud and send normal fixed 48-byte EMWaver SysEx
-packets. The serial setup surface supports:
+packets. The serial surface supports:
 
 - version, reset, help
 - hardware UID and board type
 - device name get/set
 - Wi-Fi provision/clear/status
 - transport session status/connect/disconnect/heartbeat
-
-GPIO, ADC, SPI, PWM, sample, and transmit opcodes return
-`EMW_RESP_STATUS_ERR` over serial. Runtime hardware control is Wi-Fi-only for
-this port.
+- GPIO, ADC, SPI, PWM, sample, and transmit runtime commands
 
 As a fallback, when no saved Wi-Fi credentials exist, the firmware also starts a
 local SoftAP named `EMWaver-8266-XXXX`. Connect to that network and open the

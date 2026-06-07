@@ -57,7 +57,7 @@ Responsibilities:
 Transport behavior:
 - `MacUSBManager.swift` currently coordinates CoreMIDI USB, USB Serial, CoreBluetooth BLE, and the app-facing `ScriptDevice` routing surface.
 - `MacWiFiManager.swift` owns the first ESP32 Wi-Fi transport slice: local mDNS discovery, manual LAN/VPN hosts, WebSocket connection, binary packet send/receive, and disconnect handling.
-- USB MIDI remains the preferred wired path when present; ESP8266 boards use USB Serial as their wired runtime path.
+- USB MIDI remains the preferred wired path when present. USB Serial is a first-class wired runtime path for board families whose firmware exposes the EMWaver 48-byte SysEx/superframe protocol over a serial adapter, including ESP8266 today and future Arduino-class targets.
 - The device sheet now exposes a unified local device list for discovered USB MIDI, USB Serial, ESP32-S3 BLE candidates, and discovered Wi-Fi devices, so multi-board bench work can start with explicit user selection.
 - USB Serial and Wi-Fi devices use the same EMWaver SysEx/superframe payload as USB MIDI and BLE once connected. The Wi-Fi edge is a WebSocket transport adapter, not a separate hardware-control protocol.
 - macOS sends and receives the existing 48-byte EMWaver SysEx payload directly over the WebSocket. There is no Wi-Fi-specific envelope or sequence layer.
@@ -90,7 +90,7 @@ Transport behavior:
 - BLE scanning may continue while a device is connected so additional ESP32-S3 boards can be discovered for the multi-device bench path.
 - The first multi-device implementation can keep multiple ESP32-S3 BLE peripherals connected and lets the user select the active board for the in-app runtime.
 - The app queries `EMW_OP_HARDWARE_UID_GET` after USB MIDI/USB Serial/BLE connection, refreshes connected USB/BLE/serial UID checks during the regular 5-second connection poll, and uses that local hardware UID to merge the same physical device across transports when known. Wi-Fi uses fresh UID probe responses every 5 seconds as its live connection metric, not a cached UID. This UID is only for local labels/diagnostics/device-list deduplication.
-- BLE and USB Serial carry the same EMWaver SysEx/superframe payload as USB MIDI; opcodes and command behavior must stay shared in firmware and scripts.
+- BLE and USB Serial carry the same EMWaver SysEx/superframe payload as USB MIDI; opcodes and command behavior must stay shared in firmware and scripts. Serial board identity is determined by the board metadata command when available, with filename-based ESP/Arduino/generic labels only used before probing completes.
 
 Runtime boundary:
 - The macOS app is self-contained and owns its native script UI, local transport managers, MCP bridge surface, and firmware/update flows.

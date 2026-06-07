@@ -338,7 +338,7 @@ struct DeviceConnectionSheet: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Wi-Fi Setup")
                     .font(.subheadline.weight(.semibold))
-                Text("Provision this ESP32 for local network control.")
+                Text("Provision this ESP board for local network control.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -360,9 +360,9 @@ struct DeviceConnectionSheet: View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("ESP32 Wi-Fi Setup", systemImage: "wifi")
+                    Label("ESP Wi-Fi Setup", systemImage: "wifi")
                         .font(.headline)
-                    Text("Send network credentials over the current device connection. The ESP32 will choose its own local hostname.")
+                    Text("Send network credentials over the current device connection. The ESP board will choose its own local hostname.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
