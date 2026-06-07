@@ -38,6 +38,10 @@
 #include "nvs_flash.h"
 #include "sdkconfig.h"
 
+#ifndef ESP_ERR_NVS_NEW_VERSION_FOUND
+#define ESP_ERR_NVS_NEW_VERSION_FOUND ESP_ERR_NVS_NO_FREE_PAGES
+#endif
+
 #ifndef CONFIG_EMWAVER_ESP8266_AP_PASSWORD
 #define CONFIG_EMWAVER_ESP8266_AP_PASSWORD ""
 #endif
@@ -587,7 +591,7 @@ static void handle_name_set(const command_t *cmd)
         memcpy(name, &cmd->data[2], len);
     }
 
-    nvs_handle_t nvs = 0;
+    nvs_handle nvs = 0;
     esp_err_t err = nvs_open(DEVICE_NAME_NAMESPACE, NVS_READWRITE, &nvs);
     if (err != ESP_OK) {
         send_binary_err();
@@ -1155,7 +1159,7 @@ static void websocket_server_task(void *arg)
         ESP_LOGI(TAG, "WebSocket listening on %d%s", WIFI_CONTROL_PORT, WIFI_WS_PATH);
 
         while (s_listen_sock >= 0) {
-            struct sockaddr_in6 source_addr;
+            struct sockaddr_in source_addr;
             uint addr_len = sizeof(source_addr);
             int sock = accept(listen_sock, (struct sockaddr *)&source_addr, &addr_len);
             if (sock < 0) {
@@ -1384,7 +1388,7 @@ static bool load_wifi_config(wifi_config_store_t *out)
         return false;
     }
     memset(out, 0, sizeof(*out));
-    nvs_handle_t nvs = 0;
+    nvs_handle nvs = 0;
     if (nvs_open(WIFI_NAMESPACE, NVS_READONLY, &nvs) != ESP_OK) {
         return false;
     }
@@ -1405,7 +1409,7 @@ static bool load_wifi_config(wifi_config_store_t *out)
 
 static esp_err_t save_wifi_config(const wifi_config_store_t *config)
 {
-    nvs_handle_t nvs = 0;
+    nvs_handle nvs = 0;
     esp_err_t err = nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &nvs);
     if (err != ESP_OK) {
         return err;
@@ -1426,7 +1430,7 @@ static esp_err_t save_wifi_config(const wifi_config_store_t *config)
 
 static esp_err_t clear_wifi_config(void)
 {
-    nvs_handle_t nvs = 0;
+    nvs_handle nvs = 0;
     esp_err_t err = nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &nvs);
     if (err == ESP_OK) {
         (void)nvs_erase_all(nvs);
@@ -1693,7 +1697,7 @@ static void load_device_name(char *out, size_t out_len)
     if (!out || out_len == 0u) {
         return;
     }
-    nvs_handle_t nvs = 0;
+    nvs_handle nvs = 0;
     if (nvs_open(DEVICE_NAME_NAMESPACE, NVS_READONLY, &nvs) != ESP_OK) {
         get_default_device_name(out, out_len);
         return;
