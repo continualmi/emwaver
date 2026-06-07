@@ -19,7 +19,6 @@
 #include "driver/gpio.h"
 #include "driver/i2c.h"
 #include "driver/ledc.h"
-#include "driver/spi.h"
 #include "driver/uart.h"
 #include "esp_event.h"
 #include "esp_log.h"
@@ -37,6 +36,7 @@
 #include "mdns.h"
 #include "nvs.h"
 #include "nvs_flash.h"
+#include "rom/ets_sys.h"
 #include "sdkconfig.h"
 
 #ifndef ESP_ERR_NVS_NEW_VERSION_FOUND
@@ -294,6 +294,7 @@ static bool i2c_read_from(uint8_t addr, uint8_t *rx, uint8_t rx_len, uint32_t ti
 static bool i2c_write_read(uint8_t addr, const uint8_t *tx, uint8_t tx_len, uint8_t *rx, uint8_t rx_len, uint32_t timeout_ms);
 static bool pwm_apply_output(gpio_num_t gpio, uint16_t duty_u12, uint32_t hz);
 static bool spi_transfer_once(gpio_num_t cs_gpio, const uint8_t *tx, uint8_t tx_len, uint8_t rx_len, uint8_t *rx);
+static uint8_t spi_shift_byte(uint8_t out);
 static void transport_expire_stale_claim(void);
 static bool transport_session_allows_command(const command_t *cmd);
 static bool transport_session_connect(uint8_t source);
@@ -1304,53 +1305,47 @@ static bool spi_transfer_once(gpio_num_t cs_gpio, const uint8_t *tx, uint8_t tx_
     }
 
     if (!s_spi_initialized) {
-        spi_config_t config = {
-            .interface.val = SPI_DEFAULT_INTERFACE,
-            .intr_enable.val = 0,
-            .event_cb = NULL,
-            .mode = SPI_MASTER_MODE,
-            .clk_div = SPI_8MHz_DIV,
-        };
-        config.interface.cs_en = 0;
-        if (spi_init(HSPI_HOST, &config) != ESP_OK) {
-            return false;
-        }
+        (void)gpio_set_direction((gpio_num_t)CONFIG_EMWAVER_ESP8266_SPI_MISO_GPIO, GPIO_MODE_INPUT);
+        (void)gpio_set_direction((gpio_num_t)CONFIG_EMWAVER_ESP8266_SPI_MOSI_GPIO, GPIO_MODE_OUTPUT);
+        (void)gpio_set_direction((gpio_num_t)CONFIG_EMWAVER_ESP8266_SPI_SCK_GPIO, GPIO_MODE_OUTPUT);
+        (void)gpio_set_level((gpio_num_t)CONFIG_EMWAVER_ESP8266_SPI_MOSI_GPIO, 0);
+        (void)gpio_set_level((gpio_num_t)CONFIG_EMWAVER_ESP8266_SPI_SCK_GPIO, 0);
         s_spi_initialized = true;
-    }
-
-    uint32_t mosi_words[5] = {0};
-    uint32_t miso_words[5] = {0};
-    uint8_t *mosi_bytes = (uint8_t *)mosi_words;
-    uint8_t *miso_bytes = (uint8_t *)miso_words;
-    for (uint8_t i = 0; i < total_len; ++i) {
-        mosi_bytes[i] = (tx && i < tx_len) ? tx[i] : 0u;
     }
 
     (void)gpio_set_direction(cs_gpio, GPIO_MODE_OUTPUT);
     (void)gpio_set_level(cs_gpio, 1);
-    spi_trans_t trans = {
-        .cmd = NULL,
-        .addr = NULL,
-        .mosi = mosi_words,
-        .miso = miso_words,
-        .bits = {
-            .cmd = 0,
-            .addr = 0,
-            .mosi = (uint32_t)total_len * 8u,
-            .miso = (uint32_t)total_len * 8u,
-        },
-    };
 
     (void)gpio_set_level(cs_gpio, 0);
-    esp_err_t err = spi_trans(HSPI_HOST, &trans);
+    ets_delay_us(2);
+    for (uint8_t i = 0; i < total_len; ++i) {
+        uint8_t out = (tx && i < tx_len) ? tx[i] : 0u;
+        uint8_t in = spi_shift_byte(out);
+        if (rx && i < rx_len) {
+            rx[i] = in;
+        }
+    }
     (void)gpio_set_level(cs_gpio, 1);
-    if (err != ESP_OK) {
-        return false;
-    }
-    if (rx && rx_len > 0u) {
-        memcpy(rx, miso_bytes, rx_len);
-    }
     return true;
+}
+
+static uint8_t spi_shift_byte(uint8_t out)
+{
+    uint8_t in = 0;
+    const gpio_num_t miso = (gpio_num_t)CONFIG_EMWAVER_ESP8266_SPI_MISO_GPIO;
+    const gpio_num_t mosi = (gpio_num_t)CONFIG_EMWAVER_ESP8266_SPI_MOSI_GPIO;
+    const gpio_num_t sck = (gpio_num_t)CONFIG_EMWAVER_ESP8266_SPI_SCK_GPIO;
+
+    for (int bit = 7; bit >= 0; --bit) {
+        (void)gpio_set_level(mosi, (out >> bit) & 0x01u);
+        ets_delay_us(1);
+        (void)gpio_set_level(sck, 1);
+        ets_delay_us(1);
+        in = (uint8_t)((in << 1) | (gpio_get_level(miso) ? 1u : 0u));
+        (void)gpio_set_level(sck, 0);
+        ets_delay_us(1);
+    }
+    return in;
 }
 
 static void send_binary_ok(const uint8_t *payload, size_t len)

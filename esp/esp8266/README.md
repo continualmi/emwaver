@@ -98,7 +98,10 @@ Wi-Fi runtime subset that maps cleanly to ESP8266 hardware:
 - I2C open/close/write/read/xfer on the configured software I2C pins, defaulting
   to GPIO4 SDA and GPIO5 SCL
 - PWM write/frequency/stop through LEDC on one active channel
-- SPI transfer through HSPI with caller-selected CS pin
+- SPI transfer on the HSPI pin set with caller-selected CS pin. The runtime
+  drives this as software SPI because the ESP8266 RTOS SDK SPI master API is
+  half-duplex, while CC1101-style register reads need byte-for-byte MOSI/MISO
+  shifting during the same CS assertion.
 
 Unsupported or intentionally constrained operations return `EMW_RESP_STATUS_ERR`.
 Sampling and retransmit streaming are not enabled in this low-cost ESP8266 port
