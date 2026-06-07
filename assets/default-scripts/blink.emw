@@ -6,6 +6,7 @@ import { pin, gpio } from "emw-gpio";
 
 function normalizeBoardType(value) {
   var board = String(value || "").trim().toLowerCase();
+  if (board === "esp8266" || board === "esp8266ex") return "esp8266";
   if (board === "esp32s2") return "esp32s2";
   if (board === "esp32s3") return "esp32s3";
   return "stm32f042";
@@ -38,6 +39,22 @@ function buildEspPins() {
   return out;
 }
 
+function buildEsp8266Pins() {
+  return [
+    { label: "GPIO2 (built-in LED on many boards)", value: "2" },
+    { label: "GPIO0", value: "0" },
+    { label: "GPIO1 (UART0 TX)", value: "1" },
+    { label: "GPIO3 (UART0 RX)", value: "3" },
+    { label: "GPIO4 (I2C SDA default)", value: "4" },
+    { label: "GPIO5 (I2C SCL default)", value: "5" },
+    { label: "GPIO12 (HSPI MISO)", value: "12" },
+    { label: "GPIO13 (HSPI MOSI)", value: "13" },
+    { label: "GPIO14 (HSPI SCK)", value: "14" },
+    { label: "GPIO15", value: "15" },
+    { label: "GPIO16", value: "16" },
+  ];
+}
+
 function firstEnabledPin(options) {
   for (var i = 0; i < options.length; i += 1) {
     if (!options[i].disabled) return String(options[i].value);
@@ -46,6 +63,7 @@ function firstEnabledPin(options) {
 }
 
 const PINS_BY_BOARD = {
+  esp8266: buildEsp8266Pins(),
   stm32f042: [
     { label: "GDO0 (A2)", value: 2 },
     { label: "GDO2 (A3)", value: 3 },
@@ -76,7 +94,7 @@ function boardPins() {
 
 function selectedTarget() {
   var value = Number(selectedPin);
-  if (boardType === "esp32s2" || boardType === "esp32s3") {
+  if (boardType === "esp8266" || boardType === "esp32s2" || boardType === "esp32s3") {
     return pin({ gpio: value });
   }
   return value >= 16
@@ -132,7 +150,7 @@ function App() {
     <Column padding={16} spacing={14}>
       <Text font="title2" fontWeight="semibold">Blink</Text>
       <Text font="caption">
-        {boardType === "esp32s2" ? "Detected MCU: ESP32-S2" : boardType === "esp32s3" ? "Detected MCU: ESP32-S3" : "Detected MCU: STM32F042"}
+        {boardType === "esp8266" ? "Detected MCU: ESP8266" : boardType === "esp32s2" ? "Detected MCU: ESP32-S2" : boardType === "esp32s3" ? "Detected MCU: ESP32-S3" : "Detected MCU: STM32F042"}
       </Text>
       <Picker
         id="blink.pin"

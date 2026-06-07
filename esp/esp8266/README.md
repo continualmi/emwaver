@@ -60,7 +60,7 @@ packets. The serial surface supports:
 - device name get/set
 - Wi-Fi provision/clear/status
 - transport session status/connect/disconnect/heartbeat
-- GPIO, ADC, SPI, PWM, sample, and transmit runtime commands
+- GPIO, ADC, UART, I2C, SPI, and PWM runtime commands
 
 As a fallback, when no saved Wi-Fi credentials exist, the firmware also starts a
 local SoftAP named `EMWaver-8266-XXXX`. Connect to that network and open the
@@ -92,8 +92,16 @@ Wi-Fi runtime subset that maps cleanly to ESP8266 hardware:
 - transport session claim/status/heartbeat/disconnect
 - GPIO input/output/read/high/low/pull/info on GPIO 0-5 and 12-16
 - ADC reads from the single TOUT/A0 channel
+- UART open/close/write/read command surface through UART1 TX. Reads return an
+  empty payload on ESP8266 because UART0 is reserved for the USB-serial EMWaver
+  control transport and UART1 has no RX pin.
+- I2C open/close/write/read/xfer on the configured software I2C pins, defaulting
+  to GPIO4 SDA and GPIO5 SCL
 - PWM write/frequency/stop through LEDC on one active channel
 - SPI transfer through HSPI with caller-selected CS pin
 
 Unsupported or intentionally constrained operations return `EMW_RESP_STATUS_ERR`.
-ESP8266 GPIO 6-11 are flash pins and are rejected for normal runtime control.
+Sampling and retransmit streaming are not enabled in this low-cost ESP8266 port
+yet because they require the shared second-lane stream/circular-buffer transport
+work used by ESP32 USB/BLE/Wi-Fi. ESP8266 GPIO 6-11 are flash pins and are
+rejected for normal runtime control.

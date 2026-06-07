@@ -17,6 +17,7 @@
 
 #include "driver/adc.h"
 #include "driver/gpio.h"
+#include "driver/i2c.h"
 #include "driver/ledc.h"
 #include "driver/spi.h"
 #include "driver/uart.h"
@@ -62,10 +63,18 @@
 #define CONFIG_EMWAVER_ESP8266_SPI_SCK_GPIO 14
 #endif
 
+#ifndef CONFIG_EMWAVER_ESP8266_I2C_SDA_GPIO
+#define CONFIG_EMWAVER_ESP8266_I2C_SDA_GPIO 4
+#endif
+
+#ifndef CONFIG_EMWAVER_ESP8266_I2C_SCL_GPIO
+#define CONFIG_EMWAVER_ESP8266_I2C_SCL_GPIO 5
+#endif
+
 #define EMWAVER_FIRMWARE_VERSION_MAJOR 1u
 #define EMWAVER_FIRMWARE_VERSION_MINOR 0u
-#define EMWAVER_FIRMWARE_VERSION_PATCH 2u
-#define EMWAVER_FIRMWARE_VERSION_STRING "1.0.2"
+#define EMWAVER_FIRMWARE_VERSION_PATCH 3u
+#define EMWAVER_FIRMWARE_VERSION_STRING "1.0.3"
 
 #define EMW_TARGET_BOARD_TYPE "esp8266"
 #define EMW_TARGET_CAPABILITIES "wifi,serial"
@@ -110,6 +119,19 @@
 #define EMW_ADC_SRC_TEMP 0x01u
 #define EMW_ADC_SRC_VREFINT 0x02u
 #define EMW_ADC_SRC_VBAT 0x03u
+
+#define EMW_OP_UART 0x30u
+#define EMW_UART_OPEN 0x00u
+#define EMW_UART_CLOSE 0x01u
+#define EMW_UART_WRITE 0x02u
+#define EMW_UART_READ 0x03u
+
+#define EMW_OP_I2C 0x40u
+#define EMW_I2C_OPEN 0x00u
+#define EMW_I2C_CLOSE 0x01u
+#define EMW_I2C_WRITE 0x02u
+#define EMW_I2C_READ 0x03u
+#define EMW_I2C_XFER 0x04u
 
 #define EMW_OP_SPI_XFER 0x50u
 
@@ -206,6 +228,10 @@ static int s_pwm_active_pin = -1;
 static bool s_pwm_configured;
 static bool s_adc_initialized;
 static bool s_spi_initialized;
+static bool s_i2c_initialized;
+static uint32_t s_i2c_hz = 100000u;
+static bool s_uart1_initialized;
+static uint32_t s_uart1_baud = 115200u;
 
 static void command_task(void *arg);
 static void serial_transport_task(void *arg);
@@ -248,13 +274,24 @@ static void load_device_name(char *out, size_t out_len);
 static void get_default_device_name(char *out, size_t out_len);
 static void handle_gpio_opcode(const command_t *cmd);
 static void handle_adc_opcode(const command_t *cmd);
+static void handle_uart_opcode(const command_t *cmd);
+static void handle_i2c_opcode(const command_t *cmd);
 static void handle_pwm_opcode(const command_t *cmd);
 static void handle_spi_opcode(const command_t *cmd);
 static void handle_sample_opcode(const command_t *cmd);
 static void handle_transmit_opcode(const command_t *cmd);
 static bool serial_allows_opcode(const command_t *cmd);
 static bool validate_gpio_pin(uint8_t pin, gpio_num_t *out_gpio);
+static uint16_t read_u16_le(const uint8_t *p);
+static uint32_t read_u32_le(const uint8_t *p);
 static bool adc_read_tout_average(uint8_t samples, uint16_t *out);
+static bool uart1_ensure(uint32_t baud);
+static void uart1_close(void);
+static bool i2c_ensure(uint32_t hz);
+static void i2c_close(void);
+static bool i2c_write_to(uint8_t addr, const uint8_t *tx, uint8_t tx_len, uint32_t timeout_ms);
+static bool i2c_read_from(uint8_t addr, uint8_t *rx, uint8_t rx_len, uint32_t timeout_ms);
+static bool i2c_write_read(uint8_t addr, const uint8_t *tx, uint8_t tx_len, uint8_t *rx, uint8_t rx_len, uint32_t timeout_ms);
 static bool pwm_apply_output(gpio_num_t gpio, uint16_t duty_u12, uint32_t hz);
 static bool spi_transfer_once(gpio_num_t cs_gpio, const uint8_t *tx, uint8_t tx_len, uint8_t rx_len, uint8_t *rx);
 static void transport_expire_stale_claim(void);
@@ -293,6 +330,7 @@ void app_main(void)
 
     BaseType_t created = xTaskCreate(command_task, "emw_cmd", 4096, NULL, 5, &s_command_task);
     configASSERT(created == pdPASS);
+    (void)created;
 
     while (true) {
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -414,6 +452,12 @@ static bool handle_binary_packet(const command_t *cmd)
             return true;
         case EMW_OP_ADC_READ:
             handle_adc_opcode(cmd);
+            return true;
+        case EMW_OP_UART:
+            handle_uart_opcode(cmd);
+            return true;
+        case EMW_OP_I2C:
+            handle_i2c_opcode(cmd);
             return true;
         case EMW_OP_SPI_XFER:
             handle_spi_opcode(cmd);
@@ -711,6 +755,160 @@ static void handle_adc_opcode(const command_t *cmd)
     send_binary_ok(out, sizeof(out));
 }
 
+static void handle_uart_opcode(const command_t *cmd)
+{
+    const uint8_t sub = cmd->data[1];
+    uint32_t baud = read_u32_le(&cmd->data[2]);
+    uint16_t timeout_ms = read_u16_le(&cmd->data[6]);
+    const uint8_t n_or_len = cmd->data[8];
+    if (baud == 0u) {
+        baud = s_uart1_baud;
+    }
+    if (timeout_ms == 0u) {
+        timeout_ms = 250u;
+    }
+
+    if (sub == EMW_UART_OPEN) {
+        if (!uart1_ensure(baud)) {
+            send_binary_err();
+            return;
+        }
+        send_binary_ok(NULL, 0);
+        return;
+    }
+
+    if (sub == EMW_UART_CLOSE) {
+        uart1_close();
+        send_binary_ok(NULL, 0);
+        return;
+    }
+
+    if (sub == EMW_UART_WRITE) {
+        if (!uart1_ensure(baud)) {
+            send_binary_err();
+            return;
+        }
+        uint8_t tx_len = n_or_len;
+        const uint8_t max_tx = (uint8_t)(EMW_LANE_SIZE - 9u);
+        if (tx_len > max_tx) {
+            tx_len = max_tx;
+        }
+        int written = 0;
+        if (tx_len > 0u) {
+            written = uart_write_bytes(UART_NUM_1, (const char *)&cmd->data[9], tx_len);
+            if (written < 0) {
+                send_binary_err();
+                return;
+            }
+            (void)uart_wait_tx_done(UART_NUM_1, pdMS_TO_TICKS(timeout_ms));
+        }
+        uint8_t out = (uint8_t)(written > 255 ? 255 : written);
+        send_binary_ok(&out, 1);
+        return;
+    }
+
+    if (sub == EMW_UART_READ) {
+        if (!uart1_ensure(baud)) {
+            send_binary_err();
+            return;
+        }
+        uint8_t payload[1] = {0};
+        (void)n_or_len;
+        send_binary_ok(payload, sizeof(payload));
+        return;
+    }
+
+    send_binary_err();
+}
+
+static void handle_i2c_opcode(const command_t *cmd)
+{
+    const uint8_t sub = cmd->data[1];
+    uint32_t hz = read_u32_le(&cmd->data[2]);
+    uint16_t timeout_ms = read_u16_le(&cmd->data[6]);
+    const uint8_t addr = (uint8_t)(cmd->data[8] & 0x7fu);
+    uint8_t tx_len = cmd->data[9];
+    uint8_t rx_len = cmd->data[10];
+
+    if (hz == 0u) {
+        hz = s_i2c_hz;
+    }
+    if (timeout_ms == 0u) {
+        timeout_ms = 250u;
+    }
+
+    if (sub == EMW_I2C_OPEN) {
+        if (!i2c_ensure(hz)) {
+            send_binary_err();
+            return;
+        }
+        send_binary_ok(NULL, 0);
+        return;
+    }
+
+    if (sub == EMW_I2C_CLOSE) {
+        i2c_close();
+        send_binary_ok(NULL, 0);
+        return;
+    }
+
+    if (!i2c_ensure(hz)) {
+        send_binary_err();
+        return;
+    }
+
+    const uint8_t max_tx = (uint8_t)(EMW_LANE_SIZE - 11u);
+    if (tx_len > max_tx) {
+        tx_len = max_tx;
+    }
+    if (rx_len > EMW_RESP_MAX_PAYLOAD) {
+        rx_len = EMW_RESP_MAX_PAYLOAD;
+    }
+
+    if (sub == EMW_I2C_WRITE) {
+        if (i2c_write_to(addr, &cmd->data[11], tx_len, timeout_ms)) {
+            send_binary_ok(NULL, 0);
+        } else {
+            send_binary_err();
+        }
+        return;
+    }
+
+    if (sub == EMW_I2C_READ) {
+        uint8_t n = tx_len;
+        if (n > EMW_RESP_MAX_PAYLOAD) {
+            n = EMW_RESP_MAX_PAYLOAD;
+        }
+        uint8_t rx[EMW_RESP_MAX_PAYLOAD] = {0};
+        if (n == 0u || i2c_read_from(addr, rx, n, timeout_ms)) {
+            send_binary_ok(rx, n);
+        } else {
+            send_binary_err();
+        }
+        return;
+    }
+
+    if (sub == EMW_I2C_XFER) {
+        uint8_t rx[EMW_RESP_MAX_PAYLOAD] = {0};
+        if (rx_len == 0u) {
+            if (i2c_write_to(addr, &cmd->data[11], tx_len, timeout_ms)) {
+                send_binary_ok(NULL, 0);
+            } else {
+                send_binary_err();
+            }
+            return;
+        }
+        if (i2c_write_read(addr, &cmd->data[11], tx_len, rx, rx_len, timeout_ms)) {
+            send_binary_ok(rx, rx_len);
+        } else {
+            send_binary_err();
+        }
+        return;
+    }
+
+    send_binary_err();
+}
+
 static void handle_pwm_opcode(const command_t *cmd)
 {
     const uint8_t sub = cmd->data[1];
@@ -834,6 +1032,19 @@ static bool validate_gpio_pin(uint8_t pin, gpio_num_t *out_gpio)
     return true;
 }
 
+static uint16_t read_u16_le(const uint8_t *p)
+{
+    return (uint16_t)p[0] | ((uint16_t)p[1] << 8u);
+}
+
+static uint32_t read_u32_le(const uint8_t *p)
+{
+    return (uint32_t)p[0] |
+           ((uint32_t)p[1] << 8u) |
+           ((uint32_t)p[2] << 16u) |
+           ((uint32_t)p[3] << 24u);
+}
+
 static bool adc_read_tout_average(uint8_t samples, uint16_t *out)
 {
     if (!out) {
@@ -860,6 +1071,181 @@ static bool adc_read_tout_average(uint8_t samples, uint16_t *out)
     }
     *out = (uint16_t)((sum + (samples / 2u)) / samples);
     return true;
+}
+
+static bool uart1_ensure(uint32_t baud)
+{
+    if (baud == 0u) {
+        baud = 115200u;
+    }
+    if (s_uart1_initialized && s_uart1_baud == baud) {
+        return true;
+    }
+    if (s_uart1_initialized) {
+        uart1_close();
+    }
+
+    uart_config_t uart_config = {
+        .baud_rate = (int)baud,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .rx_flow_ctrl_thresh = 0,
+    };
+    if (uart_param_config(UART_NUM_1, &uart_config) != ESP_OK) {
+        return false;
+    }
+    if (uart_driver_install(UART_NUM_1, 256, 256, 0, NULL, 0) != ESP_OK) {
+        return false;
+    }
+
+    s_uart1_initialized = true;
+    s_uart1_baud = baud;
+    return true;
+}
+
+static void uart1_close(void)
+{
+    if (!s_uart1_initialized) {
+        return;
+    }
+    (void)uart_wait_tx_done(UART_NUM_1, pdMS_TO_TICKS(100));
+    (void)uart_driver_delete(UART_NUM_1);
+    s_uart1_initialized = false;
+}
+
+static bool i2c_ensure(uint32_t hz)
+{
+    (void)hz;
+    gpio_num_t sda = GPIO_NUM_MAX;
+    gpio_num_t scl = GPIO_NUM_MAX;
+    if (!validate_gpio_pin((uint8_t)CONFIG_EMWAVER_ESP8266_I2C_SDA_GPIO, &sda) ||
+        !validate_gpio_pin((uint8_t)CONFIG_EMWAVER_ESP8266_I2C_SCL_GPIO, &scl) ||
+        sda == scl) {
+        return false;
+    }
+
+    if (s_i2c_initialized) {
+        return true;
+    }
+
+    if (i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER) != ESP_OK) {
+        return false;
+    }
+
+    i2c_config_t config = {
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = sda,
+        .sda_pullup_en = GPIO_PULLUP_ENABLE,
+        .scl_io_num = scl,
+        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .clk_stretch_tick = 300u,
+    };
+    if (i2c_param_config(I2C_NUM_0, &config) != ESP_OK) {
+        (void)i2c_driver_delete(I2C_NUM_0);
+        return false;
+    }
+
+    s_i2c_initialized = true;
+    s_i2c_hz = hz == 0u ? 100000u : hz;
+    return true;
+}
+
+static void i2c_close(void)
+{
+    if (!s_i2c_initialized) {
+        return;
+    }
+    (void)i2c_driver_delete(I2C_NUM_0);
+    s_i2c_initialized = false;
+}
+
+static bool i2c_write_to(uint8_t addr, const uint8_t *tx, uint8_t tx_len, uint32_t timeout_ms)
+{
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    if (!cmd) {
+        return false;
+    }
+    esp_err_t err = i2c_master_start(cmd);
+    if (err == ESP_OK) {
+        err = i2c_master_write_byte(cmd, (uint8_t)((addr << 1u) | I2C_MASTER_WRITE), true);
+    }
+    if (err == ESP_OK && tx_len > 0u) {
+        err = i2c_master_write(cmd, (uint8_t *)tx, tx_len, true);
+    }
+    if (err == ESP_OK) {
+        err = i2c_master_stop(cmd);
+    }
+    if (err == ESP_OK) {
+        err = i2c_master_cmd_begin(I2C_NUM_0, cmd, pdMS_TO_TICKS(timeout_ms));
+    }
+    i2c_cmd_link_delete(cmd);
+    return err == ESP_OK;
+}
+
+static bool i2c_read_from(uint8_t addr, uint8_t *rx, uint8_t rx_len, uint32_t timeout_ms)
+{
+    if (rx_len == 0u) {
+        return true;
+    }
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    if (!cmd) {
+        return false;
+    }
+    esp_err_t err = i2c_master_start(cmd);
+    if (err == ESP_OK) {
+        err = i2c_master_write_byte(cmd, (uint8_t)((addr << 1u) | I2C_MASTER_READ), true);
+    }
+    for (uint8_t i = 0; err == ESP_OK && i < rx_len; ++i) {
+        const i2c_ack_type_t ack = (i + 1u == rx_len) ? I2C_MASTER_NACK : I2C_MASTER_ACK;
+        err = i2c_master_read_byte(cmd, &rx[i], ack);
+    }
+    if (err == ESP_OK) {
+        err = i2c_master_stop(cmd);
+    }
+    if (err == ESP_OK) {
+        err = i2c_master_cmd_begin(I2C_NUM_0, cmd, pdMS_TO_TICKS(timeout_ms));
+    }
+    i2c_cmd_link_delete(cmd);
+    return err == ESP_OK;
+}
+
+static bool i2c_write_read(uint8_t addr, const uint8_t *tx, uint8_t tx_len, uint8_t *rx, uint8_t rx_len, uint32_t timeout_ms)
+{
+    if (rx_len == 0u) {
+        return i2c_write_to(addr, tx, tx_len, timeout_ms);
+    }
+
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    if (!cmd) {
+        return false;
+    }
+    esp_err_t err = i2c_master_start(cmd);
+    if (err == ESP_OK) {
+        err = i2c_master_write_byte(cmd, (uint8_t)((addr << 1u) | I2C_MASTER_WRITE), true);
+    }
+    if (err == ESP_OK && tx_len > 0u) {
+        err = i2c_master_write(cmd, (uint8_t *)tx, tx_len, true);
+    }
+    if (err == ESP_OK) {
+        err = i2c_master_start(cmd);
+    }
+    if (err == ESP_OK) {
+        err = i2c_master_write_byte(cmd, (uint8_t)((addr << 1u) | I2C_MASTER_READ), true);
+    }
+    for (uint8_t i = 0; err == ESP_OK && i < rx_len; ++i) {
+        const i2c_ack_type_t ack = (i + 1u == rx_len) ? I2C_MASTER_NACK : I2C_MASTER_ACK;
+        err = i2c_master_read_byte(cmd, &rx[i], ack);
+    }
+    if (err == ESP_OK) {
+        err = i2c_master_stop(cmd);
+    }
+    if (err == ESP_OK) {
+        err = i2c_master_cmd_begin(I2C_NUM_0, cmd, pdMS_TO_TICKS(timeout_ms));
+    }
+    i2c_cmd_link_delete(cmd);
+    return err == ESP_OK;
 }
 
 static bool pwm_apply_output(gpio_num_t gpio, uint16_t duty_u12, uint32_t hz)
@@ -1210,6 +1596,7 @@ static void init_serial_transport(void)
     ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 1024, 1024, 0, NULL, 0));
     BaseType_t created = xTaskCreate(serial_transport_task, "emw_serial", 3072, NULL, 5, &s_serial_task);
     configASSERT(created == pdPASS);
+    (void)created;
     ESP_LOGI(TAG, "USB-serial setup transport ready at 115200 baud");
 }
 

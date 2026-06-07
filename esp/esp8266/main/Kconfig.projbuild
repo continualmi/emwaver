@@ -29,4 +29,14 @@ config EMWAVER_ESP8266_SPI_SCK_GPIO
     default 14
     range 0 16
 
+config EMWAVER_ESP8266_I2C_SDA_GPIO
+    int "Default I2C SDA GPIO"
+    default 4
+    range 0 16
+
+config EMWAVER_ESP8266_I2C_SCL_GPIO
+    int "Default I2C SCL GPIO"
+    default 5
+    range 0 16
+
 endmenu
