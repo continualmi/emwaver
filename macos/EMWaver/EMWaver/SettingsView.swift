@@ -64,6 +64,7 @@ struct SettingsView: View {
                     Button("Check for Updates…") {
                         appUpdater.checkForUpdates()
                     }
+                    .disabled(!appUpdater.updatesConfigured)
 
                     Text("Updates are checked from \(updateFeedURL.absoluteString). Local scripts and hardware control do not require an account.")
                         .font(.caption)

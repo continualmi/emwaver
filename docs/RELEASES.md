@@ -110,7 +110,7 @@ Use `.github/workflows/ios-release-upload.yml` (`iOS Release Upload`) to build a
 
 `.github/workflows/macos-dmg-release.yml` builds, Developer ID signs, notarizes, staples, and publishes `EMWaver-macos.dmg`. The `build` job uses the `app-store` GitHub Environment so it can reuse the App Store Connect API key secrets for notarization.
 
-The macOS app includes Sparkle for app-level update checks. The macOS release workflow expects `SPARKLE_PUBLIC_ED_KEY` and `SPARKLE_PRIVATE_ED_KEY`, generates signed `appcast.xml` from the notarized DMG, publishes it as a release asset, and uploads it to `https://emwaver.ai/updates/macos/appcast.xml` through the static-site Azure storage account.
+The macOS app includes Sparkle for app-level update checks. The macOS release workflow requires `SPARKLE_PUBLIC_ED_KEY` and `SPARKLE_PRIVATE_ED_KEY`, generates signed `appcast.xml` from the notarized DMG, publishes it as a release asset, and uploads it to `https://emwaver.ai/updates/macos/appcast.xml` through the static-site Azure storage account. Local builds without a configured Sparkle public key skip automatic update checks.
 
 Required signing/notarization secrets:
 

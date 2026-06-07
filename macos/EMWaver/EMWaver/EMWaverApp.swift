@@ -43,6 +43,7 @@ struct EMWaverApp: App {
                 Button("Check for Updates…") {
                     appUpdater.checkForUpdates()
                 }
+                .disabled(!appUpdater.updatesConfigured)
             }
 
             CommandMenu("Device") {

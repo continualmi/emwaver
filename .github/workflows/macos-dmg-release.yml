@@ -64,6 +64,14 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
 
+      - name: Validate Sparkle update keys
+        run: |
+          set -euo pipefail
+          if [ -z "${SPARKLE_PUBLIC_ED_KEY}" ] || [ -z "${SPARKLE_PRIVATE_ED_KEY}" ]; then
+            echo "Set SPARKLE_PUBLIC_ED_KEY and SPARKLE_PRIVATE_ED_KEY before building the macOS update feed."
+            exit 1
+          fi
+
       - name: Install App Store Connect API key
         env:
           APP_STORE_CONNECT_API_KEY_BASE64: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
