@@ -1,12 +1,12 @@
 # EMWaver ESP Helper
 
-Freeze-friendly Python source for the ESP32 serial flashing helper used by desktop apps.
+Freeze-friendly Python source for the ESP serial flashing helper used by desktop apps.
 
 Current contract:
 - `list-ports`
-- `chip-id --port ... [--chip auto|esp32|esp32s2|esp32s3] [--baud ...] [--no-stub]`
+- `chip-id --port ... [--chip auto|esp8266|esp32|esp32s2|esp32s3] [--baud ...] [--no-stub]`
 - `read-identity --port ... [--baud ...]`
-- `flash --chip esp32|esp32s2|esp32s3 --port ... --bootloader-offset ... --flash-freq ... --bootloader ... --partition-table ... --ota-data ... --app ... [--baud ...] [--before ...] [--after ...] [--no-stub]`
+- `flash --chip esp8266|esp32|esp32s2|esp32s3 --port ... --bootloader-offset ... --partition-table-offset ... --app-offset ... --flash-freq ... --flash-size ... --bootloader ... --partition-table ... [--ota-data ...] --app ... [--baud ...] [--before ...] [--after ...] [--no-stub]`
 
 The flash command defaults to the same fast path ESP-IDF uses for normal
 `idf.py flash`: 460800 baud, `default-reset`, hard reset after flashing, and

@@ -1002,6 +1002,8 @@ final class MacWiFiManager: NSObject {
     static func normalizedBoardType(_ value: String?) -> String? {
         guard let value = nonEmpty(value) else { return nil }
         switch value.lowercased() {
+        case "esp8266", "esp8266ex":
+            return "esp8266"
         case "esp32s3", "esp32-s3":
             return "esp32s3"
         case "esp32s2", "esp32-s2":

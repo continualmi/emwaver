@@ -113,6 +113,8 @@ struct EMWaverTests {
     }
 
     @Test func wifiBoardMetadataNormalizesEspTargets() {
+        #expect(MacWiFiManager.normalizedBoardType("esp8266") == "esp8266")
+        #expect(MacWiFiManager.normalizedBoardType("ESP8266EX") == "esp8266")
         #expect(MacWiFiManager.normalizedBoardType("esp32-s3") == "esp32s3")
         #expect(MacWiFiManager.normalizedBoardType("ESP32S2") == "esp32s2")
         #expect(MacWiFiManager.normalizedBoardType("esp32") == "esp32")
@@ -121,6 +123,7 @@ struct EMWaverTests {
     }
 
     @Test func firmwareUpdaterTreatsAllEspBoardTypesAsEspWorkflow() {
+        #expect(FirmwareUpdateManager.isEspBoardType("esp8266"))
         #expect(FirmwareUpdateManager.isEspBoardType("esp32"))
         #expect(FirmwareUpdateManager.isEspBoardType(" ESP32-S2 "))
         #expect(FirmwareUpdateManager.isEspBoardType("esp32s3"))
@@ -129,6 +132,7 @@ struct EMWaverTests {
     }
 
     @Test func firmwareUpdaterNormalizesEspBoardTypes() {
+        #expect(FirmwareUpdateManager.normalizedEspBoardType("ESP8266EX") == "esp8266")
         #expect(FirmwareUpdateManager.normalizedEspBoardType("esp32") == "esp32")
         #expect(FirmwareUpdateManager.normalizedEspBoardType(" ESP32-S2 ") == "esp32s2")
         #expect(FirmwareUpdateManager.normalizedEspBoardType("esp32-s3") == "esp32s3")

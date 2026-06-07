@@ -49,8 +49,8 @@ struct EMWaverApp: App {
                 if device.isConnected {
                     Text("Status: Connected")
                         .foregroundStyle(.secondary)
-                } else if FirmwareUpdateManager.isEspBoardType(device.connectedBoardType ?? device.lastDetectedBoardType), firmwareUpdater.espBootloaderConnected {
-                    Text("Status: ESP Bootloader")
+                } else if firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil {
+                    Text("Status: \(LocalDeviceLabelFormatter.boardDisplayName(firmwareUpdater.espBootloaderBoardType ?? "esp32")) Serial")
                         .foregroundStyle(.secondary)
                 } else if firmwareUpdater.dfuConnected {
                     Text("Status: Update Mode")
@@ -116,8 +116,8 @@ struct EMWaverApp: App {
                     firmwareUpdater.refreshDfuPresence(includeEspSerialProbe: true)
                 }
 
-                if FirmwareUpdateManager.isEspBoardType(device.connectedBoardType ?? device.lastDetectedBoardType), firmwareUpdater.espBootloaderConnected {
-                    Text("ESP Bootloader: Detected")
+                if firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil {
+                    Text("\(LocalDeviceLabelFormatter.boardDisplayName(firmwareUpdater.espBootloaderBoardType ?? "esp32")) serial: Detected")
                         .foregroundStyle(.secondary)
                 } else if firmwareUpdater.dfuConnected {
                     Text("Update Mode: Detected")

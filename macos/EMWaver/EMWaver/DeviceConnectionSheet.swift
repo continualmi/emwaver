@@ -60,7 +60,7 @@ struct DeviceConnectionSheet: View {
             return ("Connected", "cable.connector")
         }
         if espBootloaderAvailable {
-            return ("ESP Bootloader", "cpu")
+            return ("\(currentBoardDisplayName) serial", "cpu")
         }
         if firmwareUpdater.dfuConnected {
             return ("Update Mode", "arrow.triangle.2.circlepath")
@@ -98,7 +98,7 @@ struct DeviceConnectionSheet: View {
             return connected
         }
         if espBootloaderAvailable {
-            return "esp32"
+            return firmwareUpdater.espBootloaderBoardType ?? "esp"
         }
         return device.lastDetectedBoardType ?? "stm32f042"
     }
@@ -108,12 +108,7 @@ struct DeviceConnectionSheet: View {
     }
 
     private var isEspBoard: Bool {
-        switch currentBoardType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "esp32", "esp32s2", "esp32-s2", "esp32s3", "esp32-s3":
-            return true
-        default:
-            return false
-        }
+        FirmwareUpdateManager.isEspBoardType(currentBoardType)
     }
 
     private var shouldShowWiFiCard: Bool {
@@ -462,7 +457,7 @@ struct DeviceConnectionSheet: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text("Firmware")
                     .font(.subheadline.weight(.semibold))
-                Text(isEspBoard ? "Flash the bundled ESP32 firmware." : "Update the connected board firmware.")
+                Text(isEspBoard ? "Flash the bundled \(currentBoardDisplayName) firmware." : "Update the connected board firmware.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

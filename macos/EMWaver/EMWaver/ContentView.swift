@@ -36,7 +36,7 @@ struct ContentView: View {
             return ("cable.connector", currentBoardDisplayName)
         }
         if firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil {
-            return ("cpu", "ESP Bootloader")
+            return ("cpu", "\(currentBoardDisplayName) Serial")
         }
         if firmwareUpdater.dfuConnected {
             return ("arrow.triangle.2.circlepath", "Update Mode")
@@ -49,7 +49,7 @@ struct ContentView: View {
 
     private var currentBoardType: String {
         if firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil {
-            return "esp32"
+            return firmwareUpdater.espBootloaderBoardType ?? "esp"
         }
         return device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
     }
@@ -160,7 +160,15 @@ struct ContentView: View {
                 Button {
                     showingMcpInfo = true
                 } label: {
-                    Label("MCP", systemImage: "point.3.connected.trianglepath.dotted")
+                    Label {
+                        Text("MCP")
+                    } icon: {
+                        Image("MCPLogo")
+                            .resizable()
+                            .renderingMode(.template)
+                            .scaledToFit()
+                            .frame(width: 16, height: 16)
+                    }
                 }
                 .help("Desktop MCP")
 

@@ -17,6 +17,8 @@ CHIP_FEATURE_EMB_PSRAM = 1 << 7
 
 def _chip_id_for_name(chip_name: str) -> int:
     normalized = chip_name.strip().lower().replace("-", "")
+    if normalized.startswith("esp8266"):
+        return 1
     if normalized == "esp32":
         return 0
     if normalized == "esp32s2":
@@ -58,7 +60,10 @@ def cmd_chip_id(args: argparse.Namespace) -> int:
 
 
 def _feature_mask_for_chip(esp: object) -> int:
-    features = CHIP_FEATURE_WIFI_BGN | CHIP_FEATURE_BLE
+    chip_name = str(getattr(esp, "CHIP_NAME", "")).strip().lower().replace("-", "")
+    features = CHIP_FEATURE_WIFI_BGN
+    if chip_name in ("esp32", "esp32s3"):
+        features |= CHIP_FEATURE_BLE
 
     get_flash_cap = getattr(esp, "get_flash_cap", None)
     if callable(get_flash_cap):
@@ -90,12 +95,13 @@ def cmd_read_identity(args: argparse.Namespace) -> int:
         esp = detect_chip(
             port=args.port,
             baud=args.baud,
-            connect_mode="no_reset",
+            connect_mode=_esptool_connect_mode(args.before),
             trace_enabled=False,
         )
         mac = tuple(int(x) & 0xFF for x in esp.read_mac("BASE_MAC"))
-        revision = int(esp.get_chip_revision())
-        cores = int(getattr(esp, "CHIP_CORES", 2))
+        get_chip_revision = getattr(esp, "get_chip_revision", None)
+        revision = int(get_chip_revision()) if callable(get_chip_revision) else 0
+        cores = int(getattr(esp, "CHIP_CORES", 1))
         features = _feature_mask_for_chip(esp)
 
         print(f"CHIP_NAME={esp.CHIP_NAME}")
@@ -127,13 +133,17 @@ def _require_file(path: str, label: str) -> str:
 
 
 def _esptool_reset_choice(value: str) -> str:
-    return value.strip().lower().replace("_", "-")
+    return value.strip().lower().replace("-", "_")
+
+
+def _esptool_connect_mode(value: str) -> str:
+    return value.strip().lower().replace("-", "_")
 
 
 def cmd_flash(args: argparse.Namespace) -> int:
     bootloader = _require_file(args.bootloader, "bootloader")
     partition_table = _require_file(args.partition_table, "partition-table")
-    ota_data = _require_file(args.ota_data, "ota-data")
+    ota_data = _require_file(args.ota_data, "ota-data") if args.ota_data else None
     app = _require_file(args.app, "app")
 
     argv = [
@@ -146,15 +156,16 @@ def cmd_flash(args: argparse.Namespace) -> int:
     if args.no_stub:
         argv.append("--no-stub")
     argv.extend([
-        "write-flash",
-        "--flash-mode", "dio",
-        "--flash-freq", args.flash_freq,
-        "--flash-size", "4MB",
+        "write_flash",
+        "--flash_mode", "dio",
+        "--flash_freq", args.flash_freq,
+        "--flash_size", args.flash_size,
         args.bootloader_offset, bootloader,
-        "0x20000", app,
-        "0x8000", partition_table,
-        "0x10000", ota_data,
+        args.app_offset, app,
+        args.partition_table_offset, partition_table,
     ])
+    if ota_data:
+        argv.extend([args.ota_data_offset, ota_data])
     return _run_esptool(argv)
 
 
@@ -175,6 +186,7 @@ def build_parser() -> argparse.ArgumentParser:
     read_identity = sub.add_parser("read-identity")
     read_identity.add_argument("--port", required=True)
     read_identity.add_argument("--baud", type=int, default=115200)
+    read_identity.add_argument("--before", default="default-reset")
     read_identity.set_defaults(func=cmd_read_identity)
 
     flash = sub.add_parser("flash")
@@ -182,10 +194,14 @@ def build_parser() -> argparse.ArgumentParser:
     flash.add_argument("--port", required=True)
     flash.add_argument("--bootloader", required=True)
     flash.add_argument("--partition-table", required=True)
-    flash.add_argument("--ota-data", required=True)
+    flash.add_argument("--ota-data")
     flash.add_argument("--app", required=True)
     flash.add_argument("--bootloader-offset", default="0x0")
+    flash.add_argument("--partition-table-offset", default="0x8000")
+    flash.add_argument("--ota-data-offset", default="0x10000")
+    flash.add_argument("--app-offset", default="0x20000")
     flash.add_argument("--flash-freq", default="80m")
+    flash.add_argument("--flash-size", default="4MB")
     flash.add_argument("--baud", type=int, default=460800)
     flash.add_argument("--before", default="default-reset")
     flash.add_argument("--after", default="hard-reset")

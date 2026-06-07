@@ -5,7 +5,11 @@ struct FirmwareUpdateSheet: View {
     @ObservedObject var updater: FirmwareUpdateManager
 
     private var boardType: String {
-        updater.presentedBoardType ?? device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
+        updater.presentedBoardType ?? updater.espBootloaderBoardType ?? device.connectedBoardType ?? device.lastDetectedBoardType ?? (updater.espBootloaderPort == nil ? "stm32f042" : "esp")
+    }
+
+    private var boardDisplayName: String {
+        LocalDeviceLabelFormatter.boardDisplayName(boardType)
     }
 
     private var isEspWorkflow: Bool {
@@ -45,7 +49,7 @@ struct FirmwareUpdateSheet: View {
 
     private var titleText: String {
         if isEspWorkflow {
-            return "Flash ESP32"
+            return "Flash \(boardDisplayName)"
         }
         if updater.updateDone {
             return "Reconnect device"
@@ -225,7 +229,7 @@ struct FirmwareUpdateSheet: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Flash ESP32")
+                        Text("Flash \(boardDisplayName)")
                             .font(.title3.weight(.semibold))
                         Text("Use the board's flash-capable serial USB connection.")
                             .font(.subheadline)
@@ -239,15 +243,15 @@ struct FirmwareUpdateSheet: View {
                 }
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Bootloader")
+                    Text("Serial flash")
                         .font(.subheadline.weight(.semibold))
                     Text(espBootloaderDetectedText)
                         .font(.caption.weight(.medium))
                         .foregroundStyle((updater.espBootloaderConnected || updater.espBootloaderPort != nil) ? Color.green : .secondary)
 
-                    Text("1. Hold BOOT")
+                    Text("1. Hold BOOT or FLASH if your board needs manual bootloader mode")
                     Text("2. Press and release RESET")
-                    Text("3. Release BOOT")
+                    Text("3. Release BOOT or FLASH")
                         .padding(.bottom, 4)
 
                     HStack(spacing: 10) {
@@ -347,10 +351,10 @@ struct FirmwareUpdateSheet: View {
 
     private var espBootloaderDetectedText: String {
         if let port = updater.espBootloaderPort, !port.isEmpty {
-            return "Detected on \(port)."
+            return "\(boardDisplayName) detected on \(port)."
         }
         if updater.espBootloaderConnected {
-            return "Detected."
+            return "\(boardDisplayName) detected."
         }
         return "Not detected yet. Put the board in bootloader mode, then click Refresh."
     }

@@ -11,17 +11,27 @@ final class FirmwareUpdateManager: ObservableObject {
     private struct EspFirmwareAssets {
         let chip: String
         let bootloaderOffset: String
+        let partitionTableOffset: String
+        let otaDataOffset: String?
+        let appOffset: String
         let flashFrequency: String
+        let flashSize: String
         let bootloader: URL
         let partitionTable: URL
-        let otaData: URL
+        let otaData: URL?
         let app: URL
+    }
+
+    private struct EspSerialTarget {
+        let port: String
+        let boardType: String?
     }
 
     @Published var isPresented: Bool = false
     @Published var dfuConnected: Bool = false
     @Published var espBootloaderConnected: Bool = false
     @Published var espBootloaderPort: String? = nil
+    @Published var espBootloaderBoardType: String? = nil
     @Published var presentedBoardType: String? = nil
     @Published var isFlashing: Bool = false
     @Published var progressPct: Double = 0
@@ -42,7 +52,7 @@ final class FirmwareUpdateManager: ObservableObject {
 
     init() {
         startDfuPolling()
-        refreshDfuPresence()
+        refreshDfuPresence(includeEspSerialProbe: true)
     }
 
     deinit {
@@ -206,7 +216,7 @@ final class FirmwareUpdateManager: ObservableObject {
         return "Bundled emwaver.bin"
     }
 
-    func refreshDfuPresence(includeEspSerialProbe: Bool = false) {
+    func refreshDfuPresence(includeEspSerialProbe: Bool = true) {
         if isFlashing { return }
 
         DispatchQueue.global(qos: .utility).async { [weak self] in
@@ -236,19 +246,13 @@ final class FirmwareUpdateManager: ObservableObject {
 
             guard includeEspSerialProbe else { return }
 
-            do {
-                let port = try self.detectEspBootloaderPort()
-                DispatchQueue.main.async {
-                    self.espBootloaderConnected = (port != nil)
-                    self.espBootloaderPort = port
-                    if port != nil {
-                        self.presentedBoardType = "esp32"
-                    }
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    self.espBootloaderConnected = false
-                    self.espBootloaderPort = nil
+            let target = self.detectEspSerialCandidate()
+            DispatchQueue.main.async {
+                self.espBootloaderConnected = (target != nil)
+                self.espBootloaderPort = target?.port
+                self.espBootloaderBoardType = target?.boardType
+                if let boardType = target?.boardType {
+                    self.presentedBoardType = boardType
                 }
             }
         }
@@ -260,14 +264,14 @@ final class FirmwareUpdateManager: ObservableObject {
         if dfuPollTimer != nil { return }
         dfuPollTimer = Timer.scheduledTimer(withTimeInterval: 0.9, repeats: true) { [weak self] _ in
             DispatchQueue.main.async {
-                self?.refreshDfuPresence()
+                self?.refreshDfuPresence(includeEspSerialProbe: true)
             }
         }
     }
 
     static func isEspBoardType(_ boardType: String?) -> Bool {
         switch (boardType ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "esp32", "esp32s2", "esp32-s2", "esp32s3", "esp32-s3":
+        case "esp", "esp8266", "esp32", "esp32s2", "esp32-s2", "esp32s3", "esp32-s3":
             return true
         default:
             return false
@@ -276,6 +280,8 @@ final class FirmwareUpdateManager: ObservableObject {
 
     static func normalizedEspBoardType(_ boardType: String?) -> String? {
         switch (boardType ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "esp8266", "esp8266ex":
+            return "esp8266"
         case "esp32s2", "esp32-s2":
             return "esp32s2"
         case "esp32s3", "esp32-s3":
@@ -291,8 +297,11 @@ final class FirmwareUpdateManager: ObservableObject {
         if let boardType = Self.normalizedEspBoardType(presentedBoardType) {
             return boardType
         }
+        if let boardType = Self.normalizedEspBoardType(espBootloaderBoardType) {
+            return boardType
+        }
         if espBootloaderConnected || espBootloaderPort != nil {
-            return "esp32"
+            return "esp"
         }
         return device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
     }
@@ -370,11 +379,29 @@ final class FirmwareUpdateManager: ObservableObject {
         }
 
         switch Self.normalizedEspBoardType(boardType) {
+        case "esp8266":
+            return EspFirmwareAssets(
+                chip: "esp8266",
+                bootloaderOffset: "0x0",
+                partitionTableOffset: "0x8000",
+                otaDataOffset: nil,
+                appOffset: "0x10000",
+                flashFrequency: "40m",
+                flashSize: "2MB",
+                bootloader: try require("emwaver-esp8266-bootloader"),
+                partitionTable: try require("emwaver-esp8266-partition-table"),
+                otaData: nil,
+                app: try require("emwaver-esp8266-app")
+            )
         case "esp32":
             return EspFirmwareAssets(
                 chip: "esp32",
                 bootloaderOffset: "0x1000",
+                partitionTableOffset: "0x8000",
+                otaDataOffset: "0x10000",
+                appOffset: "0x20000",
                 flashFrequency: "40m",
+                flashSize: "4MB",
                 bootloader: try require("emwaver-esp32-bootloader"),
                 partitionTable: try require("emwaver-esp32-partition-table"),
                 otaData: try require("emwaver-esp32-ota-data"),
@@ -384,7 +411,11 @@ final class FirmwareUpdateManager: ObservableObject {
             return EspFirmwareAssets(
                 chip: "esp32s2",
                 bootloaderOffset: "0x1000",
+                partitionTableOffset: "0x8000",
+                otaDataOffset: "0x10000",
+                appOffset: "0x20000",
                 flashFrequency: "80m",
+                flashSize: "4MB",
                 bootloader: try require("emwaver-esp32s2-bootloader"),
                 partitionTable: try require("emwaver-esp32s2-partition-table"),
                 otaData: try require("emwaver-esp32s2-ota-data"),
@@ -394,7 +425,11 @@ final class FirmwareUpdateManager: ObservableObject {
             return EspFirmwareAssets(
                 chip: "esp32s3",
                 bootloaderOffset: "0x0",
+                partitionTableOffset: "0x8000",
+                otaDataOffset: "0x10000",
+                appOffset: "0x20000",
                 flashFrequency: "80m",
+                flashSize: "4MB",
                 bootloader: try require("emwaver-esp32s3-bootloader"),
                 partitionTable: try require("emwaver-esp32s3-partition-table"),
                 otaData: try require("emwaver-esp32s3-ota-data"),
@@ -429,13 +464,42 @@ final class FirmwareUpdateManager: ObservableObject {
         return ports
     }
 
+    private func preferredEspFlashPorts(from ports: [String]) -> [String] {
+        ports.filter { port in
+            let lowercased = port.lowercased()
+            return lowercased.contains("usbmodem") ||
+                lowercased.contains("usbserial") ||
+                lowercased.contains("slab_usbtouart") ||
+                lowercased.contains("wchusbserial")
+        }
+    }
+
+    private func espSerialDeviceNodeCandidates() -> [String] {
+        let devURL = URL(fileURLWithPath: "/dev", isDirectory: true)
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: devURL.path) else {
+            return []
+        }
+        return names
+            .filter { $0.hasPrefix("cu.") }
+            .map { devURL.appendingPathComponent($0).path }
+            .sorted()
+    }
+
+    private func detectEspSerialCandidate() -> EspSerialTarget? {
+        let ports = espSerialDeviceNodeCandidates()
+        let preferred = preferredEspFlashPorts(from: ports)
+        guard let port = preferred.first else { return nil }
+        return EspSerialTarget(port: port, boardType: Self.normalizedEspBoardType(espBootloaderBoardType))
+    }
+
     private func resolveEspFlashPort() throws -> String {
-        if let detected = try detectEspBootloaderPort() {
-            return detected
+        if let detected = try detectEspBootloaderTarget() {
+            espBootloaderBoardType = detected.boardType
+            return detected.port
         }
 
         let ports = try espFlashPortCandidates()
-        let preferred = ports.filter { $0.contains("usbmodem") || $0.contains("usbserial") || $0.contains("SLAB_USBtoUART") }
+        let preferred = preferredEspFlashPorts(from: ports)
         if preferred.count == 1, let port = preferred.first {
             return port
         }
@@ -449,34 +513,52 @@ final class FirmwareUpdateManager: ObservableObject {
         )
     }
 
-    private func detectEspBootloaderPort() throws -> String? {
+    private func detectEspBootloaderTarget() throws -> EspSerialTarget? {
         let ports = try espFlashPortCandidates()
-        let preferred = ports.filter { $0.contains("usbmodem") || $0.contains("usbserial") || $0.contains("SLAB_USBtoUART") }
+        let preferred = preferredEspFlashPorts(from: ports)
         let candidates = preferred.isEmpty ? ports : preferred
 
         for port in candidates {
+            if let boardType = try readEspBoardType(port: port) {
+                return EspSerialTarget(port: port, boardType: boardType)
+            }
+
             let (code, _, _) = try runEspHelperAndWait(arguments: ["chip-id", "--port", port, "--baud", "115200", "--no-stub"])
             if code == 0 {
-                return port
+                return EspSerialTarget(port: port, boardType: "esp32")
             }
         }
 
         return nil
     }
 
+    private func readEspBoardType(port: String) throws -> String? {
+        let (code, stdout, _) = try runEspHelperAndWait(arguments: ["read-identity", "--port", port, "--baud", "115200"])
+        guard code == 0 else { return nil }
+        for line in stdout.split(separator: "\n") {
+            let parts = line.split(separator: "=", maxSplits: 1).map(String.init)
+            guard parts.count == 2, parts[0] == "CHIP_NAME" else { continue }
+            let normalized = parts[1].trimmingCharacters(in: .whitespacesAndNewlines).lowercased().replacingOccurrences(of: "-", with: "")
+            if normalized.hasPrefix("esp8266") {
+                return "esp8266"
+            }
+            return Self.normalizedEspBoardType(normalized)
+        }
+        return nil
+    }
+
     private func startEspSerialUpdate(device: MacUSBManager) throws {
         progressMessage = "Preparing ESP serial update..."
         completionMessage = "ESP firmware update complete. Reconnect the device in Run Mode."
-        appendLog("ESP32 update selected")
+        appendLog("ESP update selected")
         appendLog("ESP flashing uses the serial helper, not DFU.")
         if device.isConnected {
             appendLog("Run Mode remains separate from flashing; using serial port discovery.")
         }
 
+        let port = try resolveEspFlashPort()
         let boardType = effectiveBoardType(for: device)
         appendLog("ESP board type: \(boardType)")
-
-        let port = try resolveEspFlashPort()
         appendLog("ESP flash port: \(port)")
         try runEspFlash(port: port, boardType: boardType)
     }
@@ -510,7 +592,9 @@ final class FirmwareUpdateManager: ObservableObject {
         appendLog("ESP chip: \(assets.chip)")
         appendLog("ESP bootloader: \(assets.bootloader.lastPathComponent)")
         appendLog("ESP partition table: \(assets.partitionTable.lastPathComponent)")
-        appendLog("ESP OTA data: \(assets.otaData.lastPathComponent)")
+        if let otaData = assets.otaData {
+            appendLog("ESP OTA data: \(otaData.lastPathComponent)")
+        }
         appendLog("ESP app image: \(assets.app.lastPathComponent)")
 
         isFlashing = true
@@ -519,7 +603,7 @@ final class FirmwareUpdateManager: ObservableObject {
 
         let process = Process()
         process.executableURL = try espHelperURL()
-        process.arguments = [
+        var arguments = [
             "flash",
             "--chip", assets.chip,
             "--port", port,
@@ -527,12 +611,18 @@ final class FirmwareUpdateManager: ObservableObject {
             "--before", "default_reset",
             "--after", "hard_reset",
             "--bootloader-offset", assets.bootloaderOffset,
+            "--partition-table-offset", assets.partitionTableOffset,
+            "--app-offset", assets.appOffset,
             "--flash-freq", assets.flashFrequency,
+            "--flash-size", assets.flashSize,
             "--bootloader", assets.bootloader.path,
             "--partition-table", assets.partitionTable.path,
-            "--ota-data", assets.otaData.path,
             "--app", assets.app.path,
         ]
+        if let otaData = assets.otaData, let otaDataOffset = assets.otaDataOffset {
+            arguments.append(contentsOf: ["--ota-data-offset", otaDataOffset, "--ota-data", otaData.path])
+        }
+        process.arguments = arguments
 
         let stdout = Pipe()
         let stderr = Pipe()
@@ -578,6 +668,7 @@ final class FirmwareUpdateManager: ObservableObject {
                     self.updateDone = true
                     self.espBootloaderConnected = false
                     self.espBootloaderPort = nil
+                    self.espBootloaderBoardType = nil
                     self.appendLog(self.completionMessage)
                 } else {
                     let err = String(data: self.flashStderrBuffer, encoding: .utf8) ?? ""
