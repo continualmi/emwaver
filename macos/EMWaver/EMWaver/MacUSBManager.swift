@@ -360,6 +360,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private var suppressedAutoConnectWiFiIDs: Set<String> = []
     private var wifiConnectionErrorsByID: [String: String] = [:]
     private var uidConnectionProbeInFlightDeviceIDs: Set<String> = []
+    private var firmwareUpdateReconnectSuspendCount: Int = 0
 
     private var bleCentral: CBCentralManager?
     private var blePeripheral: CBPeripheral?
@@ -477,6 +478,17 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             return wifiManager?.isConnected == true && wifiManager?.activeDeviceID == targetID
         }
         return false
+    }
+
+    private var isRuntimeReconnectSuspendedInternal: Bool {
+        firmwareUpdateReconnectSuspendCount > 0
+    }
+
+    private func isRuntimeReconnectSuspended() -> Bool {
+        if DispatchQueue.getSpecific(key: midiQueueKey) != nil {
+            return isRuntimeReconnectSuspendedInternal
+        }
+        return midiQueue.sync { isRuntimeReconnectSuspendedInternal }
     }
 
     static func inferBoardType(portName: String?) -> String {
@@ -611,6 +623,23 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             self.suppressedAutoConnectWiFiIDs.removeAll()
             self.ensureClient()
             self.pollConnectionsInternal(resetWiFiSuppression: true)
+        }
+    }
+
+    func setFirmwareUpdateReconnectSuspended(_ suspended: Bool) {
+        withMidiQueueSync {
+            if suspended {
+                firmwareUpdateReconnectSuspendCount += 1
+                pendingAutoConnectWiFiID = nil
+                stopBleScanInternal()
+                publishDiscoveredDevices()
+                return
+            }
+
+            firmwareUpdateReconnectSuspendCount = max(0, firmwareUpdateReconnectSuspendCount - 1)
+            guard !isRuntimeReconnectSuspendedInternal else { return }
+            publishDiscoveredDevices()
+            autoConnectIfNeededInternal()
         }
     }
 
@@ -957,6 +986,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
     private func autoConnectIfNeededInternal() {
         guard autoConnectEnabled else { return }
+        guard !isRuntimeReconnectSuspendedInternal else { return }
         if bleCentral?.state == .poweredOn {
             startBleScanInternal()
         }
@@ -992,6 +1022,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         reconcileActiveTransportInternal()
         refreshPortsInternal()
         publishDiscoveredDevices()
+        guard !isRuntimeReconnectSuspendedInternal else { return }
         autoConnectIfNeededInternal()
         scheduleUIDConnectionPollsInternal()
     }
@@ -1025,6 +1056,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private func sendCommandInternal(_ command: Data, timeout: Int, responsePredicate: ((Data) -> Bool)?, deviceID: String?) -> Data? {
         commandSemaphore.wait()
         defer { commandSemaphore.signal() }
+
+        guard !isRuntimeReconnectSuspended() else {
+            return nil
+        }
 
         guard isTransportConnectedInternal(deviceID: deviceID) else {
             setError("Cannot send command: Not connected")
@@ -1086,6 +1121,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func sendPacketNow(_ data: Data, deviceID: String?) {
+        guard !isRuntimeReconnectSuspendedInternal else {
+            return
+        }
+
         guard let session = deviceSession(for: deviceID) else {
             setError("Cannot send packet: Not connected")
             return
@@ -1273,6 +1312,12 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func canActivateTransportInternal(_ deviceID: String) -> Bool {
+        guard !isRuntimeReconnectSuspendedInternal else {
+            setError("Firmware update is using the device connection")
+            publishDiscoveredDevices()
+            return false
+        }
+
         let targetID = resolvedTransportID(for: deviceID) ?? deviceID
         guard !transportSessionClaimsByDeviceID.isEmpty,
               transportSessionClaimsByDeviceID[targetID] == nil else {
@@ -1514,6 +1559,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     func transmitBuffer(deviceID: String?) {
+        guard !isRuntimeReconnectSuspended() else {
+            return
+        }
+
         guard isTransportConnectedInternal() else {
             setError("Cannot transmit buffer: Not connected")
             return
@@ -1946,6 +1995,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func scheduleUIDConnectionPollsInternal() {
+        guard !isRuntimeReconnectSuspendedInternal else { return }
+
         var deviceIDs: [String] = []
         if activeTransport == .usbMidi,
            connectedSource != 0,
@@ -2440,6 +2491,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func startBleScanInternal(allowWhenAutoConnectDisabled: Bool = false) {
+        guard !isRuntimeReconnectSuspendedInternal else { return }
         guard allowWhenAutoConnectDisabled || autoConnectEnabled else { return }
         guard bleCentral?.state == .poweredOn else {
             stopBleScanInternal()
@@ -2884,7 +2936,10 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         bleDiscoveredPeripheralsByID[peripheral.identifier] = peripheral
         bleLastSeenByID[peripheral.identifier] = Date()
         publishDiscoveredDevices()
-        guard autoConnectEnabled, peripheral.state != .connected, peripheral.state != .connecting else { return }
+        guard autoConnectEnabled,
+              !isRuntimeReconnectSuspendedInternal,
+              peripheral.state != .connected,
+              peripheral.state != .connecting else { return }
         NSLog("EMWaver BLE discovered: %@ rssi=%@", name, RSSI)
         connectBleInternal(peripheral, name: name, makeActive: activeTransport == .none || activeTransport == .wifi)
     }

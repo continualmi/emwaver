@@ -84,7 +84,7 @@ Transport behavior:
 - Wi-Fi control uses LAN/VPN reachability as the trust boundary. If the Mac can reach the ESP32 WebSocket, it can control the board; use trusted LANs, VPNs, or SSH tunnels only.
 - Wi-Fi records report `connecting` while WebSocket connection is pending, so the local device list distinguishes same-LAN discovery and completed connection without showing saved-but-offline endpoints as live devices.
 - If the firmware reports the Wi-Fi command socket is already owned by another session, macOS surfaces a busy-session error instead of treating it as a generic disconnect.
-- macOS runs a lightweight 5-second connection poll across the unified transport manager. The poll refreshes USB MIDI candidates, reconciles stale active USB/BLE/Wi-Fi state, prunes BLE devices that stop advertising, republishes the device list, keeps BLE discovery active when auto-connect is enabled, and retries the existing auto-connect path. Separately, a 2-second transport session heartbeat (opcode `0x0B`/`0x03`) runs on the active transport to detect silent disconnections that OS-level transport events miss.
+- macOS runs a lightweight 5-second connection poll across the unified transport manager. The poll refreshes USB MIDI candidates, reconciles stale active USB/BLE/Wi-Fi state, prunes BLE devices that stop advertising, republishes the device list, keeps BLE discovery active when auto-connect is enabled, and retries the existing auto-connect path. ESP serial flashing temporarily suspends runtime reconnect/probe work so the helper owns the flash-capable serial port during bootloader handshakes. Separately, a 2-second transport session heartbeat (opcode `0x0B`/`0x03`) runs on the active transport to detect silent disconnections that OS-level transport events miss.
 - The device list only shows Wi-Fi devices that are actively advertised, manually entered in the current app session, or connected, so old `.local` endpoints do not look like plugged-in devices on launch.
 - If auto-connect is enabled and no wired EMWaver runtime is connected, macOS tries advertised Wi-Fi endpoints, then scans for the ESP32-S3 EMWaver BLE GATT service.
 - BLE scanning may continue while a device is connected so additional ESP32-S3 boards can be discovered for the multi-device bench path.
@@ -161,6 +161,7 @@ STM32 update flow:
 ESP32 update flow:
 - run-mode connection over USB remains separate from flashing,
 - flashing is performed over the board's flash-capable USB serial port,
+- runtime auto-connect, UID probes, and command writes are paused while the ESP serial flash helper is running,
 - the app should bundle a small helper based on `esptool` behavior,
 - the app should use prebuilt firmware images rather than ESP-IDF project logic,
 - manual bootloader entry is acceptable for the first shipping version on boards where automatic entry is unreliable,

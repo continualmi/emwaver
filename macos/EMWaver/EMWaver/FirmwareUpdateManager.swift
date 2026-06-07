@@ -556,6 +556,14 @@ final class FirmwareUpdateManager: ObservableObject {
         completionMessage = "ESP firmware update complete. Reconnect the device in Run Mode."
         appendLog("ESP update selected")
         appendLog("ESP flashing uses the serial helper, not DFU.")
+        appendLog("Pausing runtime reconnect while ESP flashing owns the serial port.")
+        device.setFirmwareUpdateReconnectSuspended(true)
+        var flashProcessStarted = false
+        defer {
+            if !flashProcessStarted {
+                device.setFirmwareUpdateReconnectSuspended(false)
+            }
+        }
         if device.isConnected {
             appendLog("Run Mode remains separate from flashing; using serial port discovery.")
             if device.connectedTransportKind == "USB Serial" {
@@ -576,7 +584,8 @@ final class FirmwareUpdateManager: ObservableObject {
         }
         appendLog("ESP board type: \(boardType)")
         appendLog("ESP flash port: \(port)")
-        try runEspFlash(port: port, boardType: boardType)
+        try runEspFlash(port: port, boardType: boardType, runtimeDevice: device)
+        flashProcessStarted = true
     }
 
     private func runEspHelperAndWait(arguments: [String]) throws -> (terminationStatus: Int32, stdout: String, stderr: String) {
@@ -599,9 +608,13 @@ final class FirmwareUpdateManager: ObservableObject {
         return (process.terminationStatus, stdoutStr, stderrStr)
     }
 
-    private func runEspFlash(port: String, boardType: String) throws {
+    private func runEspFlash(port: String, boardType: String, runtimeDevice: MacUSBManager) throws {
         if flashProcess != nil {
-            return
+            throw NSError(
+                domain: "FirmwareUpdateManager",
+                code: 22,
+                userInfo: [NSLocalizedDescriptionKey: "Firmware update is already running."]
+            )
         }
 
         let assets = try espFirmwareURLs(boardType: boardType)
@@ -669,7 +682,7 @@ final class FirmwareUpdateManager: ObservableObject {
             }
         }
 
-        process.terminationHandler = { [weak self] proc in
+        process.terminationHandler = { [weak self, weak runtimeDevice] proc in
             DispatchQueue.main.async {
                 guard let self else { return }
                 stdout.fileHandleForReading.readabilityHandler = nil
@@ -677,6 +690,7 @@ final class FirmwareUpdateManager: ObservableObject {
 
                 self.flashProcess = nil
                 self.isFlashing = false
+                runtimeDevice?.setFirmwareUpdateReconnectSuspended(false)
 
                 if proc.terminationStatus == 0 {
                     self.progressPct = 100
@@ -696,7 +710,15 @@ final class FirmwareUpdateManager: ObservableObject {
             }
         }
 
-        try process.run()
+        do {
+            try process.run()
+        } catch {
+            stdout.fileHandleForReading.readabilityHandler = nil
+            stderr.fileHandleForReading.readabilityHandler = nil
+            flashProcess = nil
+            isFlashing = false
+            throw error
+        }
     }
 
     private func firmwareURL() throws -> URL {
