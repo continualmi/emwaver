@@ -25,7 +25,7 @@ stm/                     STM32 firmware workspace
 esp/                     ESP32 firmware workspace
 firmware/                Bundled firmware payloads consumed by apps
 hardware/                Open hardware designs (schematics, Gerbers, BOMs)
-assets/default-scripts/  Bundled example .js scripts and emw-* libraries
+assets/default-scripts/  Bundled example .emw scripts and emw-* libraries
 simulator/               Shared simulator fixtures for cross-platform testing
 crates/                  Rust firmware/update helper crates
 tools/                   Build and firmware support tooling
@@ -84,7 +84,7 @@ The ESP32 firmware workspace lives under `esp/`. Build it with ESP-IDF. After a 
 ### Running tests
 
 - **Platform parity**: `node scripts/parity/verify-platform-parity.mjs` — verifies cross-platform parity contracts.
-- **Simulator tests**: Each platform has a simulator bridge that runs hardware-touching `.js` scripts against `simulator/fixtures/*.json` without a physical board. Useful for CI and local iteration.
+- **Simulator tests**: Each platform has a simulator bridge that runs hardware-touching `.emw` scripts against `simulator/fixtures/*.json` without a physical board. Useful for CI and local iteration.
 - **Linux crate tests**: `cargo test --manifest-path linux/Cargo.toml --workspace --exclude emwaver-linux-app`
 
 ## Making changes
@@ -99,7 +99,7 @@ The ESP32 firmware workspace lives under `esp/`. Build it with ESP-IDF. After a 
 
 ## What makes a good contribution
 
-- **Scripts**: well-commented, self-contained `.js` files that exercise one module or workflow clearly. See `assets/default-scripts/cc1101.js` for style.
+- **Scripts**: well-commented, self-contained `.emw` files that exercise one module or workflow clearly. See `assets/default-scripts/cc1101.emw` for style.
 - **Hardware support**: firmware port plus the bundled binary payload, with the board-class split preserved (STM32 DFU vs ESP32 serial flashing).
 - **App improvements**: keep shared logic in the shared packages (`apple/` for iOS/macOS, `linux/crates/` for Linux). Don't duplicate behavior across platforms.
 - **Docs**: clear, concise, and close to the code. Prefer folder READMEs for architecture; use `docs/` for cross-cutting planning docs.

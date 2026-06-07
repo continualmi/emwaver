@@ -1,5 +1,7 @@
 namespace EMWaver.Models;
 
+using System.IO;
+
 public sealed record ScriptInfo(
     string Name,
     string FullPath,
@@ -7,9 +9,7 @@ public sealed record ScriptInfo(
     bool ShadowsBundled
 )
 {
-    public string FileName => Name.EndsWith(".js", System.StringComparison.OrdinalIgnoreCase)
-        ? Name
-        : Name + ".js";
+    public string FileName => Path.GetFileName(FullPath);
 
     public string DisplayName => Name;
 

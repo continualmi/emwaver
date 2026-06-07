@@ -329,11 +329,11 @@
       <h2>Decision</h2>
       <p class="lead">
         Do not preserve <code>script_bootstrap.emw</code> as the long-term runtime owner. Replace it
-        with ordinary bundled JavaScript files. Name the core file <code>emw-kernel.js</code>,
+        with ordinary bundled JavaScript files. Name the core file <code>emw-kernel.emw</code>,
         expose it as read-only runtime infrastructure in the main app UI, and move user-facing APIs
-        into importable libraries such as <code>emw-jsx.js</code>, <code>emw-ui.js</code>,
-        <code>emw-gpio.js</code>, <code>emw-spi.js</code>, <code>emw-i2c.js</code>,
-        and <code>emw-components.js</code>. The <code>emw-</code>
+        into importable libraries such as <code>emw-jsx.emw</code>, <code>emw-ui.emw</code>,
+        <code>emw-gpio.emw</code>, <code>emw-spi.emw</code>, <code>emw-i2c.emw</code>,
+        and <code>emw-components.emw</code>. The <code>emw-</code>
         prefix is worth keeping in code because bare names like <code>ui</code> and
         <code>hardware</code> are too ambiguous once imports become normal.
       </p>
@@ -361,17 +361,17 @@
     <section>
       <h2>Source Format</h2>
       <p class="lead">
-        The new public script format should be JavaScript source files, not a mixed
-        <code>.emw</code>/<code>.js</code> world. The <code>.emw</code> extension was useful when scripts
-        were a custom EMWaver-only surface. Once libraries use normal imports and JSX-like authoring,
-        <code>.js</code> is the cleaner open-source contract.
+        The new public script format should be JavaScript/JSX source carried in
+        <code>.emw</code> files, not a mixed user-facing <code>.emw</code>/<code>.js</code> world.
+        The <code>.emw</code> extension now marks these files as EMWaver programs: local hardware
+        scripts, native UI, and platform imports that still remain readable JavaScript.
       </p>
 
       <div class="grid three">
         <div class="card">
-          <span class="tag">All JS</span>
+          <span class="tag">All EMW</span>
           <h3>No mixed bundle</h3>
-          <p>Bundled examples, libraries, and kernel/runtime source should all move to <code>.js</code>.</p>
+          <p>Bundled examples, libraries, and kernel/runtime source should all move to <code>.emw</code>.</p>
         </div>
         <div class="card">
           <span class="tag ui">Type by metadata</span>
@@ -405,57 +405,57 @@
           <tr>
             <td>Host bridge</td>
             <td><code>Kernel.sendPacket</code> wraps the native host primitive <code>_scriptSendPacket</code></td>
-            <td><code>emw-kernel.js</code></td>
+            <td><code>emw-kernel.emw</code></td>
           </tr>
           <tr>
             <td>Protocol command send</td>
             <td><code>Protocol.sendCommand</code> wraps kernel packet send and asserts EMW OK/ERR status</td>
-            <td><code>emw-protocol.js</code></td>
+            <td><code>emw-protocol.emw</code></td>
           </tr>
           <tr>
             <td>Primitive hiding</td>
             <td>Keep raw host functions private so libraries use kernel/protocol APIs instead</td>
-            <td><code>emw-kernel.js</code></td>
+            <td><code>emw-kernel.emw</code></td>
           </tr>
           <tr>
             <td>Runtime timing</td>
             <td><code>millis</code>, <code>delay</code>, <code>sleep</code>, <code>every</code></td>
-            <td><code>emw-kernel.js</code> or <code>emw-runtime.js</code></td>
+            <td><code>emw-kernel.emw</code> or <code>emw-runtime.emw</code></td>
           </tr>
           <tr>
             <td>Protocol constants</td>
             <td><code>EMW_OP_GPIO</code>, <code>EMW_OP_I2C</code>, <code>__emwWriteU16LE</code></td>
-            <td><code>emw-protocol.js</code></td>
+            <td><code>emw-protocol.emw</code></td>
           </tr>
           <tr>
             <td>GPIO and pins</td>
             <td>Explicit <code>pin(...)</code> descriptors and <code>gpio</code> read/write/mode helpers</td>
-            <td><code>emw-gpio.js</code></td>
+            <td><code>emw-gpio.emw</code></td>
           </tr>
           <tr>
             <td>Bus interfaces</td>
             <td><code>spi</code>, <code>i2c</code>, <code>uart</code>, ADC, PWM, device metadata</td>
-            <td><code>emw-spi.js</code>, <code>emw-i2c.js</code>, <code>emw-uart.js</code>, <code>emw-adc.js</code>, <code>emw-pwm.js</code>, focused peers</td>
+            <td><code>emw-spi.emw</code>, <code>emw-i2c.emw</code>, <code>emw-uart.emw</code>, <code>emw-adc.emw</code>, <code>emw-pwm.emw</code>, focused peers</td>
           </tr>
           <tr>
             <td>Sampler and signals</td>
             <td><code>Sampler</code>, <code>SamplerSignals</code>, buffer load/save, retransmit helpers</td>
-            <td><code>emw-sampler.js</code></td>
+            <td><code>emw-sampler.emw</code></td>
           </tr>
           <tr>
             <td>Raw UI node factories</td>
             <td><code>UI.column</code>, <code>UI.button</code>, handler registration, <code>UI.render</code>, <code>UI.buffer</code></td>
-            <td><code>emw-ui.js</code></td>
+            <td><code>emw-ui.emw</code></td>
           </tr>
           <tr>
             <td>JSX authoring</td>
             <td><code>JSX.h</code>, <code>Column</code>, <code>Text</code>, <code>Button</code>, <code>render(&lt;App /&gt;)</code></td>
-            <td><code>emw-jsx.js</code></td>
+            <td><code>emw-jsx.emw</code></td>
           </tr>
           <tr>
             <td>Filesystem helpers</td>
             <td><code>FS.appDataDir</code>, <code>FS.readText</code>, <code>FS.writeBytes</code>, <code>FS.revealInFinder</code></td>
-            <td><code>emw-fs.js</code></td>
+            <td><code>emw-fs.emw</code></td>
           </tr>
         </tbody>
       </table>
@@ -466,43 +466,43 @@
       <div class="map">
         <div class="stack">
           <div class="module kernel">
-            <strong>emw-kernel.js</strong>
+            <strong>emw-kernel.emw</strong>
             <p>Host bridge, packet send, module loader, runtime registration, basic timers.</p>
           </div>
           <div class="arrow">imports</div>
           <div class="module hardware">
-            <strong>emw-protocol.js</strong>
+            <strong>emw-protocol.emw</strong>
             <p>Opcode constants, packet builders, status/payload helpers.</p>
           </div>
           <div class="module hardware">
-            <strong>emw-gpio.js</strong>
+            <strong>emw-gpio.emw</strong>
             <p>Explicit pin descriptors plus GPIO mode/read/write helpers.</p>
           </div>
           <div class="module hardware">
-            <strong>emw-spi.js / emw-i2c.js / emw-uart.js</strong>
+            <strong>emw-spi.emw / emw-i2c.emw / emw-uart.emw</strong>
             <p>Focused bus libraries that take explicit pins from the calling script.</p>
           </div>
           <div class="module hardware">
-            <strong>emw-adc.js / emw-pwm.js</strong>
+            <strong>emw-adc.emw / emw-pwm.emw</strong>
             <p>Focused analog and timer-output libraries, added when their API is large enough to stand alone.</p>
           </div>
         </div>
 
         <div class="stack">
           <div class="module ui">
-            <strong>emw-ui.js</strong>
+            <strong>emw-ui.emw</strong>
             <p>UI node factories, event handler tokenization, render tree output, plot buffer registration.</p>
           </div>
           <div class="module ui">
-            <strong>emw-jsx.js</strong>
+            <strong>emw-jsx.emw</strong>
             <p>JSX helper, primitive tag bindings, <code>render(&lt;App /&gt;)</code>, later state helpers.</p>
           </div>
           <div class="module components">
-            <strong>emw-components.js</strong>
+            <strong>emw-components.emw</strong>
             <p>Higher-level functional components: pin picker, board status, register cards, logs.</p>
           </div>
           <div class="module components">
-            <strong>emw-sampler.js</strong>
+            <strong>emw-sampler.emw</strong>
             <p>Sampler APIs, signal file helpers, capture/retransmit helpers, sampler UI components.</p>
           </div>
         </div>
@@ -584,7 +584,7 @@
         </p>
         <p>
           Those libraries should not ship mutable board aliases. SPI, I2C, UART, PWM, ADC, and component
-          helpers must take explicit pins supplied by the calling <code>.js</code> script.
+          helpers must take explicit pins supplied by the calling <code>.emw</code> script.
         </p>
       </div>
     </section>
@@ -619,7 +619,7 @@
           <p>
             Resolve module specifiers such as <code>emw-jsx</code>, <code>emw-ui</code>,
             <code>emw-gpio</code>, <code>emw-spi</code>, and relative script paths such as
-            <code>./lib/pins.js</code>.
+            <code>./lib/pins.emw</code>.
           </p>
         </div>
       </div>
@@ -652,13 +652,13 @@
           </tr>
           <tr>
             <td>Libraries</td>
-            <td><code>emw-jsx.js</code>, <code>emw-ui.js</code>, <code>emw-gpio.js</code>, <code>emw-spi.js</code>, <code>emw-i2c.js</code>, <code>emw-uart.js</code>, <code>emw-adc.js</code>, <code>emw-pwm.js</code>, <code>emw-sampler.js</code>.</td>
+            <td><code>emw-jsx.emw</code>, <code>emw-ui.emw</code>, <code>emw-gpio.emw</code>, <code>emw-spi.emw</code>, <code>emw-i2c.emw</code>, <code>emw-uart.emw</code>, <code>emw-adc.emw</code>, <code>emw-pwm.emw</code>, <code>emw-sampler.emw</code>.</td>
             <td>Visible in the main script UI, read-only, inspect, make copy, import from scripts.</td>
             <td><span class="tag hardware">Library</span> badge, read-only lock, import name shown.</td>
           </tr>
           <tr>
             <td>Kernel</td>
-            <td><code>emw-kernel.js</code> and possibly <code>emw-protocol.js</code>.</td>
+            <td><code>emw-kernel.emw</code> and possibly <code>emw-protocol.emw</code>.</td>
             <td>Visible in the main script UI as runtime infrastructure, read-only, importable, not a hidden asset.</td>
             <td><span class="tag">Kernel</span> badge, read-only lock, lower visual priority than examples.</td>
           </tr>
@@ -711,27 +711,27 @@
           </tr>
           <tr>
             <td><code>gpio.emw</code></td>
-            <td>Replace with <code>emw-gpio.js</code>; keep only a small <code>blink.js</code> or GPIO example if useful.</td>
+            <td>Replace with <code>emw-gpio.emw</code>; keep only a small <code>blink.emw</code> or GPIO example if useful.</td>
             <td><code>pin</code> and <code>gpio</code> are library APIs, not a standalone protocol script.</td>
           </tr>
           <tr>
             <td><code>spi.emw</code>, <code>i2c.emw</code>, <code>uart.emw</code></td>
-            <td>Replace with <code>emw-spi.js</code>, <code>emw-i2c.js</code>, <code>emw-uart.js</code>.</td>
+            <td>Replace with <code>emw-spi.emw</code>, <code>emw-i2c.emw</code>, <code>emw-uart.emw</code>.</td>
             <td>Bus APIs should be imported by real device examples, not shown as generic runnable scripts.</td>
           </tr>
           <tr>
             <td><code>adc.emw</code>, <code>pwm.emw</code></td>
-            <td>Replace with <code>emw-adc.js</code> and <code>emw-pwm.js</code>, or fold into a specific demo.</td>
+            <td>Replace with <code>emw-adc.emw</code> and <code>emw-pwm.emw</code>, or fold into a specific demo.</td>
             <td>Raw capability tests belong in libraries unless they demonstrate a useful workflow.</td>
           </tr>
           <tr>
             <td><code>sampler.emw</code></td>
-            <td>Move reusable capture/retransmit APIs to <code>emw-sampler.js</code>; keep only a real sampler demo if it is product-worthy.</td>
+            <td>Move reusable capture/retransmit APIs to <code>emw-sampler.emw</code>; keep only a real sampler demo if it is product-worthy.</td>
             <td>Sampler helpers should be imported by scripts, while demos should stay focused on user workflows.</td>
           </tr>
           <tr>
             <td><code>blink.emw</code>, <code>cc1101.emw</code>, radio/RFID demos, JSX demos</td>
-            <td>Keep as Examples, renamed to <code>.js</code> with normal imports.</td>
+            <td>Keep as Examples, renamed to <code>.emw</code> with normal imports.</td>
             <td>These are runnable scripts that prove a real workflow or component.</td>
           </tr>
         </tbody>
@@ -754,7 +754,7 @@
           <strong>Phase 0</strong>
           <div>
             <h3>Define visible library files</h3>
-            <p>Replace the hidden bootstrap concept with bundled read-only files: <code>emw-kernel.js</code>, <code>emw-protocol.js</code>, <code>emw-ui.js</code>, <code>emw-jsx.js</code>, <code>emw-gpio.js</code>, <code>emw-spi.js</code>, <code>emw-i2c.js</code>, <code>emw-uart.js</code>, <code>emw-adc.js</code>, <code>emw-pwm.js</code>, and component libraries.</p>
+            <p>Replace the hidden bootstrap concept with bundled read-only files: <code>emw-kernel.emw</code>, <code>emw-protocol.emw</code>, <code>emw-ui.emw</code>, <code>emw-jsx.emw</code>, <code>emw-gpio.emw</code>, <code>emw-spi.emw</code>, <code>emw-i2c.emw</code>, <code>emw-uart.emw</code>, <code>emw-adc.emw</code>, <code>emw-pwm.emw</code>, and component libraries.</p>
           </div>
           <span class="status">New model</span>
         </div>

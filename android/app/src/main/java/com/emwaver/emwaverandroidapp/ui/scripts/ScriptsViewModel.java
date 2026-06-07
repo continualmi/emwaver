@@ -167,7 +167,9 @@ public final class ScriptsViewModel extends ViewModel {
             return false;
         }
         String lowerName = name != null ? name.toLowerCase(Locale.US) : "";
-        if (lowerName.endsWith(".module.js")
+        if (lowerName.endsWith(".module.emw")
+            || lowerName.endsWith("_module.emw")
+            || lowerName.endsWith(".module.js")
             || lowerName.endsWith("_module.js")) {
             return true;
         }

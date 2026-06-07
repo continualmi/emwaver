@@ -45,7 +45,7 @@ This is the working checklist for the native Linux GTK4 port against the macOS a
 
 - Linux loads the shared `assets/default-scripts` bundle and separates examples, libraries, kernel files, and custom scripts.
 - Linux script execution can load bundled library/kernel module sources through a local `require` loader after import-line rewriting.
-- Linux runtime can transform uppercase JSX and capture the rendered script UI tree from the shared `emw-jsx.js`/`emw-ui.js` modules.
+- Linux runtime can transform uppercase JSX and capture the rendered script UI tree from the shared `emw-jsx.emw`/`emw-ui.emw` modules.
 - Linux GTK can render captured script UI trees for common layout/control nodes instead of showing only a text tree summary.
 - Linux script UI preview now keeps a live `ScriptUiRuntime` and invokes captured handler tokens from GTK buttons, tiles, sliders, pickers, toggles, and text-field submit/change callbacks.
 - Linux script rows now expose native Run/Edit buttons plus inline running state and row Stop actions, and row Run switches the main content to the live runtime preview instead of requiring the editor/toolbar path.

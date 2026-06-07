@@ -101,7 +101,7 @@ mod tests {
 
     fn sim_request() -> ScriptRunRequest {
         ScriptRunRequest {
-            script_name: "blink.js".to_string(),
+            script_name: "blink.emw".to_string(),
             source: "gpio.write(13, 1);".to_string(),
             device: DeviceRecord::new(
                 "sim",

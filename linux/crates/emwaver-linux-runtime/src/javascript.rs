@@ -928,10 +928,12 @@ globalThis.__emwModuleSources = {json};
   function candidates(name) {{
     const n = normalize(name);
     const out = [n];
+    if (n.slice(-4) !== '.emw') out.push(n + '.emw');
     if (n.slice(-3) !== '.js') out.push(n + '.js');
     if (n.indexOf('./') === 0) {{
       const bare = n.slice(2);
       out.push(bare);
+      if (bare.slice(-4) !== '.emw') out.push(bare + '.emw');
       if (bare.slice(-3) !== '.js') out.push(bare + '.js');
     }}
     return out;
@@ -1215,7 +1217,7 @@ mod tests {
     #[test]
     fn compiles_imports_through_local_module_loader() {
         let modules = BTreeMap::from([(
-            "board-tools.js".to_string(),
+            "board-tools.emw".to_string(),
             r#"
             const value = 0x09;
             module.exports = {
@@ -1244,11 +1246,11 @@ mod tests {
     fn compiles_nested_imports_in_modules() {
         let modules = BTreeMap::from([
             (
-                "inner.js".to_string(),
+                "inner.emw".to_string(),
                 "module.exports = { command: [0x01] };".to_string(),
             ),
             (
-                "outer.js".to_string(),
+                "outer.emw".to_string(),
                 r#"
                 import { command } from "./inner";
                 module.exports = { run() { emw.command(command, "nested"); } };
@@ -1274,12 +1276,12 @@ mod tests {
     fn renders_jsx_tree_through_shared_ui_modules() {
         let modules = BTreeMap::from([
             (
-                "emw-jsx.js".to_string(),
-                include_str!("../../../../assets/default-scripts/emw-jsx.js").to_string(),
+                "emw-jsx.emw".to_string(),
+                include_str!("../../../../assets/default-scripts/emw-jsx.emw").to_string(),
             ),
             (
-                "emw-ui.js".to_string(),
-                include_str!("../../../../assets/default-scripts/emw-ui.js").to_string(),
+                "emw-ui.emw".to_string(),
+                include_str!("../../../../assets/default-scripts/emw-ui.emw").to_string(),
             ),
         ]);
         let tree = render_javascript_ui(
@@ -1328,22 +1330,22 @@ mod tests {
             .join("assets/default-scripts");
         let mut modules = BTreeMap::new();
         for name in [
-            "emw-adc.js",
-            "emw-gpio.js",
-            "emw-i2c.js",
-            "emw-jsx.js",
-            "emw-protocol.js",
-            "emw-pwm.js",
-            "emw-spi.js",
-            "emw-ui.js",
-            "emw-uart.js",
+            "emw-adc.emw",
+            "emw-gpio.emw",
+            "emw-i2c.emw",
+            "emw-jsx.emw",
+            "emw-protocol.emw",
+            "emw-pwm.emw",
+            "emw-spi.emw",
+            "emw-ui.emw",
+            "emw-uart.emw",
         ] {
             modules.insert(
                 name.to_string(),
                 std::fs::read_to_string(root.join(name)).expect("bundled module"),
             );
         }
-        let source = std::fs::read_to_string(root.join("cc1101.js")).expect("cc1101 script");
+        let source = std::fs::read_to_string(root.join("cc1101.emw")).expect("cc1101 script");
 
         let tree = render_javascript_ui(&source, &modules).unwrap();
 
@@ -1370,22 +1372,22 @@ mod tests {
             .join("assets/default-scripts");
         let mut modules = BTreeMap::new();
         for name in [
-            "emw-adc.js",
-            "emw-gpio.js",
-            "emw-i2c.js",
-            "emw-jsx.js",
-            "emw-protocol.js",
-            "emw-pwm.js",
-            "emw-spi.js",
-            "emw-ui.js",
-            "emw-uart.js",
+            "emw-adc.emw",
+            "emw-gpio.emw",
+            "emw-i2c.emw",
+            "emw-jsx.emw",
+            "emw-protocol.emw",
+            "emw-pwm.emw",
+            "emw-spi.emw",
+            "emw-ui.emw",
+            "emw-uart.emw",
         ] {
             modules.insert(
                 name.to_string(),
                 std::fs::read_to_string(root.join(name)).expect("bundled module"),
             );
         }
-        let source = std::fs::read_to_string(root.join("cc1101.js")).expect("cc1101 script");
+        let source = std::fs::read_to_string(root.join("cc1101.emw")).expect("cc1101 script");
         let mut runtime = ScriptUiRuntime::new(&source, &modules).unwrap();
         let tree = runtime.tree().unwrap().unwrap();
         let token = find_button_token(&tree.root, "Initialize & Read").expect("initialize button");
@@ -1399,12 +1401,12 @@ mod tests {
     fn streams_console_calls_from_script_actions() {
         let modules = BTreeMap::from([
             (
-                "emw-jsx.js".to_string(),
-                include_str!("../../../../assets/default-scripts/emw-jsx.js").to_string(),
+                "emw-jsx.emw".to_string(),
+                include_str!("../../../../assets/default-scripts/emw-jsx.emw").to_string(),
             ),
             (
-                "emw-ui.js".to_string(),
-                include_str!("../../../../assets/default-scripts/emw-ui.js").to_string(),
+                "emw-ui.emw".to_string(),
+                include_str!("../../../../assets/default-scripts/emw-ui.emw").to_string(),
             ),
         ]);
         let lines = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
@@ -1434,12 +1436,12 @@ mod tests {
     fn streams_render_calls_from_script_actions() {
         let modules = BTreeMap::from([
             (
-                "emw-jsx.js".to_string(),
-                include_str!("../../../../assets/default-scripts/emw-jsx.js").to_string(),
+                "emw-jsx.emw".to_string(),
+                include_str!("../../../../assets/default-scripts/emw-jsx.emw").to_string(),
             ),
             (
-                "emw-ui.js".to_string(),
-                include_str!("../../../../assets/default-scripts/emw-ui.js").to_string(),
+                "emw-ui.emw".to_string(),
+                include_str!("../../../../assets/default-scripts/emw-ui.emw").to_string(),
             ),
         ]);
         let rendered = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
@@ -1488,12 +1490,12 @@ mod tests {
     fn invokes_captured_ui_handlers_against_live_runtime() {
         let modules = BTreeMap::from([
             (
-                "emw-jsx.js".to_string(),
-                include_str!("../../../../assets/default-scripts/emw-jsx.js").to_string(),
+                "emw-jsx.emw".to_string(),
+                include_str!("../../../../assets/default-scripts/emw-jsx.emw").to_string(),
             ),
             (
-                "emw-ui.js".to_string(),
-                include_str!("../../../../assets/default-scripts/emw-ui.js").to_string(),
+                "emw-ui.emw".to_string(),
+                include_str!("../../../../assets/default-scripts/emw-ui.emw").to_string(),
             ),
         ]);
         let mut runtime = ScriptUiRuntime::new(

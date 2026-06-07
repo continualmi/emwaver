@@ -3,7 +3,7 @@
 import { JSX, render } from "emw-jsx";
 import { Column, Text, Button } from "emw-ui";
 
-const SCRIPT_NAME = "hello.js";
+const SCRIPT_NAME = "hello.emw";
 
 var count = 0;
 

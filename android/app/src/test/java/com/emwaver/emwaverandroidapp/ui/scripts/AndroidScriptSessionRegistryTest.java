@@ -37,7 +37,7 @@ public class AndroidScriptSessionRegistryTest {
         assertEquals(1, registry.sessions().size());
         assertEquals(second.instanceId, registry.selectedSession().instanceId);
         assertEquals("usb:b", registry.selectedSession().deviceId);
-        assertEquals("Beta.js", registry.selectedSession().fileName());
+        assertEquals("Beta.emw", registry.selectedSession().fileName());
         assertEquals("Running on USB B", registry.selectedSession().statusLabel());
     }
 

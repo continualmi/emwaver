@@ -859,14 +859,17 @@ public struct ScriptsRootView: View {
         let initial: String
         switch context {
         case .create:
-            initial = "script_script.js"
+            initial = "script_script.emw"
         case .rename(let id):
             initial = viewModel.scriptName(for: id)
         case .copy(let id):
             let original = viewModel.scriptName(for: id)
-            if original.lowercased().hasSuffix(".js") {
+            if original.lowercased().hasSuffix(".emw") {
+                let base = String(original.dropLast(4))
+                initial = base + "_copy.emw"
+            } else if original.lowercased().hasSuffix(".js") {
                 let base = String(original.dropLast(3))
-                initial = base + "_copy.js"
+                initial = base + "_copy.emw"
             } else {
                 initial = original + "_copy"
             }

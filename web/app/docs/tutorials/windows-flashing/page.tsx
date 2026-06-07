@@ -136,9 +136,9 @@ export default function WindowsFlashingTutorial() {
         Switch to the Scripts view, open one of the built-in scripts, and press <strong>Run</strong>:
       </p>
       <ul>
-        <li><code>hello.js</code> — confirms the script engine is working.</li>
-        <li><code>blink.js</code> — toggles a GPIO pin.</li>
-        <li><code>cc1101.js</code> — controls a CC1101 module over SPI.</li>
+        <li><code>hello.emw</code> — confirms the script engine is working.</li>
+        <li><code>blink.emw</code> — toggles a GPIO pin.</li>
+        <li><code>cc1101.emw</code> — controls a CC1101 module over SPI.</li>
       </ul>
 
       <h2>Troubleshooting</h2>

@@ -23,7 +23,7 @@ final class SimulatorScriptDeviceTests: XCTestCase {
         let scripts = try defaultScriptSources()
         let device = try SimulatorScriptDevice(fixtureURL: fixtureURL())
         let engine = ScriptEngine()
-        engine.setBootstrapSource(scripts["emw-kernel.js"])
+        engine.setBootstrapSource(scripts["emw-kernel.emw"])
 
         let rendered = expectation(description: "script rendered")
         var errors: [String] = []
@@ -97,7 +97,7 @@ final class SimulatorScriptDeviceTests: XCTestCase {
         )
 
         var sources: [String: String] = [:]
-        for url in urls where url.pathExtension == "js" {
+        for url in urls where url.pathExtension == "emw" {
             sources[url.lastPathComponent] = try String(contentsOf: url, encoding: .utf8)
         }
         return sources

@@ -17,6 +17,7 @@ export function mimeFromPath(filePath: string): string {
     case "css":
       return "text/css; charset=utf-8";
     case "js":
+    case "emw":
       return "text/javascript; charset=utf-8";
     case "json":
       return "application/json; charset=utf-8";

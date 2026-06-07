@@ -48,7 +48,7 @@
       <Link>simulator\fixtures\basic-board.json</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
-    <None Include="..\..\assets\default-scripts\*.js">
+    <None Include="..\..\assets\default-scripts\*.emw">
       <Link>Assets\DefaultScripts\%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

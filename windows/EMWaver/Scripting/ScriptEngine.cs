@@ -240,11 +240,11 @@ public sealed class ScriptEngine : IDisposable
         }
 
         var baseDir = AppContext.BaseDirectory;
-        var path = Path.Combine(baseDir, "Assets", "DefaultScripts", "emw-kernel.js");
+        var path = Path.Combine(baseDir, "Assets", "DefaultScripts", "emw-kernel.emw");
         if (!File.Exists(path))
         {
             _bootstrapSource = string.Empty;
-            EmitError("Script kernel missing from app bundle (Assets/DefaultScripts/emw-kernel.js)");
+            EmitError("Script kernel missing from app bundle (Assets/DefaultScripts/emw-kernel.emw)");
             return;
         }
 
@@ -260,7 +260,8 @@ public sealed class ScriptEngine : IDisposable
             return modules;
         }
 
-        foreach (var path in Directory.EnumerateFiles(scriptsDir, "*.js", SearchOption.TopDirectoryOnly))
+        foreach (var path in Directory.EnumerateFiles(scriptsDir, "*.emw", SearchOption.TopDirectoryOnly)
+                     .Concat(Directory.EnumerateFiles(scriptsDir, "*.js", SearchOption.TopDirectoryOnly)))
         {
             var fileName = Path.GetFileName(path);
             var moduleName = Path.GetFileNameWithoutExtension(path);
@@ -283,7 +284,13 @@ public sealed class ScriptEngine : IDisposable
               var key = String(name || "");
               var resolved = Object.prototype.hasOwnProperty.call(__emwModuleSources, key)
                 ? key
-                : (Object.prototype.hasOwnProperty.call(__emwModuleSources, key + ".js") ? key + ".js" : null);
+                : (Object.prototype.hasOwnProperty.call(__emwModuleSources, key + ".emw")
+                  ? key + ".emw"
+                  : (Object.prototype.hasOwnProperty.call(__emwModuleSources, key + ".js") ? key + ".js" : null));
+              if (!resolved && key.slice(-4) === ".emw") {
+                var withoutEmwExt = key.slice(0, -4);
+                if (Object.prototype.hasOwnProperty.call(__emwModuleSources, withoutEmwExt)) resolved = withoutEmwExt;
+              }
               if (!resolved && key.slice(-3) === ".js") {
                 var withoutExt = key.slice(0, -3);
                 if (Object.prototype.hasOwnProperty.call(__emwModuleSources, withoutExt)) resolved = withoutExt;
@@ -506,10 +513,10 @@ public sealed class ScriptEngine : IDisposable
         }));
 
         // Keep parity with macOS: expose the live sampler capture stream as a built-in
-        // plot source named "samplerBits" so sampler.js can render UI.plot directly.
+        // plot source named "samplerBits" so sampler.emw can render UI.plot directly.
         PlotBufferStore.Shared.SetProvider("samplerBits", () => GetSamplerBytes());
 
-        // Sampler buffer API parity with macOS (used by emw-kernel.js + sampler.js).
+        // Sampler buffer API parity with macOS (used by emw-kernel.emw + sampler.emw).
         engine.SetValue("_scriptSamplerBufferGetPacketCount", new Func<int>(() =>
         {
             var len = GetSamplerBytes().Length;

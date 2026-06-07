@@ -28,7 +28,7 @@ export default function DocsIndex() {
         </li>
         <li>
           <strong>Run a script</strong> — use built-in examples, write your own
-          JSX-based <code>.js</code> script, or enable desktop MCP so an MCP client can assemble the flow.
+          JSX-based <code>.emw</code> script, or enable desktop MCP so an MCP client can assemble the flow.
         </li>
       </ol>
 
@@ -83,7 +83,7 @@ export default function DocsIndex() {
           <strong>Plug in locally</strong>. EMWaver runs supported scripts directly through the native app and connected board.
         </li>
         <li>
-          <strong>Open a script</strong> such as <code>sampler.js</code>, <code>cc1101.js</code>, or <code>rfid.js</code>,
+          <strong>Open a script</strong> such as <code>sampler.emw</code>, <code>cc1101.emw</code>, or <code>rfid.emw</code>,
           then adapt it or create a new one.
         </li>
       </ol>

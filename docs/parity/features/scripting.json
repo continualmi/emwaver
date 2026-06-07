@@ -3,7 +3,7 @@
   "features": [
     {
       "id": "scripting.default_scripts_packaged",
-      "description": "Native app packages include the canonical default .js script assets and kernel/libraries.",
+      "description": "Native app packages include the canonical default .emw script assets and kernel/libraries.",
       "parity": "documented_exceptions",
       "platforms": {
         "macos": {
@@ -13,13 +13,13 @@
               "file": "macos/EMWaver/EMWaver.xcodeproj/project.pbxproj",
               "contains": [
                 "assets/default-scripts",
-                "emw-kernel\\.js",
-                "\\*\\.js"
+                "emw-kernel\\.emw",
+                "\\*\\.emw"
               ]
             },
             {
               "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptStorage/ScriptsViewModel.swift",
-              "contains": "urls\\(forResourcesWithExtension: \"js\"[\\s\\S]*DefaultScripts"
+              "contains": "urls\\(forResourcesWithExtension: \"emw\"[\\s\\S]*DefaultScripts"
             }
           ]
         },
@@ -30,13 +30,13 @@
               "file": "ios/EMWaver.xcodeproj/project.pbxproj",
               "contains": [
                 "assets/default-scripts",
-                "emw-kernel\\.js",
-                "\\*\\.js"
+                "emw-kernel\\.emw",
+                "\\*\\.emw"
               ]
             },
             {
               "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptStorage/ScriptsViewModel.swift",
-              "contains": "urls\\(forResourcesWithExtension: \"js\"[\\s\\S]*DefaultScripts"
+              "contains": "urls\\(forResourcesWithExtension: \"emw\"[\\s\\S]*DefaultScripts"
             }
           ]
         },
@@ -47,7 +47,7 @@
               "file": "windows/EMWaver/EMWaver.csproj",
               "contains": [
                 "Assets\\\\DefaultScripts",
-                "\\*\\.js"
+                "\\*\\.emw"
               ]
             }
           ]
@@ -60,8 +60,8 @@
               "contains": [
                 "syncScriptAssets",
                 "DefaultScripts",
-                "include\\(\"\\*\\.js\"\\)",
-                "emw-kernel\\.js"
+                "include\\(\"\\*\\.emw\"\\)",
+                "emw-kernel\\.emw"
               ]
             }
           ]
@@ -73,21 +73,21 @@
               "file": "linux/crates/emwaver-linux-core/src/script_library.rs",
               "contains": [
                 "assets/default-scripts",
-                "emw-kernel.js",
+                "emw-kernel.emw",
                 "EMWAVER_DEFAULT_SCRIPTS_DIR"
               ]
             },
             {
               "file": "linux/scripts/package-linux.sh",
-              "contains": "assets/default-scripts/\\*.js"
+              "contains": "assets/default-scripts/\\*.emw"
             }
           ]
         }
       }
     },
     {
-      "id": "scripting.js_jsx_runtime",
-      "description": "Native app script runtimes expose JS imports/require, JSX transpilation, and the shared emw-kernel.js surface.",
+      "id": "scripting.emw_jsx_runtime",
+      "description": "Native app script runtimes expose JS imports/require, JSX transpilation, and the shared emw-kernel.emw surface.",
       "parity": "documented_exceptions",
       "platforms": {
         "macos": {
@@ -96,7 +96,7 @@
             {
               "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptRuntime/ScriptEngine.swift",
               "contains": [
-                "emw-kernel\\.js",
+                "emw-kernel\\.emw",
                 "require",
                 "ScriptModuleTranspiler",
                 "ScriptJSXTranspiler"
@@ -104,7 +104,7 @@
             },
             {
               "file": "apple/EMWaverAppleCore/Tests/EMWaverScriptRuntimeTests/DefaultScriptAssetsTests.swift",
-              "contains": "JavaScriptOnlyAndTranspile|ScriptJSXTranspiler"
+              "contains": "EmwScriptsAndTranspile|ScriptJSXTranspiler"
             }
           ]
         },
@@ -114,7 +114,7 @@
             {
               "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptRuntime/ScriptEngine.swift",
               "contains": [
-                "emw-kernel\\.js",
+                "emw-kernel\\.emw",
                 "require",
                 "ScriptModuleTranspiler",
                 "ScriptJSXTranspiler"
@@ -122,7 +122,7 @@
             },
             {
               "file": "apple/EMWaverAppleCore/Tests/EMWaverScriptRuntimeTests/DefaultScriptAssetsTests.swift",
-              "contains": "JavaScriptOnlyAndTranspile|ScriptJSXTranspiler"
+              "contains": "EmwScriptsAndTranspile|ScriptJSXTranspiler"
             }
           ]
         },
@@ -132,7 +132,7 @@
             {
               "file": "windows/EMWaver/Scripting/ScriptEngine.cs",
               "contains": [
-                "emw-kernel\\.js",
+                "emw-kernel\\.emw",
                 "function require",
                 "ScriptSourceTranspiler\\.Transpile"
               ]
@@ -152,7 +152,7 @@
             {
               "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/scripts/ScriptEngine.java",
               "contains": [
-                "emw-kernel\\.js",
+                "emw-kernel\\.emw",
                 "require\\(\\)",
                 "ScriptSourceTranspiler\\.transpile"
               ]
@@ -175,7 +175,7 @@
                 "execute_javascript_with_modules",
                 "global.require",
                 "JSX.h",
-                "emw-protocol.js"
+                "emw-protocol.emw"
               ]
             },
             {

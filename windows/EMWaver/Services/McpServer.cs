@@ -826,12 +826,14 @@ public sealed class McpServer : IDisposable
 
     private static string LocalScriptFileName(string? requestedPath)
     {
-        var raw = string.IsNullOrWhiteSpace(requestedPath) ? "mcp-script.js" : Path.GetFileName(requestedPath.Trim());
+        var raw = string.IsNullOrWhiteSpace(requestedPath) ? "mcp-script.emw" : Path.GetFileName(requestedPath.Trim());
         if (string.IsNullOrWhiteSpace(raw))
         {
-            raw = "mcp-script.js";
+            raw = "mcp-script.emw";
         }
-        return raw.EndsWith(".js", StringComparison.OrdinalIgnoreCase) ? raw : raw + ".js";
+        return raw.EndsWith(".emw", StringComparison.OrdinalIgnoreCase) || raw.EndsWith(".js", StringComparison.OrdinalIgnoreCase)
+            ? raw
+            : raw + ".emw";
     }
 
     private static JsonObject Tool(string name, string description, JsonObject inputSchema)

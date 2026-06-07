@@ -10,7 +10,7 @@ import JavaScriptCore
 import XCTest
 
 final class DefaultScriptAssetsTests: XCTestCase {
-    func testDefaultScriptsAreJavaScriptOnlyAndTranspile() throws {
+    func testDefaultScriptsAreEmwScriptsAndTranspile() throws {
         let root = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -23,10 +23,10 @@ final class DefaultScriptAssetsTests: XCTestCase {
             includingPropertiesForKeys: nil
         )
 
-        XCTAssertFalse(urls.contains { $0.pathExtension == "emw" })
+        XCTAssertFalse(urls.contains { $0.pathExtension == "js" })
 
         let scriptURLs = urls
-            .filter { $0.pathExtension == "js" }
+            .filter { $0.pathExtension == "emw" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
         XCTAssertFalse(scriptURLs.isEmpty)
 

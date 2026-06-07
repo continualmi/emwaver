@@ -219,7 +219,7 @@ sending a <code>CONNECT</code> command.</p>
   <h4>&#9888; Android is currently missing this</h4>
   <p>
     The macOS app implements the full session lifecycle. The Android app does not send
-    <code>CONNECT</code>, which is why cc1101.js and other hardware scripts fail with
+    <code>CONNECT</code>, which is why cc1101.emw and other hardware scripts fail with
     <strong>error 130</strong> (<code>EMW_RESP_STATUS_BUSY = 0x82</code>) on ESP32 boards.
     See <a href="#android-gap">§7</a> for the gap analysis.
   </p>
@@ -348,11 +348,11 @@ Bytes 3-17: 0x00        (padding)</pre>
   without first claiming the session:
 </p>
 
-<pre>Client &#10132; SPI XFER [50, 0A, 02, 02, F1, 00]   &#8592; cc1101.js VERSION probe
+<pre>Client &#10132; SPI XFER [50, 0A, 02, 02, F1, 00]   &#8592; cc1101.emw VERSION probe
 Firmware &#10132; BUSY [82]                            &#8592; transport_session_allows_command() returns false
 
 JS kernel:  __emwAssertOk() sees status=0x82  &#8594;  throws "Device error: 130"
-cc1101.js:  catch  &#8594;  "Load failed: Device error: 130"</pre>
+cc1101.emw:  catch  &#8594;  "Load failed: Device error: 130"</pre>
 
 <!-- ================================================================== -->
 <h2>5. Firmware Decision Logic</h2>
@@ -545,13 +545,13 @@ if (response == null || response.length == 0 || response[0] != (byte)0x80) {
     <tr><th>Opcode</th><th>Value</th><th>Used by</th></tr>
   </thead>
   <tbody>
-    <tr><td><code>EMW_OP_GPIO</code></td><td class="byte">0x10</td><td>emw-gpio.js, any script using gpio.*</td></tr>
-    <tr><td><code>EMW_OP_ADC_READ</code></td><td class="byte">0x20</td><td>emw-adc.js</td></tr>
-    <tr><td><code>EMW_OP_SPI_XFER</code></td><td class="byte">0x50</td><td><strong>emw-spi.js, cc1101.js, rfm69.js, rfid.js</strong></td></tr>
-    <tr><td><code>EMW_OP_I2C</code></td><td class="byte">0x40</td><td>emw-i2c.js</td></tr>
-    <tr><td><code>EMW_OP_UART</code></td><td class="byte">0x30</td><td>emw-uart.js</td></tr>
-    <tr><td><code>EMW_OP_SAMPLE</code></td><td class="byte">0x60</td><td>Sampler.js, signal capture</td></tr>
-    <tr><td><code>EMW_OP_PWM</code></td><td class="byte">0x70</td><td>emw-pwm.js</td></tr>
+    <tr><td><code>EMW_OP_GPIO</code></td><td class="byte">0x10</td><td>emw-gpio.emw, any script using gpio.*</td></tr>
+    <tr><td><code>EMW_OP_ADC_READ</code></td><td class="byte">0x20</td><td>emw-adc.emw</td></tr>
+    <tr><td><code>EMW_OP_SPI_XFER</code></td><td class="byte">0x50</td><td><strong>emw-spi.emw, cc1101.emw, rfm69.emw, rfid.emw</strong></td></tr>
+    <tr><td><code>EMW_OP_I2C</code></td><td class="byte">0x40</td><td>emw-i2c.emw</td></tr>
+    <tr><td><code>EMW_OP_UART</code></td><td class="byte">0x30</td><td>emw-uart.emw</td></tr>
+    <tr><td><code>EMW_OP_SAMPLE</code></td><td class="byte">0x60</td><td>Sampler.emw, signal capture</td></tr>
+    <tr><td><code>EMW_OP_PWM</code></td><td class="byte">0x70</td><td>emw-pwm.emw</td></tr>
     <tr><td><code>EMW_OP_TRANSMIT</code></td><td class="byte">0x80</td><td>IR/signal transmit</td></tr>
   </tbody>
 </table>
@@ -624,10 +624,10 @@ case EMW_TRANSPORT_SESSION_CONNECT:
     <tr><td>Firmware</td><td><code>esp/main/libraries/init.c</code></td><td>Command task loop, calls transport_session_allows_command()</td></tr>
     <tr><td>macOS</td><td><code>macos/EMWaver/EMWaver/MacUSBManager.swift</code></td><td>Full session lifecycle reference implementation</td></tr>
     <tr><td>macOS</td><td><code>macos/EMWaver/EMWaver/MacScriptSessionManager.swift</code></td><td>Calls begin/end transport session around script runs</td></tr>
-    <tr><td>JS Kernel</td><td><code>assets/default-scripts/emw-kernel.js</code></td><td>__emwAssertOk() — where error 130 is surfaced to scripts</td></tr>
-    <tr><td>JS Kernel</td><td><code>assets/default-scripts/emw-protocol.js</code></td><td>Protocol constants used by module scripts</td></tr>
-    <tr><td>JS Module</td><td><code>assets/default-scripts/emw-spi.js</code></td><td>SPI module — builds EMW_OP_SPI_XFER packets</td></tr>
-    <tr><td>JS Module</td><td><code>assets/default-scripts/cc1101.js</code></td><td>CC1101 script — triggers the error on Initialize</td></tr>
+    <tr><td>JS Kernel</td><td><code>assets/default-scripts/emw-kernel.emw</code></td><td>__emwAssertOk() — where error 130 is surfaced to scripts</td></tr>
+    <tr><td>JS Kernel</td><td><code>assets/default-scripts/emw-protocol.emw</code></td><td>Protocol constants used by module scripts</td></tr>
+    <tr><td>JS Module</td><td><code>assets/default-scripts/emw-spi.emw</code></td><td>SPI module — builds EMW_OP_SPI_XFER packets</td></tr>
+    <tr><td>JS Module</td><td><code>assets/default-scripts/cc1101.emw</code></td><td>CC1101 script — triggers the error on Initialize</td></tr>
     <tr><td>Android</td><td><code>android/.../USBService.java</code></td><td><strong>Missing</strong> transport session handling</td></tr>
     <tr><td>Android</td><td><code>android/.../AndroidBleProtocol.java</code></td><td><strong>Missing</strong> transport session handling</td></tr>
     <tr><td>Android</td><td><code>android/.../AndroidWiFiTransport.java</code></td><td><strong>Missing</strong> transport session handling</td></tr>

@@ -274,7 +274,7 @@ export default function InstallDocPage() {
 
       <h2>5. Run local scripts</h2>
       <p>
-        Open the Scripts view in the app, pick a built-in script or create your own <code>.js</code> file,
+        Open the Scripts view in the app, pick a built-in script or create your own <code>.emw</code> file,
         and press Run. Scripts can include JSX-style UI syntax for native module panels.
       </p>
 

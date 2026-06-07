@@ -33,6 +33,16 @@ public final class FileRepositoryLocal {
         return INTERNAL_BOOTSTRAP_NAME.equalsIgnoreCase(name.trim());
     }
 
+    private static boolean matchesExtension(String name, String extension) {
+        if (extension == null) {
+            return true;
+        }
+        if (name.endsWith(extension)) {
+            return true;
+        }
+        return ".emw".equalsIgnoreCase(extension) && name.endsWith(".js");
+    }
+
     private final Context appContext;
     private final ExecutorService executor;
     private final Handler mainHandler;
@@ -68,12 +78,12 @@ public final class FileRepositoryLocal {
                             if (isReservedInternalName(name)) {
                                 continue;
                             }
-                            if (extension == null || name.endsWith(extension)) {
+                            if (matchesExtension(name, extension)) {
                                 String id = name;
                                 long size = file.length();
                                 long lastModified = file.lastModified();
                                 String etag = String.valueOf(lastModified);
-                                String ext = extension != null ? extension : "";
+                                String ext = name.contains(".") ? name.substring(name.lastIndexOf(".")) : "";
                                 String kind = "file";
                                 String contentType = "text/plain";
                                 result.add(new UserFileMetadata(id, name, ext, kind, etag, size, contentType));
@@ -102,12 +112,12 @@ public final class FileRepositoryLocal {
                             if (isReservedInternalName(name)) {
                                 continue;
                             }
-                            if (extension == null || name.endsWith(extension)) {
+                            if (matchesExtension(name, extension)) {
                                 String id = name;
                                 long size = file.length();
                                 long lastModified = file.lastModified();
                                 String etag = String.valueOf(lastModified);
-                                String ext = extension != null ? extension : "";
+                                String ext = name.contains(".") ? name.substring(name.lastIndexOf(".")) : "";
                                 String kind = "file";
                                 String contentType = "text/plain";
                                 

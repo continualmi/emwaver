@@ -57,8 +57,8 @@ macOS/iOS Apple runtime includes EMWaver JSX authoring support:
 `ScriptJSXTranspiler` rewrites a small uppercase JSX subset such as
 `<Column><Text>Hello</Text></Column>` into `JSX.h(...)` calls before
 JavaScriptCore evaluates a script. The macOS runtime now loads
-`assets/default-scripts/emw-kernel.js` and exposes visible read-only libraries
-such as `emw-ui.js`, `emw-jsx.js`, and `emw-gpio.js`; scripts can use normal
+`assets/default-scripts/emw-kernel.emw` and exposes visible read-only libraries
+such as `emw-ui.emw`, `emw-jsx.emw`, and `emw-gpio.emw`; scripts can use normal
 imports while native SwiftUI rendering still consumes the same cross-platform
 tree. This is intentionally an authoring layer, not a replacement for the
 render protocol.

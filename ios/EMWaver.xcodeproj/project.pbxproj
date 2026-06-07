@@ -309,7 +309,7 @@
 			files = (
 			);
 			inputPaths = (
-				"$(SRCROOT)/../assets/default-scripts/emw-kernel.js",
+				"$(SRCROOT)/../assets/default-scripts/emw-kernel.emw",
 				"$(SRCROOT)/../assets/default-scripts",
 			);
 			name = "Sync Script Assets";
@@ -318,7 +318,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\n\nsrc_dir=\"${SRCROOT}/../assets/default-scripts\"\ndst_root=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\ndst_default_scripts=\"${SCRIPT_OUTPUT_FILE_0:-${dst_root}/DefaultScripts}\"\n\necho \"[Sync Script Assets] src_dir=${src_dir}\"\necho \"[Sync Script Assets] dst_root=${dst_root}\"\n\ntest -d \"${src_dir}\" || (echo \"Missing canonical script assets dir at: ${src_dir}\" >&2; exit 1)\ntest -f \"${src_dir}/emw-kernel.js\" || (echo \"Missing EMWaver script kernel at: ${src_dir}/emw-kernel.js\" >&2; exit 1)\n\nmkdir -p \"${dst_default_scripts}\"\n\n# Remove any stale scripts so removed assets don't linger in the bundle.\nrm -f \"${dst_default_scripts}\"/*.emw \"${dst_default_scripts}\"/*.js\nrm -f \"${dst_root}/script_bootstrap.emw\"\n\n# Copy iOS script assets to the bundle subdirectory used by ScriptsViewModel.\nfor f in \"${src_dir}\"/*.js; do\n  test -f \"${f}\" || continue\n  cp -f \"${f}\" \"${dst_default_scripts}/$(basename \"${f}\")\"\ndone\n";
+			shellScript = "set -e\n\nsrc_dir=\"${SRCROOT}/../assets/default-scripts\"\ndst_root=\"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\ndst_default_scripts=\"${SCRIPT_OUTPUT_FILE_0:-${dst_root}/DefaultScripts}\"\n\necho \"[Sync Script Assets] src_dir=${src_dir}\"\necho \"[Sync Script Assets] dst_root=${dst_root}\"\n\ntest -d \"${src_dir}\" || (echo \"Missing canonical script assets dir at: ${src_dir}\" >&2; exit 1)\ntest -f \"${src_dir}/emw-kernel.emw\" || (echo \"Missing EMWaver script kernel at: ${src_dir}/emw-kernel.emw\" >&2; exit 1)\n\nmkdir -p \"${dst_default_scripts}\"\n\n# Remove any stale scripts so removed assets don't linger in the bundle.\nrm -f \"${dst_default_scripts}\"/*.emw \"${dst_default_scripts}\"/*.js\nrm -f \"${dst_root}/script_bootstrap.emw\"\n\n# Copy iOS script assets to the bundle subdirectory used by ScriptsViewModel.\nfor f in \"${src_dir}\"/*.emw; do\n  test -f \"${f}\" || continue\n  cp -f \"${f}\" \"${dst_default_scripts}/$(basename \"${f}\")\"\ndone\n";
 		};
 		B1F0B1C32F7C5E8D9A0B1004 /* Sync App Config */ = {
 			isa = PBXShellScriptBuildPhase;

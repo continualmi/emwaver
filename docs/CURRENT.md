@@ -12,7 +12,7 @@ Core idea:
 native app -> local script runtime -> USB/BLE/Wi-Fi transport -> supported board firmware -> electronics
 ```
 
-Scripts are JavaScript files (`.js`). They can use JSX-style syntax inside JavaScript to define native UI panels for connected modules.
+Scripts are EMWaver script files (`.emw`). They can use JSX-style syntax inside JavaScript to define native UI panels for connected modules.
 
 Desktop apps expose the running script engine and hardware tools through a local MCP server. Mobile apps keep local script import and app-local execution without hosting an MCP endpoint.
 

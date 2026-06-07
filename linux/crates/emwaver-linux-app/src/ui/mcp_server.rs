@@ -1459,11 +1459,12 @@ fn local_script_file_name(path: Option<&str>) -> String {
         .and_then(|value| std::path::Path::new(value).file_name())
         .and_then(|value| value.to_str())
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or("mcp-script.js");
-    if raw.to_lowercase().ends_with(".js") {
+        .unwrap_or("mcp-script.emw");
+    let lowered = raw.to_lowercase();
+    if lowered.ends_with(".emw") || lowered.ends_with(".js") {
         raw.to_string()
     } else {
-        format!("{raw}.js")
+        format!("{raw}.emw")
     }
 }
 

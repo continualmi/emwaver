@@ -96,19 +96,19 @@ platform :ios do
       unzip -q "#{ipa_path}" -d "${tmp_dir}"
       app_dir="$(find "${tmp_dir}/Payload" -maxdepth 1 -name '*.app' -type d | head -1)"
       test -n "${app_dir}" || (echo "Missing .app inside IPA" >&2; exit 1)
-      test -f "${app_dir}/DefaultScripts/emw-kernel.js" || (echo "Missing DefaultScripts/emw-kernel.js in IPA" >&2; exit 1)
-      js_count="$(find "${app_dir}/DefaultScripts" -maxdepth 1 -name '*.js' -type f | wc -l | tr -d ' ')"
-      test "${js_count}" -ge 5 || (echo "Expected bundled JavaScript default scripts, found ${js_count}" >&2; exit 1)
-      if find "${app_dir}" -name '*.emw' -type f | grep -q .; then
-        echo "IPA still contains legacy .emw scripts:" >&2
-        find "${app_dir}" -name '*.emw' -type f >&2
+      test -f "${app_dir}/DefaultScripts/emw-kernel.emw" || (echo "Missing DefaultScripts/emw-kernel.emw in IPA" >&2; exit 1)
+      emw_count="$(find "${app_dir}/DefaultScripts" -maxdepth 1 -name '*.emw' -type f | wc -l | tr -d ' ')"
+      test "${emw_count}" -ge 5 || (echo "Expected bundled EMWaver default scripts, found ${emw_count}" >&2; exit 1)
+      if find "${app_dir}/DefaultScripts" -maxdepth 1 -name '*.js' -type f | grep -q .; then
+        echo "IPA still contains legacy .js default scripts:" >&2
+        find "${app_dir}/DefaultScripts" -maxdepth 1 -name '*.js' -type f >&2
         exit 1
       fi
       if find "${app_dir}" -name 'script_bootstrap.emw' -type f | grep -q .; then
         echo "IPA still contains legacy script_bootstrap.emw" >&2
         exit 1
       fi
-      echo "Validated IPA script assets: ${js_count} JavaScript files and no legacy .emw files."
+      echo "Validated IPA script assets: ${emw_count} EMWaver scripts and no legacy .js default scripts."
     ))
   end
 

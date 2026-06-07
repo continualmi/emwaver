@@ -8,7 +8,7 @@ This is the durable working tracker for current EMWaver priorities. `SCHEDULE.md
 - **Mobile-first product:** iOS and Android are primary. The phone is the portable local hardware lab.
 - **Desktop apps:** macOS and Windows are active native apps for development, bench testing, firmware setup, long runs, advanced workflows, and the local MCP bridge.
 - **Linux native app:** Linux is being rebuilt as a native Rust + GTK4/libadwaita app and now carries the desktop MCP source slice; GTK-host validation remains pending.
-- **Script + UI model:** EMWaver scripts are `.js` files. Scripts may use JSX-style syntax to define native UI panels for modules.
+- **Script + UI model:** EMWaver scripts are `.emw` files. Scripts may use JSX-style syntax to define native UI panels for modules.
 - **Desktop MCP tools:** script lifecycle, device status, and hardware primitives (`spi_transfer`, `gpio_read`, `gpio_write`, `analog_read`) live on the local desktop MCP surface.
 - **Multi-transport:** USB, BLE, and Wi-Fi remain first-class depending on board capability. Wi-Fi supports LAN/VPN-style remote hardware control for supported boards.
 - **Hardware family:** nine hardware designs are imported under `hardware/`, covering compact USB-C control, radio, infrared, GPIO, RFID, and ESP32-S3 wireless workflows.
@@ -17,7 +17,7 @@ This is the durable working tracker for current EMWaver priorities. `SCHEDULE.md
 
 | Priority | Area | Status | Notes |
 | --- | --- | --- | --- |
-| `P0` | Cross-platform CC1101 validation | `done` | `cc1101.js` reads/writes registers across Windows, macOS, Android, and iOS (2026-05-24). |
+| `P0` | Cross-platform CC1101 validation | `done` | `cc1101.emw` reads/writes registers across Windows, macOS, Android, and iOS (2026-05-24). |
 | `P0` | MCP hardware primitive tools | `done/source` | Desktop MCP source now exposes `spi_transfer`, GPIO, and analog tools backed by native app/device transports on macOS, Windows, and Linux. Real-hardware validation remains part of the hardware test suite. |
 | `P0` | Script-defined native UI | `active` | JavaScript scripts can define instant native panels with JSX-style syntax. Keep docs clear that JSX is syntax inside JS, not a separate product surface. |
 | `P0` | Mobile UI polish | `active` | Improve iOS and Android script/device flows for phone-first use. |

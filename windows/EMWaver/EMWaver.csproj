@@ -54,7 +54,7 @@
     <!-- Bundled default scripts. Include from the repo-level source directory so fresh CI
          checkouts publish them even though windows/EMWaver/Assets/DefaultScripts only
          contains .gitkeep before build. -->
-    <Content Include="..\..\assets\default-scripts\*.js">
+    <Content Include="..\..\assets\default-scripts\*.emw">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <TargetPath>Assets\DefaultScripts\%(Filename)%(Extension)</TargetPath>

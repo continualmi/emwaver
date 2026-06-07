@@ -9,9 +9,10 @@ public sealed record ScriptSessionInfo(
     Action StopAction
 )
 {
-    public string FileName => ScriptName.EndsWith(".js", System.StringComparison.OrdinalIgnoreCase)
+    public string FileName => ScriptName.EndsWith(".emw", System.StringComparison.OrdinalIgnoreCase)
+        || ScriptName.EndsWith(".js", System.StringComparison.OrdinalIgnoreCase)
         ? ScriptName
-        : ScriptName + ".js";
+        : ScriptName + ".emw";
 
     public string StatusLabel => $"{StateText} on {DeviceLabel}";
 

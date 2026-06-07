@@ -1245,7 +1245,7 @@ public final class ScriptEngine {
     private void injectDsl(Context cx, Scriptable scope) {
         String source = bootstrapSource;
         if (source == null || source.trim().isEmpty()) {
-            throw new EvaluatorException("Script kernel not loaded (missing emw-kernel.js)");
+            throw new EvaluatorException("Script kernel not loaded (missing emw-kernel.emw)");
         }
         cx.evaluateString(scope, source, "ScriptBootstrap", 1, null);
     }
@@ -1270,6 +1270,9 @@ public final class ScriptEngine {
                 }
 
                 String source = moduleSources.get(resolved);
+                if (source == null) {
+                    source = moduleSources.get(resolved + ".emw");
+                }
                 if (source == null) {
                     source = moduleSources.get(resolved + ".js");
                 }
@@ -1304,11 +1307,18 @@ public final class ScriptEngine {
         if (moduleSources.containsKey(trimmed)) {
             return trimmed;
         }
-        if (trimmed.endsWith(".js")) {
+        if (trimmed.endsWith(".emw")) {
+            String without = trimmed.substring(0, trimmed.length() - 4);
+            if (moduleSources.containsKey(without)) {
+                return without;
+            }
+        } else if (trimmed.endsWith(".js")) {
             String without = trimmed.substring(0, trimmed.length() - 3);
             if (moduleSources.containsKey(without)) {
                 return without;
             }
+        } else if (moduleSources.containsKey(trimmed + ".emw")) {
+            return trimmed + ".emw";
         } else if (moduleSources.containsKey(trimmed + ".js")) {
             return trimmed + ".js";
         }

@@ -39,8 +39,8 @@ public final class ScriptEngine {
     private var nextTimeoutId: Int = 1
     private var timeouts: [Int: DispatchWorkItem] = [:]
 
-    private let userScriptSourcePath = "/emwaver-user-script.js"
-    private let kernelSourcePath = "/DefaultScripts/emw-kernel.js"
+    private let userScriptSourcePath = "/emwaver-user-script.emw"
+    private let kernelSourcePath = "/DefaultScripts/emw-kernel.emw"
     private let userScriptWrapperPrefixLineCount = 2
     private var bootstrapSource: String?
 
@@ -82,7 +82,7 @@ public final class ScriptEngine {
     private func appDataRootURL() -> URL? {
         // Scripts use FS.appDataDir() as a stable, user-visible location for local artifacts.
         // On Apple, keep this aligned with the app's script storage directory so scripts/signals
-        // behave like "just files" (sampler.js, etc.).
+        // behave like "just files" (sampler.emw, etc.).
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
         return docs?.appendingPathComponent("scripts", isDirectory: true)
     }
@@ -364,7 +364,7 @@ var console = (function() {
         context.setObject(revealBlock, forKeyedSubscript: "_scriptRevealInFinder" as NSString)
 
         // -----------------------------------------------------------------
-        // Sampler buffer API (used by sampler libraries via emw-kernel.js)
+        // Sampler buffer API (used by sampler libraries via emw-kernel.emw)
         // -----------------------------------------------------------------
 
         let samplerPacketCountBlock: @convention(block) () -> Int = { [weak self] in
@@ -723,10 +723,12 @@ var console = (function() {
   function candidates(name) {
     var n = normalize(name);
     var out = [n];
+    if (n.slice(-4) !== '.emw') out.push(n + '.emw');
     if (n.slice(-3) !== '.js') out.push(n + '.js');
     if (n.indexOf('./') === 0) {
       var bare = n.slice(2);
       out.push(bare);
+      if (bare.slice(-4) !== '.emw') out.push(bare + '.emw');
       if (bare.slice(-3) !== '.js') out.push(bare + '.js');
     }
     return out;
@@ -759,8 +761,8 @@ var console = (function() {
             return
         }
 
-        guard let url = Bundle.main.url(forResource: "emw-kernel", withExtension: "js", subdirectory: "DefaultScripts") else {
-            emitError("Script kernel missing from app bundle (DefaultScripts/emw-kernel.js)")
+        guard let url = Bundle.main.url(forResource: "emw-kernel", withExtension: "emw", subdirectory: "DefaultScripts") else {
+            emitError("Script kernel missing from app bundle (DefaultScripts/emw-kernel.emw)")
             return
         }
 

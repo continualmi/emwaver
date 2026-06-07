@@ -26,7 +26,7 @@ public sealed class ScriptSessionRegistryTests
         Assert.Single(registry.Sessions);
         Assert.Equal(second.InstanceId, registry.SelectedSession?.InstanceId);
         Assert.Equal("usb:b", registry.SelectedSession?.DeviceId);
-        Assert.Equal("Beta.js", registry.SelectedSession?.FileName);
+        Assert.Equal("Beta.emw", registry.SelectedSession?.FileName);
         Assert.Equal("running on USB B", registry.SelectedSession?.StatusLabel);
         Assert.True(registry.SelectedSession?.IsRunning);
     }

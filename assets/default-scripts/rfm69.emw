@@ -1,5 +1,5 @@
 // RFM69 radio console restored from the older profile-driven script flow and adapted
-// to the current EMWaver .js runtime.
+// to the current EMWaver .emw runtime.
 // Board wiring note: the default RFM69 chip-select is GPIO36 and DIO2 is GPIO42.
 
 import { JSX, render as renderTree } from "emw-jsx";

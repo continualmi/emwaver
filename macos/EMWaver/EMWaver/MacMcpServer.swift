@@ -581,7 +581,9 @@ final class MacMcpServer: ObservableObject {
                 continue
             }
             modules[script.name] = source
-            if script.name.lowercased().hasSuffix(".js") {
+            if script.name.lowercased().hasSuffix(".emw") {
+                modules[String(script.name.dropLast(4))] = source
+            } else if script.name.lowercased().hasSuffix(".js") {
                 modules[String(script.name.dropLast(3))] = source
             }
         }
@@ -646,7 +648,7 @@ final class MacMcpServer: ObservableObject {
     private static func sourceKind(for name: String, isBundled: Bool) -> String {
         guard isBundled else { return "custom" }
         let lowered = name.lowercased()
-        if lowered == "emw-kernel.js" || lowered == "emw-protocol.js" {
+        if lowered == "emw-kernel.emw" || lowered == "emw-protocol.emw" {
             return "kernel"
         }
         if lowered.hasPrefix("emw-") {
@@ -667,12 +669,13 @@ final class MacMcpServer: ObservableObject {
     private static func localScriptFileName(_ requestedPath: String?) -> String {
         var raw = (requestedPath?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false)
             ? URL(fileURLWithPath: requestedPath ?? "").lastPathComponent
-            : "mcp-script.js"
+            : "mcp-script.emw"
         if raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            raw = "mcp-script.js"
+            raw = "mcp-script.emw"
         }
-        if !raw.lowercased().hasSuffix(".js") {
-            raw += ".js"
+        let lowered = raw.lowercased()
+        if !lowered.hasSuffix(".emw") && !lowered.hasSuffix(".js") {
+            raw += ".emw"
         }
         return raw
     }

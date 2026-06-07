@@ -87,7 +87,7 @@ const PILLARS: Pillar[] = [
     eyebrow: "Desktop MCP",
     title: "MCP tools without app chat.",
     headline: "Expose local tools only when you enable them.",
-    body: "Desktop EMWaver apps can expose a local MCP bridge with named tools like spi_transfer, gpio_read, analog_read, run_script, and device_state. MCP clients use those tools to turn working flows into reusable local .js scripts with UI controls and live plots.",
+    body: "Desktop EMWaver apps can expose a local MCP bridge with named tools like spi_transfer, gpio_read, analog_read, run_script, and device_state. MCP clients use those tools to turn working flows into reusable local .emw scripts with UI controls and live plots.",
     href: "/docs/mcp",
     cta: "Read the docs",
     visual: "mcp",
@@ -243,7 +243,7 @@ const AGENT_LINES: {
   { kind: "result", text: "0xEF 0x40 0x18  · chip identified" },
   { kind: "tool", fn: "analog_read", text: "A0" },
   { kind: "result", text: "2.48 V" },
-  { kind: "mcp", text: "Writing dashboard.js — buttons, live plot, log viewer." },
+  { kind: "mcp", text: "Writing dashboard.emw — buttons, live plot, log viewer." },
 ];
 
 function McpConsole() {

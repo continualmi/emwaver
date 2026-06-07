@@ -68,7 +68,7 @@ let periodMs = 250;
 let isBlinking = false;
 let level = false;
 let loopHandle = null;
-const SCRIPT_NAME = "blink.js";
+const SCRIPT_NAME = "blink.emw";
 
 function boardPins() {
   return PINS_BY_BOARD[boardType] || PINS_BY_BOARD.stm32f042;

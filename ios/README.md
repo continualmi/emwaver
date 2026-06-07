@@ -156,7 +156,7 @@ base64 -i distribution.p12 | pbcopy
 base64 -i EMWaver_AppStore.mobileprovision | pbcopy
 ```
 
-The workflow runs manually from GitHub Actions or when pushing tags matching `ios-v*` or `emwaver-ios-v*`. It validates that the IPA bundles the JavaScript `DefaultScripts/*.js` assets and contains no legacy `.emw` scripts before upload. Keep the `app-store` environment protected with required reviewers so Apple signing secrets are only exposed after explicit approval.
+The workflow runs manually from GitHub Actions or when pushing tags matching `ios-v*` or `emwaver-ios-v*`. It validates that the IPA bundles the JavaScript-backed `DefaultScripts/*.emw` assets and contains no legacy `.js` default scripts before upload. Keep the `app-store` environment protected with required reviewers so Apple signing secrets are only exposed after explicit approval.
 
 After the workflow completes and Apple finishes processing the build, finish the release in App Store Connect by testing in TestFlight or selecting the processed build, confirming review details, and submitting for review manually. `ios/EMWaver/Info.plist` sets `ITSAppUsesNonExemptEncryption` to `false`, so standard Apple export-compliance encryption prompts should be pre-answered for new builds.
 

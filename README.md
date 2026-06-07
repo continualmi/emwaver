@@ -76,14 +76,14 @@ EMWaver ships native app surfaces for:
 
 The platform is designed around:
 
-- local JavaScript scripts (`.js`) with JSX-style UI syntax;
+- local JavaScript scripts (`.emw`) with JSX-style UI syntax;
 - managed board firmware;
 - USB as a first-class transport;
 - BLE and Wi-Fi for board classes that support them;
 - STM32, ESP32-family, and Arduino-compatible firmware targets;
 - shared example scripts under [`assets/default-scripts/`](assets/default-scripts/).
 
-A current cross-platform validation path is `cc1101.js`, which exercises register-level reads and writes against a CC1101 radio through supported hardware.
+A current cross-platform validation path is `cc1101.emw`, which exercises register-level reads and writes against a CC1101 radio through supported hardware.
 
 ## Hardware
 
@@ -120,7 +120,7 @@ stm/                     STM32 firmware workspace
 esp/                     ESP32 firmware workspace
 arduino/                 Arduino-compatible USB Serial firmware sketches
 firmware/                Bundled firmware payloads consumed by apps
-assets/default-scripts/  Bundled example .js scripts and emw-* libraries
+assets/default-scripts/  Bundled example .emw scripts and emw-* libraries
 simulator/               Shared simulator and protocol fixtures
 hardware/                Imported hardware design repositories
 crates/                  Rust firmware/update helper crates

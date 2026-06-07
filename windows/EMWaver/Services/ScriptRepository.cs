@@ -10,7 +10,8 @@ namespace EMWaver.Services;
 
 public sealed class ScriptRepository
 {
-    private static readonly string[] ScriptExtensions = [".js"];
+    private const string ScriptExtension = ".emw";
+    private static readonly string[] ScriptExtensions = [ScriptExtension, ".js"];
 
     public ObservableCollection<ScriptInfo> All { get; } = new();
 
@@ -157,9 +158,9 @@ public sealed class ScriptRepository
         Directory.CreateDirectory(LocalScriptsDir);
 
         var safe = SanitizeFileName(name);
-        if (!safe.EndsWith(".js", StringComparison.OrdinalIgnoreCase))
+        if (!ScriptExtensions.Contains(Path.GetExtension(safe), StringComparer.OrdinalIgnoreCase))
         {
-            safe += ".js";
+            safe += ScriptExtension;
         }
 
         var fullPath = Path.Combine(LocalScriptsDir, safe);
@@ -203,9 +204,9 @@ public sealed class ScriptRepository
         Directory.CreateDirectory(LocalScriptsDir);
 
         var safe = SanitizeFileName(newName);
-        if (!safe.EndsWith(".js", StringComparison.OrdinalIgnoreCase))
+        if (!ScriptExtensions.Contains(Path.GetExtension(safe), StringComparer.OrdinalIgnoreCase))
         {
-            safe += ".js";
+            safe += ScriptExtension;
         }
 
         var dest = Path.Combine(LocalScriptsDir, safe);

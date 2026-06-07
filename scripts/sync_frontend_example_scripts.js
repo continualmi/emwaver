@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /*
-  Sync frontend bundled example scripts from assets/default-scripts/*.js.
+  Sync frontend bundled example scripts from assets/default-scripts/*.emw.
 
   Rationale:
   - Source of truth is assets/default-scripts.
@@ -18,12 +18,12 @@ const outPaths = [
 ];
 
 const allow = [
-  "hello.js",
-  "blink.js",
-  "sampler.js",
-  "cc1101.js",
-  "rfm69.js",
-  "rfid.js",
+  "hello.emw",
+  "blink.emw",
+  "sampler.emw",
+  "cc1101.emw",
+  "rfm69.emw",
+  "rfid.emw",
 ];
 
 function readText(p) {
@@ -36,7 +36,7 @@ function stableSort(a, b) {
 
 const existing = fs
   .readdirSync(assetsDir)
-  .filter((f) => f.endsWith(".js") && !f.startsWith("emw-"))
+  .filter((f) => f.endsWith(".emw") && !f.startsWith("emw-"))
   .sort(stableSort);
 
 const names = allow.filter((n) => existing.includes(n));
@@ -46,7 +46,7 @@ const items = names.map((name) => {
   return { name, source };
 });
 
-const header = `// Bundled example scripts for the web dashboard.\n//\n// IMPORTANT: This file is GENERATED from assets/default-scripts/*.js.\n// Do not edit by hand.\n//\n// Regenerate: node scripts/sync_frontend_example_scripts.js\n\nexport type ExampleEmwScript = {\n  name: string;\n  source: string;\n};\n\nexport const exampleEmwScripts: ExampleEmwScript[] = `;
+const header = `// Bundled example scripts for the web dashboard.\n//\n// IMPORTANT: This file is GENERATED from assets/default-scripts/*.emw.\n// Do not edit by hand.\n//\n// Regenerate: node scripts/sync_frontend_example_scripts.js\n\nexport type ExampleEmwScript = {\n  name: string;\n  source: string;\n};\n\nexport const exampleEmwScripts: ExampleEmwScript[] = `;
 
 const body = JSON.stringify(items, null, 2)
   // JSON -> valid TS but we prefer single quotes? Keep JSON for stability.

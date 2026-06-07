@@ -586,7 +586,7 @@ pub fn build_main_window(app: &adw::Application) {
         let script_search_entry = script_search_entry.clone();
         let active_script_id = Rc::clone(&active_script_id);
         new_script_button.connect_clicked(move |_| {
-            match script_repository.create_script("script.js", default_script_template()) {
+            match script_repository.create_script("script.emw", default_script_template()) {
                 Ok(item) => {
                     append_log(&log_view, &format!("Created local script {}.", item.name));
                     refresh_script_list(

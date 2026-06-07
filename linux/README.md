@@ -38,7 +38,7 @@ Important constraints:
 - GTK widgets must stay on the GTK main thread.
 - Boa `Context`/`ScriptUiRuntime` is not `Send`; create and keep it inside the session worker instead of moving it between threads.
 - Script UI action buttons must call the live packet bridge (`__emwSendPacket` -> Rust -> selected transport), never synthetic success responses.
-- Script `render()` must be a host callback like macOS `_scriptRender`, not a final-tree poll after an action completes. Intermediate renders from scripts such as `cc1101.js` must stream to GTK so script-owned UI nodes like `Progress({ value })` update live.
+- Script `render()` must be a host callback like macOS `_scriptRender`, not a final-tree poll after an action completes. Intermediate renders from scripts such as `cc1101.emw` must stream to GTK so script-owned UI nodes like `Progress({ value })` update live.
 - Script `console.log`/`warn`/`error` must be a host callback like macOS `_consolePrint` and feed the app log/status surface.
 - The rendered script UI must remain visible while an action runs. Do not clear the script UI and replace it with a generic "running" placeholder; show busy/status/log feedback around the live view and update the tree when the session emits a new render.
 - Do not build Linux-only preview shims. If behavior is meant to match macOS, implement the same session/device-bridge concept rather than patching the GTK widget layer.

@@ -35,7 +35,7 @@ Key components:
 - `DeviceConnectionManager.java` / `DeviceConnectionService.java` — connection lifecycle.
 - `CommandSender.java` — command dispatch path.
 - `NativeBuffer.java` — native/buffer integration surface.
-- `scripts/ScriptEngine.java` + `scripts/ScriptRenderView.java` — Rhino bridge + native script UI rendering. Android now bundles the shared `.js` script assets, loads `emw-kernel.js`, supports normal EMWaver imports through `require(...)`, and transpiles the same JSX subset used by the Apple runtime.
+- `scripts/ScriptEngine.java` + `scripts/ScriptRenderView.java` — Rhino bridge + native script UI rendering. Android now bundles the shared `.emw` script assets, loads `emw-kernel.emw`, supports normal EMWaver imports through `require(...)`, and transpiles the same JSX subset used by the Apple runtime.
 - `scripts/ScriptDeviceBridge.java` + `scripts/SimulatorScriptDeviceBridge.java` — pluggable real/simulated script device bridge for tests.
 - Activities for primary UX and settings.
 
@@ -97,7 +97,7 @@ Release distribution:
 
 Simulator testing:
 - `scripts/SimulatorScriptDeviceBridge.java` reads the shared `simulator/fixtures/*.json` contract and implements the same bridge used by `ScriptEngine`.
-- Use it in Android runtime tests to run hardware-touching `.js` scripts without a physical USB device.
+- Use it in Android runtime tests to run hardware-touching `.emw` scripts without a physical USB device.
 
 Current Android board split:
 - STM32 runtime uses USB and can enter the DFU-based update flow.

@@ -5,7 +5,7 @@ export default function ScriptsDocPage() {
     <>
       <h1>Scripting guide</h1>
       <p>
-        EMWaver scripts are local JavaScript programs. Scripts use <code>.js</code> files and can include
+        EMWaver scripts are local JavaScript programs. Scripts use <code>.emw</code> files and can include
         JSX-style UI syntax for native panels, extensionless imports such as <code>&quot;emw-ui&quot;</code>, and
         hardware modules such as <code>emw-gpio</code>, <code>emw-spi</code>, and <code>emw-sampler</code>.
       </p>
@@ -154,12 +154,12 @@ rerender();`}</code>
             </tr>
           </thead>
           <tbody>
-            <tr><td className="px-4 py-3"><code>hello.js</code></td><td className="px-4 py-3">JSX/import smoke test with buttons and state.</td></tr>
-            <tr><td className="px-4 py-3"><code>blink.js</code></td><td className="px-4 py-3">Board-aware pin selection, timer-based output, GPIO module use.</td></tr>
-            <tr><td className="px-4 py-3"><code>sampler.js</code></td><td className="px-4 py-3">Signal capture, plot viewport callbacks, retransmit, local save/load.</td></tr>
-            <tr><td className="px-4 py-3"><code>cc1101.js</code></td><td className="px-4 py-3">CC1101 radio register control, presets, SPI transfers, logs, grids, cards, tiles.</td></tr>
-            <tr><td className="px-4 py-3"><code>rfid.js</code></td><td className="px-4 py-3">MFRC522 probe/UID/read/write workflows over SPI and GPIO reset/IRQ pins.</td></tr>
-            <tr><td className="px-4 py-3"><code>rfm69.js</code></td><td className="px-4 py-3">Profile-driven RFM69/RFM69HW radio control and RSSI/status UI.</td></tr>
+            <tr><td className="px-4 py-3"><code>hello.emw</code></td><td className="px-4 py-3">JSX/import smoke test with buttons and state.</td></tr>
+            <tr><td className="px-4 py-3"><code>blink.emw</code></td><td className="px-4 py-3">Board-aware pin selection, timer-based output, GPIO module use.</td></tr>
+            <tr><td className="px-4 py-3"><code>sampler.emw</code></td><td className="px-4 py-3">Signal capture, plot viewport callbacks, retransmit, local save/load.</td></tr>
+            <tr><td className="px-4 py-3"><code>cc1101.emw</code></td><td className="px-4 py-3">CC1101 radio register control, presets, SPI transfers, logs, grids, cards, tiles.</td></tr>
+            <tr><td className="px-4 py-3"><code>rfid.emw</code></td><td className="px-4 py-3">MFRC522 probe/UID/read/write workflows over SPI and GPIO reset/IRQ pins.</td></tr>
+            <tr><td className="px-4 py-3"><code>rfm69.emw</code></td><td className="px-4 py-3">Profile-driven RFM69/RFM69HW radio control and RSSI/status UI.</td></tr>
           </tbody>
         </table>
       </div>

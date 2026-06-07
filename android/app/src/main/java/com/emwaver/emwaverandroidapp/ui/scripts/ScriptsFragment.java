@@ -91,13 +91,13 @@ import java.util.function.Consumer;
 public class ScriptsFragment extends Fragment {
 
     private static final String TAG = "ScriptsFragment";
-    private static final String SCRIPT_EXTENSION = ".js";
-    private static final String SCRIPT_DISPLAY_EXTENSION = ".js";
-    private static final String ASSET_SCRIPT_EXTENSION = ".js";
+    private static final String SCRIPT_EXTENSION = ".emw";
+    private static final String SCRIPT_DISPLAY_EXTENSION = ".emw";
+    private static final String ASSET_SCRIPT_EXTENSION = ".emw";
     private static final String ASSET_SCRIPTS_DIR = "DefaultScripts";
 
     // User files live in a single flat namespace locally.
-    // UI decides what to show based on extension (.js scripts vs .raw/.txt signals).
+    // UI decides what to show based on extension (.emw scripts vs .raw/.txt signals).
     private static final String SIGNALS_DIR_NAME = "scripts";
     private static final String SIGNAL_RAW_EXTENSION = ".raw";
     private static final String SIGNAL_TEXT_EXTENSION = ".txt";
@@ -1098,7 +1098,7 @@ public class ScriptsFragment extends Fragment {
 
     private ScriptMetadata.FileKind assetFileKind(@NonNull String filename) {
         String lower = filename.toLowerCase(Locale.US);
-        if ("emw-kernel.js".equals(lower) || "emw-protocol.js".equals(lower)) {
+        if ("emw-kernel.emw".equals(lower) || "emw-protocol.emw".equals(lower)) {
             return ScriptMetadata.FileKind.KERNEL;
         }
         if (lower.startsWith("emw-")) {
@@ -1533,7 +1533,7 @@ public class ScriptsFragment extends Fragment {
             showNameInputDialog(
                 "Save Script",
                 "Enter a name for the script:",
-                currentScriptName != null ? currentScriptName : "script_script.js",
+                currentScriptName != null ? currentScriptName : "script_script.emw",
                 name -> createScriptWithContent(name, getEditorText(), "Script saved: ")
             );
             return;
@@ -2132,7 +2132,7 @@ public class ScriptsFragment extends Fragment {
         ensureScriptEngineBindings();
         if (scriptEngine == null) {
             scriptEngine = new ScriptEngine();
-            scriptEngine.setBootstrapSource(readAssetUtf8(ASSET_SCRIPTS_DIR + "/emw-kernel.js"));
+            scriptEngine.setBootstrapSource(readAssetUtf8(ASSET_SCRIPTS_DIR + "/emw-kernel.emw"));
             scriptEngine.setAppDataDir(getSignalsDir());
             scriptEngine.setLegacySignalDirs(getLegacySignalDirs());
             if (scriptDeviceConnection == null && isAdded()) {
@@ -2632,7 +2632,7 @@ public class ScriptsFragment extends Fragment {
                 cursor.close();
             }
         }
-        return fileName != null ? fileName : "script.js";
+        return fileName != null ? fileName : "script.emw";
     }
 
     private String buildNewScriptTemplate() {
@@ -2663,7 +2663,8 @@ public class ScriptsFragment extends Fragment {
         if (name.isEmpty()) {
             name = "script_script";
         }
-        if (!name.toLowerCase(Locale.US).endsWith(SCRIPT_EXTENSION)) {
+        String lower = name.toLowerCase(Locale.US);
+        if (!lower.endsWith(SCRIPT_EXTENSION) && !lower.endsWith(".js")) {
             name = name + SCRIPT_EXTENSION;
         }
         return name;

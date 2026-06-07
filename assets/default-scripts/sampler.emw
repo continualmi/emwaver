@@ -6,7 +6,7 @@ import { pin, gpio } from "emw-gpio";
 import { FS } from "emw-fs";
 import { Sampler } from "emw-sampler";
 
-const SCRIPT_NAME = "sampler.js";
+const SCRIPT_NAME = "sampler.emw";
 
 function normalizeBoardType(value) {
   var board = String(value || '').trim().toLowerCase();

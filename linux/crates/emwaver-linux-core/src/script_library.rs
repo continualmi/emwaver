@@ -6,7 +6,8 @@ use std::{
 
 use thiserror::Error;
 
-const SCRIPT_EXTENSION: &str = ".js";
+const SCRIPT_EXTENSION: &str = ".emw";
+const LEGACY_SCRIPT_EXTENSION: &str = ".js";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScriptKind {
@@ -250,7 +251,10 @@ impl ScriptRepository {
             return proposed.to_string();
         }
 
-        let stem = proposed.strip_suffix(SCRIPT_EXTENSION).unwrap_or(proposed);
+        let stem = proposed
+            .strip_suffix(SCRIPT_EXTENSION)
+            .or_else(|| proposed.strip_suffix(LEGACY_SCRIPT_EXTENSION))
+            .unwrap_or(proposed);
         let mut counter = 1;
         loop {
             let candidate = format!("{stem}_{counter}{SCRIPT_EXTENSION}");
@@ -292,7 +296,7 @@ impl ScriptRepository {
 }
 
 pub fn default_script_template() -> &'static str {
-    "// EMWaver JavaScript script\n\
+    "// EMWaver script\n\
 import { JSX, render } from \"emw-jsx\";\n\
 import { Column, Text, LogViewer } from \"emw-ui\";\n\n\
 let logLines = [];\n\
@@ -352,7 +356,7 @@ fn default_local_dir() -> PathBuf {
 
 fn asset_kind(name: &str) -> ScriptKind {
     let lowered = name.to_lowercase();
-    if lowered == "emw-kernel.js" || lowered == "emw-protocol.js" {
+    if lowered == "emw-kernel.emw" || lowered == "emw-protocol.emw" {
         ScriptKind::Kernel
     } else if lowered.starts_with("emw-") {
         ScriptKind::Library
@@ -363,7 +367,8 @@ fn asset_kind(name: &str) -> ScriptKind {
 
 fn script_file_name(path: &Path) -> Option<String> {
     let name = path.file_name()?.to_string_lossy().to_string();
-    if name.to_lowercase().ends_with(SCRIPT_EXTENSION) {
+    let lowered = name.to_lowercase();
+    if lowered.ends_with(SCRIPT_EXTENSION) || lowered.ends_with(LEGACY_SCRIPT_EXTENSION) {
         Some(name)
     } else {
         None
@@ -380,14 +385,18 @@ fn normalize_script_name(raw: &str) -> Result<String, ScriptLibraryError> {
     {
         return Err(ScriptLibraryError::InvalidName);
     }
-    if !candidate.to_lowercase().ends_with(SCRIPT_EXTENSION) {
+    let lowered = candidate.to_lowercase();
+    if !lowered.ends_with(SCRIPT_EXTENSION) && !lowered.ends_with(LEGACY_SCRIPT_EXTENSION) {
         candidate.push_str(SCRIPT_EXTENSION);
     }
     Ok(candidate)
 }
 
 fn copy_name_for(name: &str) -> String {
-    let stem = name.strip_suffix(SCRIPT_EXTENSION).unwrap_or(name);
+    let stem = name
+        .strip_suffix(SCRIPT_EXTENSION)
+        .or_else(|| name.strip_suffix(LEGACY_SCRIPT_EXTENSION))
+        .unwrap_or(name);
     format!("{stem}_copy{SCRIPT_EXTENSION}")
 }
 
@@ -413,10 +422,10 @@ mod tests {
     fn classifies_and_sorts_bundled_scripts_like_reference_apps() {
         let bundled = temp_dir("bundled-sort");
         let local = temp_dir("local-sort");
-        fs::write(bundled.join("emw-ui.js"), "library").unwrap();
-        fs::write(bundled.join("emw-kernel.js"), "kernel").unwrap();
-        fs::write(bundled.join("blink.js"), "example").unwrap();
-        fs::write(local.join("custom.js"), "custom").unwrap();
+        fs::write(bundled.join("emw-ui.emw"), "library").unwrap();
+        fs::write(bundled.join("emw-kernel.emw"), "kernel").unwrap();
+        fs::write(bundled.join("blink.emw"), "example").unwrap();
+        fs::write(local.join("custom.emw"), "custom").unwrap();
 
         let scripts = ScriptRepository::new(&bundled, &local)
             .list_scripts()
@@ -429,10 +438,10 @@ mod tests {
         assert_eq!(
             labels,
             vec![
-                ("blink.js", "Example"),
-                ("emw-ui.js", "Library"),
-                ("emw-kernel.js", "Kernel"),
-                ("custom.js", "Custom")
+                ("blink.emw", "Example"),
+                ("emw-ui.emw", "Library"),
+                ("emw-kernel.emw", "Kernel"),
+                ("custom.emw", "Custom")
             ]
         );
     }
@@ -441,10 +450,10 @@ mod tests {
     fn hides_identical_local_copy_but_keeps_override() {
         let bundled = temp_dir("bundled-shadow");
         let local = temp_dir("local-shadow");
-        fs::write(bundled.join("blink.js"), "same").unwrap();
-        fs::write(bundled.join("hello.js"), "bundled").unwrap();
-        fs::write(local.join("blink.js"), "same").unwrap();
-        fs::write(local.join("hello.js"), "local").unwrap();
+        fs::write(bundled.join("blink.emw"), "same").unwrap();
+        fs::write(bundled.join("hello.emw"), "bundled").unwrap();
+        fs::write(local.join("blink.emw"), "same").unwrap();
+        fs::write(local.join("hello.emw"), "local").unwrap();
 
         let scripts = ScriptRepository::new(&bundled, &local)
             .list_scripts()
@@ -455,26 +464,26 @@ mod tests {
             .map(|script| (script.name.as_str(), script.kind_label()))
             .collect();
 
-        assert_eq!(local_scripts, vec![("hello.js", "Override")]);
+        assert_eq!(local_scripts, vec![("hello.emw", "Override")]);
     }
 
     #[test]
     fn copies_bundled_script_to_unique_editable_local_script() {
         let bundled = temp_dir("bundled-copy");
         let local = temp_dir("local-copy");
-        fs::write(bundled.join("blink.js"), "source").unwrap();
-        fs::write(local.join("blink_copy.js"), "existing").unwrap();
+        fs::write(bundled.join("blink.emw"), "source").unwrap();
+        fs::write(local.join("blink_copy.emw"), "existing").unwrap();
 
         let repository = ScriptRepository::new(&bundled, &local);
         let bundled_item = repository
             .list_scripts()
             .unwrap()
             .into_iter()
-            .find(|script| script.name == "blink.js")
+            .find(|script| script.name == "blink.emw")
             .unwrap();
         let copy = repository.copy_to_local(&bundled_item).unwrap();
 
-        assert_eq!(copy.name, "blink_copy_1.js");
+        assert_eq!(copy.name, "blink_copy_1.emw");
         assert!(!copy.is_bundled);
         assert_eq!(fs::read_to_string(copy.path).unwrap(), "source");
     }
@@ -483,21 +492,21 @@ mod tests {
     fn returns_library_and_kernel_module_sources() {
         let bundled = temp_dir("module-sources-bundled");
         let local = temp_dir("module-sources-local");
-        fs::write(bundled.join("blink.js"), "script").unwrap();
-        fs::write(bundled.join("emw-ui.js"), "ui").unwrap();
-        fs::write(bundled.join("emw-kernel.js"), "kernel").unwrap();
-        fs::write(local.join("custom.js"), "custom").unwrap();
+        fs::write(bundled.join("blink.emw"), "script").unwrap();
+        fs::write(bundled.join("emw-ui.emw"), "ui").unwrap();
+        fs::write(bundled.join("emw-kernel.emw"), "kernel").unwrap();
+        fs::write(local.join("custom.emw"), "custom").unwrap();
 
         let modules = ScriptRepository::new(&bundled, &local)
             .module_sources()
             .unwrap();
 
-        assert_eq!(modules.get("emw-ui.js").map(String::as_str), Some("ui"));
+        assert_eq!(modules.get("emw-ui.emw").map(String::as_str), Some("ui"));
         assert_eq!(
-            modules.get("emw-kernel.js").map(String::as_str),
+            modules.get("emw-kernel.emw").map(String::as_str),
             Some("kernel")
         );
-        assert!(!modules.contains_key("blink.js"));
-        assert!(!modules.contains_key("custom.js"));
+        assert!(!modules.contains_key("blink.emw"));
+        assert!(!modules.contains_key("custom.emw"));
     }
 }

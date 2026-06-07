@@ -53,7 +53,7 @@ cp "${repo_root}/README.md" "${install_root}/usr/share/doc/emwaver/README.md"
 cp "${repo_root}/macos/EMWaver/EMWaver/Assets.xcassets/AppIcon.appiconset/icon_256x256.png" \
   "${install_root}/usr/share/icons/hicolor/256x256/apps/${app_id}.png"
 
-cp "${repo_root}"/assets/default-scripts/*.js "${install_root}/usr/share/emwaver/default-scripts/"
+cp "${repo_root}"/assets/default-scripts/*.emw "${install_root}/usr/share/emwaver/default-scripts/"
 cp "${repo_root}/firmware/emwaver.bin" "${install_root}/usr/share/emwaver/firmware/emwaver.bin"
 
 if [[ -f "${repo_root}/tools/emwaver-esp-helper/emwaver_esp_helper.py" ]]; then

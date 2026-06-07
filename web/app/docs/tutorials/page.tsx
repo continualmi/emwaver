@@ -39,7 +39,7 @@ export default function TutorialsIndex() {
             </div>
             <div className="mt-0.5 text-sm text-[color:var(--ink-dim)]">
               Wire a CC1101 radio module to your ESP32-family board, open the built-in{" "}
-              <code>cc1101.js</code> script, and transmit a basic 433 MHz ASK/OOK wave.
+              <code>cc1101.emw</code> script, and transmit a basic 433 MHz ASK/OOK wave.
             </div>
           </div>
           <span className="shrink-0 text-sm font-medium text-[color:var(--ink-dim)] transition group-hover:translate-x-0.5 group-hover:text-[color:var(--ink)]">

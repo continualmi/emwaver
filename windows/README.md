@@ -15,7 +15,7 @@ This folder contains the full Windows client:
 - firmware update flow integration,
 - desktop MCP bridge.
 
-The local-first rule is that connected supported boards can run local `.js` scripts immediately without account sign-in, backend activation, subscription checks, claimed-device cache membership, hardware-UID registration, device minting, or device limits.
+The local-first rule is that connected supported boards can run local `.emw` scripts immediately without account sign-in, backend activation, subscription checks, claimed-device cache membership, hardware-UID registration, device minting, or device limits.
 
 Project files:
 - solution: `windows/EMWaver.sln`
@@ -84,9 +84,9 @@ The EMWaver protocol is a **single serial bus** — one stream of commands, resp
 
 Scripts UI and runtime behavior are centered in `ScriptsPage` and `Scripting/*` modules, including plot/state helpers and script document handling.
 
-`Scripting/SimulatorCommandBridge.cs` is the Windows test adapter for the shared `simulator/fixtures/*.json` contract. It can be passed to `ScriptEngine.Setup` as the `sendPacket` delegate so hardware-touching `.js` scripts can run in tests without a physical board.
+`Scripting/SimulatorCommandBridge.cs` is the Windows test adapter for the shared `simulator/fixtures/*.json` contract. It can be passed to `ScriptEngine.Setup` as the `sendPacket` delegate so hardware-touching `.emw` scripts can run in tests without a physical board.
 
-`EMWaver.Tests` contains the hosted-CI simulator smoke for Windows. It runs a hardware-touching `.js`/JSX script through the real Windows `ScriptEngine` and `SimulatorCommandBridge`, then asserts the rendered UI includes values from `simulator/fixtures/basic-board.json`.
+`EMWaver.Tests` contains the hosted-CI simulator smoke for Windows. It runs a hardware-touching `.emw`/JSX script through the real Windows `ScriptEngine` and `SimulatorCommandBridge`, then asserts the rendered UI includes values from `simulator/fixtures/basic-board.json`.
 
 ## 3.3 Architecture boundary
 

@@ -153,7 +153,7 @@ tasks.register("syncScriptAssets", Copy) {
 
     // Default scripts live under DefaultScripts/.
     from(emwaverSharedScriptAssetsDir) {
-        include("*.js")
+        include("*.emw")
         into("DefaultScripts")
     }
 
@@ -162,11 +162,11 @@ tasks.register("syncScriptAssets", Copy) {
             throw new GradleException("Missing canonical script assets dir at: ${emwaverSharedScriptAssetsDir}")
         }
 
-        if (!new File(emwaverSharedScriptAssetsDir, "emw-kernel.js").exists()) {
-            throw new GradleException("Missing EMWaver script kernel at: ${new File(emwaverSharedScriptAssetsDir, "emw-kernel.js")}")
+        if (!new File(emwaverSharedScriptAssetsDir, "emw-kernel.emw").exists()) {
+            throw new GradleException("Missing EMWaver script kernel at: ${new File(emwaverSharedScriptAssetsDir, "emw-kernel.emw")}")
         }
 
-        // Hard cut: Android bundled scripts now use the same .js assets as macOS/iOS.
+        // Hard cut: Android bundled scripts now use the same .emw assets as macOS/iOS.
         delete emwaverGeneratedScriptAssetsDir
     }
 }

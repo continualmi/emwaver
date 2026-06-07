@@ -6,7 +6,7 @@ export default function WindowsCc1101Tutorial() {
       <h1>Set up CC1101 on Windows (433 MHz)</h1>
       <p>
         This tutorial shows how to wire a CC1101 module to an ESP32-family EMWaver device,
-        run the built-in <code>cc1101.js</code> script, initialize the radio for
+        run the built-in <code>cc1101.emw</code> script, initialize the radio for
         433.92 MHz ASK/OOK transmit mode, and turn on a continuous carrier.
       </p>
 
@@ -100,15 +100,15 @@ export default function WindowsCc1101Tutorial() {
           className="w-full rounded-xl border border-[color:var(--line)]"
         />
         <figcaption className="mt-3 text-sm leading-6 text-[color:var(--ink-dim)]">
-          Connected EMWaver device with the <code>cc1101.js</code> script open. Use the Preview
+          Connected EMWaver device with the <code>cc1101.emw</code> script open. Use the Preview
           button at the top to render the script UI.
         </figcaption>
       </figure>
 
-      <h2>3. Open and preview <code>cc1101.js</code></h2>
+      <h2>3. Open and preview <code>cc1101.emw</code></h2>
       <ol>
         <li>Open the <strong>Scripts</strong> view.</li>
-        <li>Select the built-in <code>cc1101.js</code> script.</li>
+        <li>Select the built-in <code>cc1101.emw</code> script.</li>
         <li>Click <strong>Preview</strong> at the top of the script editor.</li>
       </ol>
       <p>

@@ -89,7 +89,8 @@ public final class ScriptsViewModel: ObservableObject {
     private let fileService: FileService
     private let defaults: UserDefaults
 
-    private let scriptExtension = ".js"
+    private let scriptExtension = ".emw"
+    private let legacyScriptExtension = ".js"
     private let signalRawExtension = ".raw"
     private let signalTextExtension = ".txt"
     private let unsavedKey = "__unsaved__"
@@ -118,7 +119,12 @@ public final class ScriptsViewModel: ObservableObject {
                 includeContent: true,
                 accessToken: ""
             )
-            mergeRemoteScripts(data)
+            let legacyData = try await fileService.listFiles(
+                withExtension: legacyScriptExtension,
+                includeContent: true,
+                accessToken: ""
+            )
+            mergeRemoteScripts(data + legacyData)
 
             // Signals are stored under Application Support/signals (sampler library convention).
             let raw = try await fileService.listSignalFiles(withExtension: signalRawExtension, includeContent: false, accessToken: "")
@@ -452,7 +458,7 @@ public final class ScriptsViewModel: ObservableObject {
 
     private func loadAssetScriptsFromBundle() {
         var updated: [String: AssetRecord] = [:]
-        let urls = Bundle.main.urls(forResourcesWithExtension: "js", subdirectory: "DefaultScripts") ?? []
+        let urls = Bundle.main.urls(forResourcesWithExtension: "emw", subdirectory: "DefaultScripts") ?? []
         for fileUrl in urls {
             let filename = fileUrl.lastPathComponent
             guard let content = try? String(contentsOf: fileUrl, encoding: .utf8) else {
@@ -536,7 +542,11 @@ public final class ScriptsViewModel: ObservableObject {
 
     private func isModuleScript(name: String, content: String) -> Bool {
         let lowered = name.lowercased()
-        if lowered.hasPrefix("emw-") || lowered.hasSuffix(".module.js") || lowered.hasSuffix("_module.js") {
+        if lowered.hasPrefix("emw-")
+            || lowered.hasSuffix(".module.emw")
+            || lowered.hasSuffix("_module.emw")
+            || lowered.hasSuffix(".module.js")
+            || lowered.hasSuffix("_module.js") {
             return true
         }
         let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -559,12 +569,15 @@ public final class ScriptsViewModel: ObservableObject {
         if trimmed.lowercased().hasSuffix(scriptExtension) {
             let bare = String(trimmed.dropLast(scriptExtension.count))
             modules[bare] = source
+        } else if trimmed.lowercased().hasSuffix(legacyScriptExtension) {
+            let bare = String(trimmed.dropLast(legacyScriptExtension.count))
+            modules[bare] = source
         }
     }
 
     private func assetKind(for name: String) -> FileKind {
         let lowered = name.lowercased()
-        if lowered == "emw-kernel.js" || lowered == "emw-protocol.js" {
+        if lowered == "emw-kernel.emw" || lowered == "emw-protocol.emw" {
             return .kernel
         }
         if lowered.hasPrefix("emw-") {
@@ -587,7 +600,8 @@ public final class ScriptsViewModel: ObservableObject {
         if candidate.isEmpty {
             candidate = "script_script"
         }
-        if !candidate.lowercased().hasSuffix(scriptExtension) {
+        let lowered = candidate.lowercased()
+        if !lowered.hasSuffix(scriptExtension) && !lowered.hasSuffix(legacyScriptExtension) {
             candidate += scriptExtension
         }
         return candidate
@@ -616,7 +630,7 @@ public final class ScriptsViewModel: ObservableObject {
     }
 
     private func defaultTemplate() -> String {
-        "// EMWaver JavaScript script\n" +
+        "// EMWaver script\n" +
         "import { JSX, render } from \"emw-jsx\";\n" +
         "import { Column, Text, LogViewer } from \"emw-ui\";\n\n" +
         "let logLines = [];\n" +
