@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
+import { SiteFooter } from "@/components/emwaver/SiteFooter";
 import "./globals.css";
 
 const displaySans = Space_Grotesk({
@@ -45,7 +46,10 @@ export default function RootLayout({
           <div className="global-bg-overlay absolute inset-0" style={{ background: "var(--bg-overlay-gradient)" }} />
         </div>
 
-        <div className="relative z-10">{children}</div>
+        <div className="relative z-10">
+          {children}
+          <SiteFooter />
+        </div>
       </body>
     </html>
   );

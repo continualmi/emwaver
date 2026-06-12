@@ -30,7 +30,7 @@
             app:iconSpaceReserved="false">
             <intent
                 android:action="android.intent.action.VIEW"
-                android:data="https://emwaverpolicy.z6.web.core.windows.net/" />
+                android:data="https://emwaver.ai/privacy" />
         </Preference>
 
     </PreferenceCategory>
